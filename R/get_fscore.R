@@ -330,8 +330,12 @@ get_fs_lmer <- function(object,
   fs_dat
 }
 
+sqrt_or_na <- function(x) {
+  sqrt(ifelse(x >= 0, x, NA))
+}
+
 augment_fs2 <- function(fs, fsL, fsT, fsb = NULL) {
-  fs_se <- sqrt(diag(fsT))
+  fs_se <- sqrt_or_na(diag(fsT))
   fs_lds <- c(fsL)
   fs_evs <- fsT[upper.tri(fsT, diag = TRUE)]
   fs_vec <- c(fs_se, fs_lds, fs_evs)
