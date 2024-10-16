@@ -1,3 +1,28 @@
+# R2spa 0.0.4
+
+## New Features
+- Add function `get_fs_int()` for estimating interaction effects in 2S-PA (#82).
+- Add computation of reliability function in `get_fscore()` (#81)
+- Add functions of obtaining tidy-ed factor scores data for `get_fscore()` (#79)
+
+## Improvements
+- Add examples for `get_fs_int()` (#82).
+- Update naming for `get_fscore()` (#79)
+    * Rename `vc` to `ev` (error variance-covariance) for better consistency
+
+## Bug Fixes
+- Fix a bug in the `se_fs` argument in `tspa()` (#90).
+
+## Documentation
+- Updated vignettes for:
+    * tspa-growth-vignette (#50)
+    * get_fs_int-vignette (#82)
+    * reliability (#81)
+    * missing-data (#79)
+
+## Other
+- General code clean-up (#82).
+
 # R2spa 0.0.3
 
 - Add function `tspa_plot()` for bivariate and residual plots (#23)

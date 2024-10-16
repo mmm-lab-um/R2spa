@@ -1,0 +1,195 @@
+---
+title: "get_fs_int-example"
+author: "Jimmy Zhang"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{int_ind-example}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r load packages}
+library(lavaan)
+library(R2spa)
+```
+
+## `get_fs_int` Function
+This function is designed to create product indicators for first-order factor score indicators with standard errors and model-implied loadings. 
+With a specified model, the product indicator pairs will be generated based on the model syntax; without a specified model, the function will by default generate all possible pairs of product indicators. 
+
+## Illustrative Example
+
+We will simulate a dataset with four firsr-order latent variables: x, m, z, y
+
+```{r data-simulation}
+set.seed(2116)
+## Sample size:
+num_obs <- 5000
+
+# Structural Parameters: 
+## gamma_x = 0.3, gamma_m = 0.4, gamma_z = 0.2
+## gamma_xm = 0.1, gamma_xz = 0.15, gamma_mz = 0.12
+
+# Correlation between latent variables:
+## cor_xm = 0.2, cor_xz = 0.3, cor_zm = 0.4
+
+# Data simulation: 
+## x, z, m, ey
+cov_xmz_ey <- matrix(c(1, 0.1, 0.15, 0,
+                       0.1, 1, 0.12, 0,
+                       0.15, 0.12, 1, 0,
+                       0, 0, 0, 0.481351), nrow = 4)
+eta <- as.data.frame(
+  MASS::mvrnorm(num_obs,
+    mu = rep(0, 4), Sigma = cov_xmz_ey,
+    empirical = FALSE
+  )
+)
+names(eta) <- c("x", "m", "z", "ey")
+
+# xm, xz, mz
+eta <- eta |>
+  transform(
+    xm = x * m,
+    xz = x * z,
+    mz = m * z
+  )
+
+# y
+etay <- 0.3 * eta$x + 0.4 * eta$m + 0.2 * eta$z +
+  0.1 * eta$xm + 0.15 * eta$xz + 0.12 * eta$mz + eta$ey
+
+# Observed Indicators
+lambda_x <- c(0.9, 0.8, 0.7)
+lambda_m <- c(0.85, 0.75, 0.65)
+lambda_z <- c(0.8, 0.7, 0.6)
+lambda_y <- c(0.75, 0.7, 0.65)
+
+x_obs <- eta$x %*% t(lambda_x) + rnorm(num_obs * length(lambda_x))
+m_obs <- eta$m %*% t(lambda_m) + rnorm(num_obs * length(lambda_m))
+z_obs <- eta$z %*% t(lambda_z) + rnorm(num_obs * length(lambda_z))
+y_obs <- etay %*% t(lambda_y) + rnorm(num_obs * length(lambda_z))
+
+# Dataset: raw score
+df <- cbind(x_obs, m_obs, z_obs, y_obs)
+df <- as.data.frame(df)
+names(df) <- c(
+  paste0("x", 1:3), paste0("m", 1:3),
+  paste0("z", 1:3), paste0("y", 1:3)
+)
+```
+
+Obtain factor scores using `get_fs()`
+
+```{r}
+fs_dat <- get_fs(df, model = "x =~ x1 + x2 + x3
+                              m =~ m1 + m2 + m3
+                              z =~ z1 + z2 + z3
+                              y =~ y1 + y2 + y3",
+                 std.lv = TRUE,
+                 method = "Bartlett")
+head(fs_dat)
+```
+
+Obtain product-indicator of factor scores, and the corresponding standard errors. Double-mean-centering is used.
+
+```{r}
+# With specified model
+ind_1 <- get_fs_int(dat = fs_dat,
+                    fs_name = c("fs_x", "fs_m", "fs_z"),
+                    se_fs = c("fs_x_se", "fs_m_se", "fs_z_se"),
+                    loading_fs = c("x_by_fs_x", "m_by_fs_m", "z_by_fs_z"),
+                    model = "fs_x:fs_m + fs_x:fs_z")
+head(ind_1)
+
+# Without specified model
+ind_2 <- get_fs_int(dat = fs_dat,
+                    fs_name = c("fs_x", "fs_m", "fs_z"),
+                    se_fs = c("fs_x_se", "fs_m_se", "fs_z_se"),
+                    loading_fs = c("x_by_fs_x", "m_by_fs_m", "z_by_fs_z"))
+head(ind_2)
+```
+
+### 2S-PA with product factor score indicator
+
+```{r}
+# Rename product factor scores to be used with `tspa()`
+ind_2$fs_xm <- ind_2$`fs_x:fs_m`
+ind_2$fs_xz <- ind_2$`fs_x:fs_z`
+ind_2$fs_mz <- ind_2$`fs_m:fs_z`
+tspa_fit <- tspa("
+  y ~ x + m + z + xm + xz + mz
+", data = ind_2,
+  se_fs = c(
+    y = ind_2[1, "fs_y_se"],
+    x = ind_2[1, "fs_x_se"],
+    m = ind_2[1, "fs_m_se"],
+    z = ind_2[1, "fs_z_se"],
+    xm = ind_2[1, "fs_x:fs_m_se"],
+    xz = ind_2[1, "fs_x:fs_z_se"],
+    mz = ind_2[1, "fs_m:fs_z_se"]
+  ))
+standardizedSolution(tspa_fit)
+```
+
+The above example assumes that the factor scores are obtained from a model where the latent variances are assumed to be 1. If that is not the case, users should specify the corresponding latent variance estimate from the model, as in the following example, with the factor scores obtained from separate measurement models.
+
+```{r}
+mody <- "y =~ y1 + y2 + y3"
+mod1 <- "x =~ x1 + x2 + x3"
+mod2 <- "m =~ m1 + m2 + m3"
+mod3 <- "z =~ z1 + z2 + z3"
+cfay <- cfa(mody, data = df)
+cfa1 <- cfa(mod1, data = df)
+cfa2 <- cfa(mod2, data = df)
+cfa3 <- cfa(mod3, data = df)
+# Latent variances
+(lat_var <- vapply(list(cfa1, cfa2, cfa3),
+                   FUN = function(x) lavInspect(x, "cov.lv"),
+                   FUN.VALUE = numeric(1)))
+fs_dat2 <- lapply(list(cfay, cfa1, cfa2, cfa3),
+  FUN = augment_lav_predict,
+  method = "Bartlett"
+) |>
+  do.call(what = cbind)
+# With user-specified latent variance
+ind_3 <- get_fs_int(dat = fs_dat2,
+                    fs_name = c("fs_x", "fs_m", "fs_z"),
+                    se_fs = c("se_fs_x", "se_fs_m", "se_fs_z"),
+                    lat_var = lat_var,
+                    loading_fs = c("x_by_fs_x", "m_by_fs_m", "z_by_fs_z"))
+head(ind_3)
+```
+
+
+### 2S-PA with product factor score indicator
+
+```{r}
+# Rename product factor scores to be used with `tspa()`
+ind_3$fs_xm <- ind_3$`fs_x:fs_m`
+ind_3$fs_xz <- ind_3$`fs_x:fs_z`
+ind_3$fs_mz <- ind_3$`fs_m:fs_z`
+tspa_fit <- tspa("
+  y ~ x + m + z + xm + xz + mz
+", data = ind_3,
+  se_fs = c(
+    y = ind_3[1, "se_fs_y"],
+    x = ind_3[1, "se_fs_x"],
+    m = ind_3[1, "se_fs_m"],
+    z = ind_3[1, "se_fs_z"],
+    xm = ind_3[1, "fs_x:fs_m_se"],
+    xz = ind_3[1, "fs_x:fs_z_se"],
+    mz = ind_3[1, "fs_m:fs_z_se"]
+  ))
+standardizedSolution(tspa_fit)
+```
+
+Note that the unstandardized coefficients are on a different scale compared to the previous example, as the latent variables are scaled differently.

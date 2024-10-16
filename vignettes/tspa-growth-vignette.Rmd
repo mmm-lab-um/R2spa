@@ -19,14 +19,17 @@ library(lavaan)
 library(R2spa)
 ```
 
-We use the example from [this tutorial](https://quantdev.ssri.psu.edu/tutorials/growth-modeling-chapter-14-modeling-change-latent-variables-measured-continuous) from Chapter 14 of the book *Growth Modeling* (Grimm, Ram & Estabrook, 2017) to demonstrate how to perform linear growth modeling with two-stage path analysis (2S-PA)
+We use the example from [this tutorial](https://thechangelab.stanford.edu/tutorials/growth-modeling/measurement-invariance-2nd-order-growth-model/) from Chapter 14 of the book *Growth Modeling* (Grimm, Ram & Estabrook, 2017) to demonstrate how to perform linear growth modeling with two-stage path analysis (2S-PA)
 
 ```{r}
 # Load data
-eclsk <- read.csv(
-  "https://quantdev.ssri.psu.edu/sites/qdev/files/ECLS_Science.csv",
-  header = TRUE
+eclsk <- read.table(
+  "https://raw.githubusercontent.com/LRI-2/Data/main/GrowthModeling/ECLS_Science.dat",
+  na.strings = "."
 )
+names(eclsk) <- c("id", "s_g3", "r_g3", "m_g3", "s_g5", "r_g5", "m_g5", "s_g8",
+                  "r_g8", "m_g8", "st_g3", "rt_g3", "mt_g3", "st_g5", "rt_g5",
+                  "mt_g5", "st_g8", "rt_g8", "mt_g8")
 ```
 
 ## Joint structural equation model: Latent growth with strict invariance model

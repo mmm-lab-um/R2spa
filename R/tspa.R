@@ -143,8 +143,13 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
   }
 
   if (!is.null(fsT)) {
-    fs_names <- ifelse(multigroup, colnames(fsT[[1]]), colnames(fsT))
-    dat_names <- ifelse(multigroup, names(data[[1]]), names(data))
+    if (multigroup) {
+      fs_names <- colnames(fsT[[1]])
+      dat_names <- names(data[[1]])
+    } else {
+      fs_names <- colnames(fsT)
+      dat_names <- names(data)
+    }
     names_match <- lapply(fs_names, function(x) x %in% dat_names) |> unlist()
     if (any(!names_match)) {
       stop(

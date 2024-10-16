@@ -1,6 +1,6 @@
 Package: R2spa
 Title: An R package for two-stage path analysis (2S-PA) to adjust for measurement errors
-Version: 0.0.3
+Version: 0.0.4
 Authors@R: 
   c(
     person(given = "Mark Hok Chio",
@@ -43,6 +43,7 @@ Imports:
 Suggests: 
     boot,
     DiagrammeR,
+    ggplot2,
     knitr,
     magrittr,
     mirt,
@@ -50,6 +51,7 @@ Suggests:
     rmarkdown,
     psych,
     testthat (>= 3.0.0),
+    tidyr,
     umx
 VignetteBuilder: knitr
 Config/testthat/edition: 3
