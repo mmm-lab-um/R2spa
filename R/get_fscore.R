@@ -251,6 +251,8 @@ augment_fs <- function(fs, fs_ev) {
 #' @param method Currently only `"EB"` for empirical Bayes.
 #' @param corrected_fsT Currently not used.
 #' @param vfsLT Currently not used.
+#' @param fsm Whether to return factor scoring matrices as attributes.
+#'   Default is `FALSE`.
 #'
 #' @importFrom lme4 getME ranef
 #' @importFrom Matrix crossprod solve t tcrossprod
@@ -259,27 +261,18 @@ augment_fs <- function(fs, fs_ev) {
 get_fs_lmer <- function(object,
                         method = c("EB"),
                         corrected_fsT = FALSE,
-                        vfsLT = FALSE) {
+                        vfsLT = FALSE,
+                        fsm = FALSE) {
   if (!inherits(object, "lmerMod")) {
     stop("`object` must be a `lmerMod` object.")
   }
-  # Obtain EB estimates
-  # 1. e-tilde = y - X * gamma
   tilde_e <- object@resp$y - as.vector(object@pp$X %*% object@beta)
-  # 2. Obtain Zt (transpose of Z)
   Zt <- getME(object, "Zt")
-  # 3. Obtain Sigma (relative to sigma)
   Sigma <- Matrix::crossprod(getME(object, "Lambdat"))
-  # 3. Obtain V
   V <- Matrix::crossprod(getME(object, "A")) + diag(length(tilde_e))
-  # 4. Score matrix
   score_mat_eb <- Sigma %*% Zt %*% Matrix::solve(V)
-  # Verify factor scores are the same as `lme4::ranef()`
-  score_mat_eb %*% tilde_e - c(t(ranef(object)[[1]]))
-  # 5. Loading matrix (`fsL`) and error covariance (`fsT`)
   fsL_eb <- score_mat_eb %*% Matrix::t(Zt)
   fsT_eb <- Matrix::tcrossprod(score_mat_eb) * stats::sigma(object)^2
-  # 6. Convert to columns
   num_re <- length(object@cnms[[1]]) # Number of random effect
   num_clus <- nlevels(object@flist[[1]])
   fsL_arr_eb <- fsT_arr_eb <-
@@ -324,9 +317,11 @@ get_fs_lmer <- function(object,
     fsL_cols, fsT_cols
   )
   colnames(fs_dat)[seq_len(num_re)] <- fs_names
-  attr(fs_dat, "fsT") <- fsT_eb
-  attr(fs_dat, "fsL") <- fsL_eb
-  attr(fs_dat, "scoring_matrix") <- score_mat_eb
+  if (fsm) {
+    attr(fs_dat, "fsT") <- fsT_eb
+    attr(fs_dat, "fsL") <- fsL_eb
+    attr(fs_dat, "scoring_matrix") <- score_mat_eb
+  }
   fs_dat
 }
 

@@ -5,7 +5,13 @@
 \title{Get Factor Scores and the Corresponding Scoring Matrices for
 Mixed-Effect Models}
 \usage{
-get_fs_lmer(object, method = c("EB"), corrected_fsT = FALSE, vfsLT = FALSE)
+get_fs_lmer(
+  object,
+  method = c("EB"),
+  corrected_fsT = FALSE,
+  vfsLT = FALSE,
+  fsm = FALSE
+)
 }
 \arguments{
 \item{object}{A fiited model object of class \link[lme4:merMod-class]{lme4::lmerMod}.}
@@ -15,6 +21,9 @@ get_fs_lmer(object, method = c("EB"), corrected_fsT = FALSE, vfsLT = FALSE)
 \item{corrected_fsT}{Currently not used.}
 
 \item{vfsLT}{Currently not used.}
+
+\item{fsm}{Whether to return factor scoring matrices as attributes.
+Default is \code{FALSE}.}
 }
 \description{
 Get Factor Scores and the Corresponding Scoring Matrices for
