@@ -22,8 +22,7 @@ get_fs_lmer(
 
 \item{vfsLT}{Currently not used.}
 
-\item{fsm}{Whether to return factor scoring matrices as attributes.
-Default is \code{FALSE}.}
+\item{fsm}{Currently not used.}
 }
 \description{
 Get Factor Scores and the Corresponding Scoring Matrices for
