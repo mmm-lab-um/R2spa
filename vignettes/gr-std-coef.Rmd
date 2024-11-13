@@ -60,7 +60,7 @@ R2spa:::veta(fit_est$beta, psi = fit_est$psi)
 The standardized estimates in the $\bv B$ matrix are obtained as
 
 $$
-\bv B_s = \bv S_\eta^{-1} \bv B \bv S_\eta^{1}
+\bv B_s = \bv S_\eta^{-1} \bv B \bv S_\eta^{-1}
 $$
 
 where $\bv S_\eta$ is a diagonal matrix containing the square root of the diagonal elements of $\Var(\bv \eta)$
