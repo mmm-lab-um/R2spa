@@ -85,6 +85,9 @@ get_fs_lavaan <- function(lavobj,
                           corrected_fsT = FALSE,
                           vfsLT = FALSE,
                           reliability = FALSE) {
+  if (!inherits(lavobj, "lavaan")) {
+    stop("`lavobj` must be a `lavaan` model object.")
+  }
   est <- lavInspect(lavobj, what = "est")
   y <- lavInspect(lavobj, what = "data")
   if (reliability) corrected_fsT <- TRUE
@@ -242,8 +245,92 @@ augment_fs <- function(fs, fs_ev) {
   fs_dat
 }
 
+#' Get Factor Scores and the Corresponding Scoring Matrices for
+#' Mixed-Effect Models
+#' @param object A fiited model object of class [lme4::lmerMod-class].
+#' @param method Currently only `"EB"` for empirical Bayes.
+#' @param corrected_fsT Currently not used.
+#' @param vfsLT Currently not used.
+#' @param fsm Whether to return factor scoring matrices as attributes.
+#'   Default is `FALSE`.
+#'
+#' @importFrom lme4 getME ranef
+#' @importFrom Matrix crossprod solve t tcrossprod
+#' 
+#' @export
+get_fs_lmer <- function(object,
+                        method = c("EB"),
+                        corrected_fsT = FALSE,
+                        vfsLT = FALSE,
+                        fsm = FALSE) {
+  if (!inherits(object, "lmerMod")) {
+    stop("`object` must be a `lmerMod` object.")
+  }
+  tilde_e <- object@resp$y - as.vector(object@pp$X %*% object@beta)
+  Zt <- getME(object, "Zt")
+  Sigma <- Matrix::crossprod(getME(object, "Lambdat"))
+  V <- Matrix::crossprod(getME(object, "A")) + diag(length(tilde_e))
+  score_mat_eb <- Sigma %*% Zt %*% Matrix::solve(V)
+  fsL_eb <- score_mat_eb %*% Matrix::t(Zt)
+  fsT_eb <- Matrix::tcrossprod(score_mat_eb) * stats::sigma(object)^2
+  num_re <- length(object@cnms[[1]]) # Number of random effect
+  num_clus <- nlevels(object@flist[[1]])
+  fsL_arr_eb <- fsT_arr_eb <-
+    array(dim = c(num_re, num_re, num_clus))
+  for (i in seq_len(num_clus)) {
+    idx <- seq_len(num_re) + num_re * (i - 1)
+    fsL_arr_eb[, , i] <- as.matrix(fsL_eb[idx, idx])
+    fsT_arr_eb[, , i] <- as.matrix(fsT_eb[idx, idx])
+  }
+  fs_names <- paste0("u", seq_len(num_re) - 1, "_eb")
+  lv_names <- paste0("u", seq_len(num_re) - 1)
+  fsL_cols <- t(apply(fsL_arr_eb, MARGIN = 3, FUN = c))
+  fsT_cols <- t(apply(fsT_arr_eb,
+    MARGIN = 3,
+    FUN = \(x) x[lower.tri(x, diag = TRUE)]
+  ))
+  lcount <- tcount <- 1
+  fsL_names <- rep("", ncol(fsL_cols))
+  fsT_names <- rep("", ncol(fsT_cols))
+  for (j in seq_along(lv_names)) {
+    for (i in seq_along(fs_names)) {
+      fsL_names[lcount] <- paste(lv_names[j], fs_names[i], sep = "_by_")
+      lcount <- lcount + 1
+      if (i <= j) {
+        if (i == j) {
+          fsT_names[tcount] <- paste0("ev_", fs_names[i])
+        } else {
+          fsT_names[tcount] <- paste0(
+            "ecov_",
+            fs_names[i], "_",
+            fs_names[j]
+          )
+        }
+        tcount <- tcount + 1
+      }
+    }
+  }
+  colnames(fsL_cols) <- fsL_names
+  colnames(fsT_cols) <- fsT_names
+  fs_dat <- cbind(
+    t(matrix(score_mat_eb %*% tilde_e, nrow = num_re)),
+    fsL_cols, fsT_cols
+  )
+  colnames(fs_dat)[seq_len(num_re)] <- fs_names
+  if (fsm) {
+    attr(fs_dat, "fsT") <- fsT_eb
+    attr(fs_dat, "fsL") <- fsL_eb
+    attr(fs_dat, "scoring_matrix") <- score_mat_eb
+  }
+  fs_dat
+}
+
+sqrt_or_na <- function(x) {
+  sqrt(ifelse(x >= 0, x, NA))
+}
+
 augment_fs2 <- function(fs, fsL, fsT, fsb = NULL) {
-  fs_se <- sqrt(diag(fsT))
+  fs_se <- sqrt_or_na(diag(fsT))
   fs_lds <- c(fsL)
   fs_evs <- fsT[upper.tri(fsT, diag = TRUE)]
   fs_vec <- c(fs_se, fs_lds, fs_evs)

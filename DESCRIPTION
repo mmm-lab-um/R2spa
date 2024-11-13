@@ -36,7 +36,9 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.1
 Imports: 
     lavaan,
+    lme4,
     MASS,
+    Matrix,
     OpenMx
 Suggests: 
     boot,
@@ -44,7 +46,6 @@ Suggests:
     ggplot2,
     knitr,
     magrittr,
-    Matrix,
     mirt,
     numDeriv,
     rmarkdown,

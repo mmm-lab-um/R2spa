@@ -1,5 +1,6 @@
 # Loading packages and functions
 library(lavaan)
+library(lme4)
 library(umx)
 
 ########## Single-group example ##########
@@ -309,6 +310,12 @@ test_that("Correction factor is similar with single or multiple groups", {
   expect_lt(mean(abs(d2)), mean(abs(d1)))
 })
 
+test_that("Same factor scores as `lme4::ranef()`", {
+  lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+  expect_equal(as.data.frame(get_fs_lmer(lme1)[, 1:2]),
+               ranef(lme1)[[1]],
+               ignore_attr = TRUE)
+})
 ########## Computing reliability ##########
 
 test_that("Reliability of regression factor scores", {

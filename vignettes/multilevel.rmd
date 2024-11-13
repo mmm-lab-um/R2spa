@@ -1,0 +1,283 @@
+---
+title: "2S-PA with Random Effects"
+author: "Mark Lai"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{multilevel}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+In this vignette, we show how to use 2S-PA for estimating associations for cluster-level random effects. We use simulated data from a parallel-process growth model, where the two processes have different time scales. This is a pretty challenging model to estimate using standard structural equation models (as time scales are different) or multilevel models (as it is multivariate).
+
+```{r, message = FALSE}
+library(R2spa)
+library(lme4)
+library(umx)
+```
+
+## Simulate bivariate growth data
+
+- Process 1: 5 time points
+- Process 2: 20 time points
+
+```{r}
+set.seed(1957)
+latent_cor <- matrix(
+    c(1, 0, 0.5, 0.3,
+      0, 1, -0.1, -0.3,
+      0.5, -0.1, 1, 0.2,
+      0.3, -0.3, 0.2, 1),
+    nrow = 4
+)
+latent_sd <- c(1, 0.5, 1.5, 0.6)
+latent_cov <- diag(latent_sd) %*% latent_cor %*% diag(latent_sd)
+latent_mean <- c(-1, 0.5, 0, -0.3)
+# Simulate person-specific growth parameters
+n_clus <- 100
+eta <- MASS::mvrnorm(n_clus, mu = latent_mean, Sigma = latent_cov,
+                     empirical = TRUE)
+# Time variables (different time scale for the two processes)
+n_time1 <- 5
+n_time2 <- 20
+# Assume complete data for now
+time1 <- rep(seq_len(n_time1) - 1, n_clus)
+time2 <- rep(seq_len(n_time2) - 1, n_clus)
+# Simulate process 1
+clus_id1 <- rep(seq_len(n_clus), each = n_time1)
+sigma1 <- 1  # error sd
+# Simulate error
+e1 <- rnorm(clus_id1)
+e1 <- e1 - mean(e1)
+e1 <- e1 / sd(e1) * sigma1
+y1 <- eta[clus_id1, 1] + time1 * eta[clus_id1, 2] + e1
+# Simulate process 2
+clus_id2 <- rep(seq_len(n_clus), each = n_time2)
+sigma2 <- 2  # error sd
+# Simulate error
+e2 <- rnorm(clus_id1)
+e2 <- e2 - mean(e2)
+e2 <- e2 / sd(e2) * sigma2
+y2 <- eta[clus_id2, 3] + time2 * eta[clus_id2, 4] + e2
+```
+
+```{r}
+# Empirical Bayes
+m1 <- lmer(y1 ~ time1 + (time1 | clus_id1),
+           data = data.frame(y1, time1, clus_id1),
+           REML = FALSE)
+fs_dat1 <- get_fs_lmer(m1)
+# Empirical Bayes
+m2 <- lmer(y2 ~ time2 + (time2 | clus_id2),
+           data = data.frame(y2, time2, clus_id2),
+           REML = FALSE)
+fs_dat2 <- get_fs_lmer(m2)
+```
+
+## Using EB Without Accounting for Error
+
+```{r}
+eb_m1 <- ranef(m1)[[1]]
+eb_m2 <- ranef(m2)[[1]]
+cor(cbind(eb_m1, eb_m2))
+cov(cbind(eb_m1, eb_m2))
+```
+
+The numbers are quite different from the generating values.
+
+## 2S-PA
+
+### Process 1
+
+```{r}
+# Unstructured model
+m1_umx <- umxLav2RAM(
+    "
+      u0_eb ~~ u1_eb
+      u0_eb + u1_eb ~ 1
+    ",
+    printTab = FALSE)
+cross_load <- matrix(c("u0_by_u0_eb", "u0_by_u1_eb",
+                       "u1_by_u0_eb", "u1_by_u1_eb"), nrow = 2) |>
+    `dimnames<-`(rep(list(c("u0_eb", "u1_eb")), 2))
+err_cov <- matrix(c("ev_u0_eb", "ecov_u0_eb_u1_eb",
+                    "ecov_u0_eb_u1_eb", "ev_u1_eb"), nrow = 2) |>
+    `dimnames<-`(rep(list(c("u0_eb", "u1_eb")), 2))
+tspa1_mx <- tspa_mx_model(m1_umx, data = fs_dat1,
+                          mat_ld = cross_load, mat_ev = err_cov)
+# Run OpenMx
+tspa1_mx_fit <- mxRun(tspa1_mx)
+# Summarize the results
+summary(tspa1_mx_fit)
+```
+
+The estimated variances and covariances for $u_0$ and $u_1$ are similar to the ones in the mixed model.
+
+```{r}
+print("2S-PA covariance")
+umx_lower2full(coef(tspa1_mx_fit)[1:3], diag = TRUE)
+print("lme4 covariance")
+matrix(
+  as.numeric(VarCorr(m1)$clus_id1),
+  nrow = 2
+)
+```
+
+Notes: The formulation works best with ML estimation for `lmer()`; with REML, one may need to consider the contrast matrix.
+
+<!-- For REML, 
+
+$$
+K' y = K' X \gamma + K' Z u + K' e,
+$$
+with K'X = 0. So
+
+$$
+K' y = K' Z u + K' e.
+$$ -->
+
+### Process 2
+
+```{r}
+# Unstructured model
+m2_umx <- umxLav2RAM(
+    "
+      u0_eb ~~ u1_eb
+      u0_eb + u1_eb ~ 1
+    ",
+    printTab = FALSE)
+cross_load <- matrix(c("u0_by_u0_eb", "u0_by_u1_eb",
+                       "u1_by_u0_eb", "u1_by_u1_eb"), nrow = 2) |>
+    `dimnames<-`(rep(list(c("u0_eb", "u1_eb")), 2))
+err_cov <- matrix(c("ev_u0_eb", "ecov_u0_eb_u1_eb",
+                    "ecov_u0_eb_u1_eb", "ev_u1_eb"), nrow = 2) |>
+    `dimnames<-`(rep(list(c("u0_eb", "u1_eb")), 2))
+tspa2_mx <- tspa_mx_model(m2_umx, data = fs_dat2,
+                          mat_ld = cross_load, mat_ev = err_cov)
+# Run OpenMx
+tspa2_mx_fit <- mxRun(tspa2_mx)
+# Summarize the results
+summary(tspa2_mx_fit)
+```
+
+```{r}
+print("2S-PA covariance")
+umx_lower2full(coef(tspa2_mx_fit)[1:3], diag = TRUE)
+print("lme4 covariance")
+matrix(
+  as.numeric(VarCorr(m2)$clus_id2),
+  nrow = 2
+)
+```
+
+### Combining Processes 1 and 2
+
+First, combine the two data sets with EB estimates. We'll add suffix to separate the variables.
+
+```{r}
+colnames(fs_dat1) <- paste0(colnames(fs_dat1), "_1")
+colnames(fs_dat2) <- paste0(colnames(fs_dat2), "_2")
+fs_dat <- cbind(fs_dat1, fs_dat2)
+```
+
+```{r}
+# Unstructured model
+m3_umx <- umxLav2RAM(
+    "
+      u0_eb_1 ~~ u1_eb_1 + u0_eb_2 + u1_eb_2
+      u1_eb_1 ~~ u0_eb_2 + u1_eb_2
+      u0_eb_2 ~~ u1_eb_2
+      u0_eb_1 + u1_eb_1 + u0_eb_2 + u1_eb_2 ~ 1
+    ",
+    printTab = FALSE)
+cross_load <- matrix(c("u0_by_u0_eb_1", "u0_by_u1_eb_1", NA, NA,
+                       "u1_by_u0_eb_1", "u1_by_u1_eb_1", NA, NA,
+                       NA, NA, "u0_by_u0_eb_2", "u0_by_u1_eb_2",
+                       NA, NA, "u1_by_u0_eb_2", "u1_by_u1_eb_2"), nrow = 4) |>
+    `dimnames<-`(rep(list(c("u0_eb_1", "u1_eb_1", "u0_eb_2", "u1_eb_2")), 2))
+err_cov <- matrix(c("ev_u0_eb_1", "ecov_u0_eb_u1_eb_1", NA, NA,
+                    "ecov_u0_eb_u1_eb_1", "ev_u1_eb_1", NA, NA,
+                    NA, NA, "ev_u0_eb_2", "ecov_u0_eb_u1_eb_2",
+                    NA, NA, "ecov_u0_eb_u1_eb_2", "ev_u1_eb_2"), nrow = 4) |>
+    `dimnames<-`(rep(list(c("u0_eb_1", "u1_eb_1", "u0_eb_2", "u1_eb_2")), 2))
+tspa3_mx <- tspa_mx_model(m3_umx, data = fs_dat,
+                          mat_ld = cross_load, mat_ev = err_cov)
+# Run OpenMx
+tspa3_mx_fit <- mxRun(tspa3_mx)
+# Summarize the results
+summary(tspa3_mx_fit)
+```
+
+```{r}
+cov(cbind(eb_m1, eb_m2)) |>
+  knitr::kable(digits = 3, caption = "EB covariance")
+umx_lower2full(coef(tspa3_mx_fit)[1:10], diag = TRUE) |>
+  knitr::kable(digits = 3, caption = "2S-PA covariance")
+latent_cov |>
+  knitr::kable(digits = 3, caption = "Population covariance")
+```
+
+One can see the 2S-PA covariance matrix is much closer to the population values than using just EB estimates.
+
+# With Missing Data
+
+Now consider data with missing time points. We consider missing at random, where data are more likely to be missing for later time points.
+
+```{r}
+set.seed(1942)
+# Missing indicators
+r1 <- rbinom(time1, size = 1, prob = (20 - time1) / 20 - 0.05)
+r2 <- rbinom(time2, size = 1, prob = (100 - time2) / 100 - 0.05)
+```
+
+Model with missing data
+
+```{r}
+# Empirical Bayes
+m1 <- lmer(y1 ~ time1 + (time1 | clus_id1),
+           data = data.frame(y1, time1, clus_id1),
+           REML = FALSE, subset = r1 == 1)
+fs_dat1 <- get_fs_lmer(m1)
+# Empirical Bayes
+m2 <- lmer(y2 ~ time2 + (time2 | clus_id2),
+           data = data.frame(y2, time2, clus_id2),
+           REML = FALSE, subset = r2 == 1)
+fs_dat2 <- get_fs_lmer(m2)
+colnames(fs_dat1) <- paste0(colnames(fs_dat1), "_1")
+colnames(fs_dat2) <- paste0(colnames(fs_dat2), "_2")
+fs_dat <- cbind(fs_dat1, fs_dat2)
+```
+
+Note that the cross-loadings and error covariances are not constant across clusters.
+
+```{r}
+head(fs_dat)
+```
+
+Now run 2S-PA and compare with EB estimates without accounting for error
+
+```{r}
+tspa3o_mx <- tspa_mx_model(m3_umx, data = fs_dat,
+                           mat_ld = cross_load, mat_ev = err_cov)
+# Run OpenMx
+tspa3o_mx_fit <- mxTryHard(tspa3o_mx)
+# Summarize the results
+summary(tspa3o_mx_fit)
+```
+
+```{r}
+cov(cbind(fs_dat1[, 1:2], fs_dat2[, 1:2])) |>
+  knitr::kable(digits = 3, caption = "EB covariance")
+umx_lower2full(coef(tspa3o_mx_fit)[1:10], diag = TRUE) |>
+  knitr::kable(digits = 3, caption = "2S-PA covariance")
+latent_cov |>
+  knitr::kable(digits = 3, caption = "Population covariance")
+```
