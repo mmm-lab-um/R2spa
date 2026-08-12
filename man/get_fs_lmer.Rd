@@ -14,7 +14,7 @@ get_fs_lmer(
 )
 }
 \arguments{
-\item{object}{A fiited model object of class \link[lme4:merMod-class]{lme4::lmerMod}.}
+\item{object}{A fiited model object of class \link[lme4:lmerMod-class]{lme4::lmerMod}.}
 
 \item{method}{Currently only \code{"EB"} for empirical Bayes.}
 

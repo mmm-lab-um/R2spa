@@ -16,7 +16,7 @@ tspa_plot(
 )
 }
 \arguments{
-\item{tspa_fit}{An object of class \link[=lavaan-class]{lavaan},
+\item{tspa_fit}{An object of class \link[=lavaan:lavaan-class]{lavaan},
 representing the output generated from the \code{\link[=tspa]{tspa()}}
 function.}
 

@@ -1,7 +1,9 @@
 # Loading packages and functions
 library(lavaan)
 library(lme4)
-library(umx)
+if (requireNamespace("umx", quietly = TRUE)) {
+  library(umx)
+}
 
 ########## Single-group example ##########
 
@@ -418,7 +420,8 @@ test_that("augment_lav_predict() works for missing data",
   }
 )
 
-lcov_umx <- umxLav2RAM(
+if (requireNamespace("umx", quietly = TRUE)) {
+  lcov_umx <- umxLav2RAM(
   "
     visual ~~ textual + speed
     textual ~~ speed
@@ -434,7 +437,7 @@ tspab_mx <- tspa_mx_model(lcov_umx,
 # Run OpenMx
 tspab_mx_fit <- mxRun(tspab_mx)
 
-test_that("tspa_mx() gives similar results as lavaan with missing data", 
+test_that("tspa_mx() gives similar results as lavaan with missing data",
   code = {
     expect_equal(tspab_mx_fit$m1$S$values,
                  expected = lavInspect(cfa_fiml, what = "est")$psi,
@@ -442,3 +445,4 @@ test_that("tspa_mx() gives similar results as lavaan with missing data",
                  ignore_attr = TRUE)
   }
 )
+}

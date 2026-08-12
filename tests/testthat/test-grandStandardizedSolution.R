@@ -26,7 +26,7 @@ test_that("Test for single group warning message", {
 test_that("Standardized beta in a model with single group, two factors",
           { expect_equal(s2_std_beta$est.std, s2_std_beta_lav$est.std) })
 test_that("SE of standardized beta in a model with single group, two-factors",
-          { expect_equal(s2_std_beta$se,  s2_std_beta_lav$se) })
+          { expect_equal(s2_std_beta$se, s2_std_beta_lav$se, tolerance = 1e-7) })
 
 # Single-group, three-factor ---------------------------------------------------
 

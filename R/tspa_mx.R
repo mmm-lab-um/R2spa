@@ -36,6 +36,7 @@
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' library(mirt)
 #' library(umx)
 #' library(OpenMx)
@@ -94,6 +95,7 @@
 #' tspa_mx_fit <- mxRun(tspa_mx)
 #' # Summarize the results
 #' summary(tspa_mx_fit)
+#' }
 
 tspa_mx_model <- function(mx_model, data, mat_ld, mat_ev,
                           mat_int = NULL,

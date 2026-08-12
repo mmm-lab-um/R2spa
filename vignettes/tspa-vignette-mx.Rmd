@@ -60,17 +60,20 @@ fsreg_umx <- umxLav2RAM(
 
 ```{r}
 # Loading
+rawL <- attr(fs_dat, "fsL")[2:1, 2:1]
 matL <- mxMatrix(
     type = "Full", nrow = 2, ncol = 2,
     free = FALSE,
-    values = attr(fs_dat, "fsL")[2:1, 2:1],
+    values = rawL,
     name = "L"
 )
-# Error
+# Error (force symmetry)
+rawE <- attr(fs_dat, "fsT")[2:1, 2:1]
+rawE <- (rawE + t(rawE)) / 2
 matE <- mxMatrix(
     type = "Symm", nrow = 2, ncol = 2,
     free = FALSE,
-    values = attr(fs_dat, "fsT")[2:1, 2:1],
+    values = rawE,
     name = "E"
 )
 ```

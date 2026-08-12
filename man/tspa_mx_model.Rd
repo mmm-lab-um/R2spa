@@ -57,6 +57,7 @@ model has not been run.
 Fit a two-stage path analysis (2S-PA) model.
 }
 \examples{
+\dontrun{
 library(mirt)
 library(umx)
 library(OpenMx)
@@ -115,4 +116,5 @@ tspa_mx <-
 tspa_mx_fit <- mxRun(tspa_mx)
 # Summarize the results
 summary(tspa_mx_fit)
+}
 }

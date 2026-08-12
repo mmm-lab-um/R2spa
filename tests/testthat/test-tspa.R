@@ -3,7 +3,9 @@
 # Loading packages and functions
 library(lavaan)
 library(OpenMx)
-library(umx)
+if (requireNamespace("umx", quietly = TRUE)) {
+  library(umx)
+}
 
 ########## Single-group example ##########
 
@@ -155,7 +157,8 @@ tspa_3var <- tspa(
 )
 
 # Compare to Mx
-model_umx <- umxLav2RAM("
+if (requireNamespace("umx", quietly = TRUE)) {
+  model_umx <- umxLav2RAM("
   dem60 ~ ind60
   dem65 ~ ind60 + dem60
   dem65 + dem60 + ind60 ~ 1
@@ -233,6 +236,7 @@ test_that("Same results with different Mx matrices input", {
     tolerance = 1e-5
   )
 })
+}
 
 ########## Testing section #############
 

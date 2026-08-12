@@ -33,7 +33,6 @@ Description: `R2spa` is a free and open source R package that performs two-stage
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.1
 Imports: 
     lavaan,
     lme4,
@@ -56,3 +55,4 @@ Suggests:
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 URL: https://gengrui-zhang.github.io/R2spa/
+Config/roxygen2/version: 8.1.0
