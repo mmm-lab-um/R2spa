@@ -23,10 +23,12 @@
 #'              analysis, which is passed to \code{\link[lavaan]{cfa}}.
 #'              Only used when `data` is a data frame.
 #' @param method Character. Method for computing factor scores (options are
-#'               "regression" or "Bartlett"). Currently, the default is
-#'               "regression" to be consistent with
-#'               \code{\link[lavaan]{lavPredict}}, but the Bartlett scores have
-#'               more desirable properties and may be preferred for 2S-PA.
+#'               "regression" or "Bartlett"; "ML" is an alias for "Bartlett"
+#'               and "EB" is an alias for "regression"). Currently, the
+#'               default is "regression" to be consistent with
+#'               \code{\link[lavaan]{lavPredict}}, but the Bartlett scores
+#'               have more desirable properties and may be preferred for
+#'               2S-PA.
 #' @param corrected_fsT Logical. Whether to correct for the sampling
 #'                      error in the factor score weights when computing
 #'                      the error variance estimates of factor scores.
@@ -93,18 +95,23 @@ get_fs <- function(data, ...) {
 #' New code should call [get_fs()] directly.
 #'
 #' @export
-get_fs_lavaan <- function(lavobj,
-                          method = c("regression", "Bartlett"),
-                          corrected_fsT = FALSE,
-                          vfsLT = FALSE,
-                          reliability = FALSE,
-                          ...) {
-  get_fs(lavobj, method = method,
-         corrected_fsT = corrected_fsT,
-         vfsLT = vfsLT,
-         reliability = reliability,
-         format = "list",
-         ...)
+get_fs_lavaan <- function(
+  lavobj,
+  method = c("regression", "Bartlett", "ML", "EB"),
+  corrected_fsT = FALSE,
+  vfsLT = FALSE,
+  reliability = FALSE,
+  ...
+) {
+  get_fs(
+    lavobj,
+    method = method,
+    corrected_fsT = corrected_fsT,
+    vfsLT = vfsLT,
+    reliability = reliability,
+    format = "list",
+    ...
+  )
 }
 
 #' Convert Unified Factor Scores to Group List (or Vice Versa)
@@ -143,7 +150,9 @@ fs_to_group_list <- function(fs) {
 
   if (is.data.frame(fs)) {
     grp_col <- attr(fs, "group_col")
-    if (is.null(grp_col)) grp_col <- "group"
+    if (is.null(grp_col)) {
+      grp_col <- "group"
+    }
 
     if (!grp_col %in% names(fs)) {
       # Single-group unified result without group column — unwrap attributes
@@ -177,8 +186,10 @@ fs_to_group_list <- function(fs) {
     grp_dfs <- split(fs, fs[[grp_col]])
     grp_dfs <- grp_dfs[group_labels]
     for (g in group_labels) {
-      grp_dfs[[g]] <- grp_dfs[[g]][, !names(grp_dfs[[g]]) %in% grp_col,
-                                   drop = FALSE]
+      grp_dfs[[g]] <- grp_dfs[[g]][,
+        !names(grp_dfs[[g]]) %in% grp_col,
+        drop = FALSE
+      ]
       for (ak in attr_keys) {
         outer <- attr(fs, ak)
         if (is.list(outer) && !is.null(names(outer))) {
@@ -197,7 +208,6 @@ fs_to_group_list <- function(fs) {
       }
     }
     grp_dfs
-
   } else if (is.list(fs)) {
     group_labels <- names(fs)
     if (is.null(group_labels) || !all(nzchar(group_labels))) {
@@ -226,9 +236,13 @@ fs_to_group_list <- function(fs) {
     for (ak in attr_keys) {
       per_grp <- lapply(group_labels, function(g) {
         a <- attr(fs[[g]], ak)
-        if (!is.null(a)) return(a)
+        if (!is.null(a)) {
+          return(a)
+        }
         outer <- attr(fs, ak)
-        if (is.list(outer) && !is.null(names(outer))) return(outer[[g]])
+        if (is.list(outer) && !is.null(names(outer))) {
+          return(outer[[g]])
+        }
         NULL
       })
       if (!all(vapply(per_grp, is.null, logical(1)))) {
@@ -236,7 +250,6 @@ fs_to_group_list <- function(fs) {
       }
     }
     unified
-
   } else {
     stop("'fs' must be data frame or list.", call. = FALSE)
   }
@@ -256,9 +269,12 @@ augment_fs <- function(fs, fs_ev) {
       if (i == j) {
         names(fs_evs)[count] <- paste0("ev_", rownames(fs_ev)[i])
       } else {
-        names(fs_evs)[count] <- paste0("ecov_",
-                                       rownames(fs_ev)[i], "_",
-                                       colnames(fs_ev)[j])
+        names(fs_evs)[count] <- paste0(
+          "ecov_",
+          rownames(fs_ev)[i],
+          "_",
+          colnames(fs_ev)[j]
+        )
       }
       count <- count + 1
     }
@@ -266,12 +282,15 @@ augment_fs <- function(fs, fs_ev) {
   fsL <- attr(fs, "fsL")
   fs_names <- paste0("fs_", colnames(fsL))
   fs_lds <- lapply(seq_len(ncol(fsL)), function(i) {
-    setNames(fsL[, i],
-             paste(colnames(fsL)[i], fs_names, sep = "_by_"))
+    setNames(fsL[, i], paste(colnames(fsL)[i], fs_names, sep = "_by_"))
   })
   fs_lds <- unlist(fs_lds)
-  fs_dat <- cbind(as.data.frame(fs), fs_se, t(as.matrix(fs_lds)),
-                  t(as.matrix(fs_evs)))
+  fs_dat <- cbind(
+    as.data.frame(fs),
+    fs_se,
+    t(as.matrix(fs_lds)),
+    t(as.matrix(fs_evs))
+  )
   attr(fs_dat, "fsT") <- fs_ev
   attr(fs_dat, "fsL") <- fsL
   attr(fs_dat, "fsb") <- attr(fs, "fsb")
@@ -280,14 +299,20 @@ augment_fs <- function(fs, fs_ev) {
 }
 
 check_blocks_identical <- function(a, b, keys) {
-  all(vapply(keys, function(k) {
-    identical(a[[k]], b[[k]])
-  }, logical(1)))
+  all(vapply(
+    keys,
+    function(k) {
+      identical(a[[k]], b[[k]])
+    },
+    logical(1)
+  ))
 }
 
-assemble_fs_blocks <- function(blocks_by_group,
-                               format = c("unified", "list"),
-                               group_col = NULL) {
+assemble_fs_blocks <- function(
+  blocks_by_group,
+  format = c("unified", "list"),
+  group_col = NULL
+) {
   format <- match.arg(format)
   group_labels <- names(blocks_by_group)
   if (is.null(group_labels) || !all(nzchar(group_labels))) {
@@ -322,19 +347,30 @@ assemble_fs_blocks <- function(blocks_by_group,
         fsT = b$fsT,
         fsL = if (!is.null(b$fsL)) b$fsL else attr(b$fs, "fsL"),
         fsb = if (!is.null(b$fsb)) b$fsb else attr(b$fs, "fsb"),
-        scoring_matrix = if (!is.null(b$scoring_matrix)) b$scoring_matrix
-          else attr(b$fs, "scoring_matrix")
+        scoring_matrix = if (!is.null(b$scoring_matrix)) {
+          b$scoring_matrix
+        } else {
+          attr(b$fs, "scoring_matrix")
+        }
       )
     })
 
     if (length(blocks) > 1) {
-      all_same <- vapply(seq_len(length(blocks))[-1], function(i) {
-        check_blocks_identical(block_attrs[[i]], block_attrs[[1]], attr_keys)
-      }, logical(1))
+      all_same <- vapply(
+        seq_len(length(blocks))[-1],
+        function(i) {
+          check_blocks_identical(block_attrs[[i]], block_attrs[[1]], attr_keys)
+        },
+        logical(1)
+      )
       if (!all(all_same)) {
-        message("Group '", grp, "': blocks have differing fsT/fsL/fsb attributes ",
-                "(e.g. due to missing-data patterns). Using first block as ",
-                "representative for group-level attributes.")
+        message(
+          "Group '",
+          grp,
+          "': blocks have differing fsT/fsL/fsb attributes ",
+          "(e.g. due to missing-data patterns). Using first block as ",
+          "representative for group-level attributes."
+        )
       }
     }
     repr <- block_attrs[[1]]
@@ -411,11 +447,13 @@ assemble_fs_blocks <- function(blocks_by_group,
 #' @param fsm Currently not used.
 #'
 #' @export
-get_fs_lmer <- function(object,
-                        method = c("EB"),
-                        corrected_fsT = FALSE,
-                        vfsLT = FALSE,
-                        fsm = FALSE,
-                        ...) {
+get_fs_lmer <- function(
+  object,
+  method = c("EB"),
+  corrected_fsT = FALSE,
+  vfsLT = FALSE,
+  fsm = FALSE,
+  ...
+) {
   get_fs(object, format = "list", ...)
 }

@@ -6,7 +6,7 @@
 \usage{
 get_fs_lavaan(
   lavobj,
-  method = c("regression", "Bartlett"),
+  method = c("regression", "Bartlett", "ML", "EB"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
   reliability = FALSE,
@@ -17,10 +17,12 @@ get_fs_lavaan(
 \item{lavobj}{A lavaan model object when using \code{\link[=get_fs_lavaan]{get_fs_lavaan()}}.}
 
 \item{method}{Character. Method for computing factor scores (options are
-"regression" or "Bartlett"). Currently, the default is
-"regression" to be consistent with
-\code{\link[lavaan]{lavPredict}}, but the Bartlett scores have
-more desirable properties and may be preferred for 2S-PA.}
+"regression" or "Bartlett"; "ML" is an alias for "Bartlett"
+and "EB" is an alias for "regression"). Currently, the
+default is "regression" to be consistent with
+\code{\link[lavaan]{lavPredict}}, but the Bartlett scores
+have more desirable properties and may be preferred for
+2S-PA.}
 
 \item{corrected_fsT}{Logical. Whether to correct for the sampling
 error in the factor score weights when computing

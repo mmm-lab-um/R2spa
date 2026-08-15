@@ -2,30 +2,43 @@
 #
 # Future methods (e.g. get_fs.mirt()) should be added to this file.
 
+normalize_fs_method <- function(method) {
+  method <- match.arg(method, c("regression", "Bartlett", "ML", "EB"))
+  switch(method, ML = "Bartlett", EB = "regression", method)
+}
+
 #' @rdname get_fs
 #' @export
-get_fs.data.frame <- function(data, model = NULL, group = NULL,
-                              method = c("regression", "Bartlett"),
-                              corrected_fsT = FALSE,
-                              vfsLT = FALSE,
-                               reliability = FALSE,
-                               format = c("unified", "list"),
-                               ...) {
-  if (!is.data.frame(data)) data <- as.data.frame(data)
+get_fs.data.frame <- function(
+  data,
+  model = NULL,
+  group = NULL,
+  method = c("regression", "Bartlett", "ML", "EB"),
+  corrected_fsT = FALSE,
+  vfsLT = FALSE,
+  reliability = FALSE,
+  format = c("unified", "list"),
+  ...
+) {
+  if (!is.data.frame(data)) {
+    data <- as.data.frame(data)
+  }
   if (is.null(model)) {
     ind_names <- colnames(data)
     if (!is.null(group)) {
       ind_names <- setdiff(ind_names, group)
     }
-    model <- paste("f1 =~",
-                    paste(ind_names, collapse = " + "))
+    model <- paste("f1 =~", paste(ind_names, collapse = " + "))
   }
   fit <- cfa(model, data = data, group = group, ...)
-  get_fs(fit, method = method,
-          corrected_fsT = corrected_fsT,
-          vfsLT = vfsLT,
-          reliability = reliability,
-          format = format)
+  get_fs(
+    fit,
+    method = method,
+    corrected_fsT = corrected_fsT,
+    vfsLT = vfsLT,
+    reliability = reliability,
+    format = format
+  )
 }
 
 get_fs_blocks.lavaan <- function(object, method, add_to_evfs, ...) {
@@ -37,14 +50,15 @@ get_fs_blocks.lavaan <- function(object, method, add_to_evfs, ...) {
   prepare_fs <- function(y, est, add, mp, method) {
     if (is.null(mp)) {
       fscore <-
-        compute_fscore(y,
-                       lambda = est$lambda,
-                       theta = est$theta,
-                       psi = est$psi,
-                       nu = est$nu,
-                       alpha = est$alpha,
-                       method = method,
-                       fs_matrices = TRUE
+        compute_fscore(
+          y,
+          lambda = est$lambda,
+          theta = est$theta,
+          psi = est$psi,
+          nu = est$nu,
+          alpha = est$alpha,
+          method = method,
+          fs_matrices = TRUE
         )
       list(
         case_idx = seq_len(nrow(y)),
@@ -63,14 +77,15 @@ get_fs_blocks.lavaan <- function(object, method, add_to_evfs, ...) {
         idx_m <- mis_idx[[m]]
         pat_m <- pats[m, ]
         fs_m <-
-          compute_fscore(y[idx_m, pat_m, drop = FALSE],
-                         lambda = est$lambda[pat_m, , drop = FALSE],
-                         theta = est$theta[pat_m, pat_m, drop = FALSE],
-                         psi = est$psi,
-                         nu = est$nu[pat_m, , drop = FALSE],
-                         alpha = est$alpha,
-                         method = method,
-                         fs_matrices = TRUE
+          compute_fscore(
+            y[idx_m, pat_m, drop = FALSE],
+            lambda = est$lambda[pat_m, , drop = FALSE],
+            theta = est$theta[pat_m, pat_m, drop = FALSE],
+            psi = est$psi,
+            nu = est$nu[pat_m, , drop = FALSE],
+            alpha = est$alpha,
+            method = method,
+            fs_matrices = TRUE
           )
         blocks[[m]] <- list(
           case_idx = idx_m,
@@ -129,11 +144,13 @@ get_fs.default <- function(data, ...) {
     data <- as.data.frame(data)
     return(get_fs(data, ...))
   }
-  stop("get_fs() is not implemented for objects of class '",
-        paste(class(data), collapse = "', '"),
-        "'. Currently supported: 'data.frame', 'lavaan', ",
-        "and 'lmerMod'. Support for 'mirt' models is planned.",
-        call. = FALSE)
+  stop(
+    "get_fs() is not implemented for objects of class '",
+    paste(class(data), collapse = "', '"),
+    "'. Currently supported: 'data.frame', 'lavaan', ",
+    "and 'lmerMod'. Support for 'mirt' models is planned.",
+    call. = FALSE
+  )
 }
 
 #' @rdname get_fs
@@ -141,19 +158,24 @@ get_fs.default <- function(data, ...) {
 #' @param format Output format: `"unified"` returns a single data frame with
 #'        a `group` column; `"list"` returns a list of data frames per group.
 #' @export
-get_fs.lavaan <- function(object,
-                          method = c("regression", "Bartlett"),
-                          corrected_fsT = FALSE,
-                          vfsLT = FALSE,
-                          reliability = FALSE,
-                          format = c("unified", "list"),
-                          ...) {
+get_fs.lavaan <- function(
+  object,
+  method = c("regression", "Bartlett", "ML", "EB"),
+  corrected_fsT = FALSE,
+  vfsLT = FALSE,
+  reliability = FALSE,
+  format = c("unified", "list"),
+  ...
+) {
+  method <- normalize_fs_method(method)
   if (!inherits(object, "lavaan")) {
     stop("`object` must be a `lavaan` model object.")
   }
   format <- match.arg(format)
 
-  if (reliability) corrected_fsT <- TRUE
+  if (reliability) {
+    corrected_fsT <- TRUE
+  }
   if (corrected_fsT) {
     add_to_evfs <- correct_evfs(object, method = method)
   } else {
@@ -162,14 +184,20 @@ get_fs.lavaan <- function(object,
     add_to_evfs <- rep(0, object@Data@ngroups)
   }
 
-  blocks_by_group <- get_fs_blocks.lavaan(object, method = method,
-                                          add_to_evfs = add_to_evfs)
+  blocks_by_group <- get_fs_blocks.lavaan(
+    object,
+    method = method,
+    add_to_evfs = add_to_evfs
+  )
 
   group_var <- object@Data@group
   group_col <- if (length(group_var) > 0) group_var else NULL
 
-  out <- assemble_fs_blocks(blocks_by_group, format = format,
-                            group_col = group_col)
+  out <- assemble_fs_blocks(
+    blocks_by_group,
+    format = format,
+    group_col = group_col
+  )
 
   if (vfsLT) {
     attr(out, "vfsLT") <- vcov_ld_evfs(object, method = method)
@@ -184,8 +212,10 @@ get_fs.lavaan <- function(object,
       length(attr(out, "fsb")) > 1
     }
     if (multifactor) {
-      warning("Computation of reliability for a multi-factor model is not ",
-              "currently supported. ")
+      warning(
+        "Computation of reliability for a multi-factor model is not ",
+        "currently supported. "
+      )
     } else {
       if (ngroups == 1) {
         is_std.lv <- all(est$psi == 1)
@@ -260,8 +290,8 @@ get_fs_blocks.merMod <- function(object, ...) {
   setNames(blocks, cluster_levels)
 }
 get_D <- function(theta) {
-    L_D <- lme4::vec2mlist(theta, symm = FALSE)[[1]]
-    tcrossprod(L_D)
+  L_D <- lme4::vec2mlist(theta, symm = FALSE)[[1]]
+  tcrossprod(L_D)
 }
 
 #' @rdname get_fs
@@ -271,13 +301,15 @@ get_D <- function(theta) {
 #'        For `merMod` objects there is always a single implicit group, so
 #'        `"list"` returns a bare data frame.
 #' @export
-get_fs.merMod <- function(object,
-                          method = c("EB"),
-                          corrected_fsT = FALSE,
-                          vfsLT = FALSE,
-                          fsm = FALSE,
-                          format = c("unified", "list"),
-                          ...) {
+get_fs.merMod <- function(
+  object,
+  method = c("EB"),
+  corrected_fsT = FALSE,
+  vfsLT = FALSE,
+  fsm = FALSE,
+  format = c("unified", "list"),
+  ...
+) {
   if (!inherits(object, "merMod")) {
     stop("`object` must be an `lmerMod` model object.", call. = FALSE)
   }
@@ -305,17 +337,22 @@ get_fs.merMod <- function(object,
   num_re <- ncol(blocks[[1]]$fsT)
   re_names <- paste0("u", seq_len(num_re) - 1, "_eb")
   fs_names <- paste0("fs_", re_names)
-  fsL_arr <- array(0, dim = c(num_re, num_re, n_clus),
-                    dimnames = list(fs_names, re_names, names(blocks)))
-  fsT_arr <- array(0, dim = c(num_re, num_re, n_clus),
-                    dimnames = list(fs_names, fs_names, names(blocks)))
+  fsL_arr <- array(
+    0,
+    dim = c(num_re, num_re, n_clus),
+    dimnames = list(fs_names, re_names, names(blocks))
+  )
+  fsT_arr <- array(
+    0,
+    dim = c(num_re, num_re, n_clus),
+    dimnames = list(fs_names, fs_names, names(blocks))
+  )
   for (j in seq_len(n_clus)) {
-    fsL_arr[, , j] <- blocks[[j]]$fsL
-    fsT_arr[, , j] <- blocks[[j]]$fsT
+    fsL_arr[,, j] <- blocks[[j]]$fsL
+    fsT_arr[,, j] <- blocks[[j]]$fsT
   }
   attr(out, "fsL") <- fsL_arr
   attr(out, "fsT") <- fsT_arr
-
 
   out
 }

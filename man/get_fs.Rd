@@ -12,7 +12,7 @@
   data,
   model = NULL,
   group = NULL,
-  method = c("regression", "Bartlett"),
+  method = c("regression", "Bartlett", "ML", "EB"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
   reliability = FALSE,
@@ -24,7 +24,7 @@
 
 \method{get_fs}{lavaan}(
   object,
-  method = c("regression", "Bartlett"),
+  method = c("regression", "Bartlett", "ML", "EB"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
   reliability = FALSE,
@@ -57,10 +57,12 @@ analysis, which is passed to \code{\link[lavaan]{cfa}}.
 Only used when \code{data} is a data frame.}
 
 \item{method}{Character. Method for computing factor scores (options are
-"regression" or "Bartlett"). Currently, the default is
-"regression" to be consistent with
-\code{\link[lavaan]{lavPredict}}, but the Bartlett scores have
-more desirable properties and may be preferred for 2S-PA.}
+"regression" or "Bartlett"; "ML" is an alias for "Bartlett"
+and "EB" is an alias for "regression"). Currently, the
+default is "regression" to be consistent with
+\code{\link[lavaan]{lavPredict}}, but the Bartlett scores
+have more desirable properties and may be preferred for
+2S-PA.}
 
 \item{corrected_fsT}{Logical. Whether to correct for the sampling
 error in the factor score weights when computing

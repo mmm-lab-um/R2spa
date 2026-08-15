@@ -101,6 +101,40 @@ test_that(
   }
 )
 
+# Method aliases
+test_that("method = 'EB' is an alias for 'regression'", {
+  fs_eb <- get_fs(PoliticalDemocracy, single_model,
+    method = "EB",
+    format = "list"
+  )
+  expect_equal(fs_eb, test_object_fs, ignore_attr = TRUE)
+})
+
+test_that("method = 'ML' is an alias for 'Bartlett'", {
+  fs_ml <- get_fs(PoliticalDemocracy, single_model,
+    method = "ML",
+    format = "list"
+  )
+  expect_equal(fs_ml, test_object_fs_bar, ignore_attr = TRUE)
+})
+
+test_that("aliases also work on a fitted lavaan object", {
+  fit <- cfa(single_model, data = PoliticalDemocracy)
+  fs_ml <- get_fs(fit, method = "ML")
+  fs_bart <- get_fs(fit, method = "Bartlett")
+  expect_equal(fs_ml, fs_bart, ignore_attr = TRUE)
+  fs_eb <- get_fs(fit, method = "EB")
+  fs_reg <- get_fs_lavaan(fit)
+  expect_equal(as.data.frame(fs_eb), fs_reg, ignore_attr = TRUE)
+})
+
+test_that("invalid method errors with the full choice set", {
+  expect_error(
+    get_fs(PoliticalDemocracy, single_model, method = "MLR"),
+    "should be one of"
+  )
+})
+
 
 ########## multi-group examples ##########
 
