@@ -15,7 +15,7 @@ single_model <- '
                 '
 
 # model = cfa_3var
-test_object_fs <- get_fs(PoliticalDemocracy, single_model)
+test_object_fs <- get_fs(PoliticalDemocracy, single_model, format = "list")
 
 ########## Testing section ############
 
@@ -77,7 +77,8 @@ test_that(
 # Bartlett scores
 test_object_fs_bar <- get_fs(
   PoliticalDemocracy, single_model,
-  method = "Bartlett"
+  method = "Bartlett",
+  format = "list"
 )
 
 test_that("Standard errors for each observation are the same", {
@@ -114,7 +115,8 @@ hs_model <- 'visual  =~ x1 + x2 + x3'
 test_object_fs_multi <- get_fs(
   HolzingerSwineford1939[c("school", "x1", "x2", "x3")],
   hs_model,
-  group = "school"
+  group = "school",
+  format = "list"
 )
 
 ########## Testing section ############
@@ -165,7 +167,8 @@ test_object_fs_multi_bar <- get_fs(
   HolzingerSwineford1939[c("school", "x1", "x2", "x3")],
   hs_model,
   group = "school",
-  method = "Bartlett"
+  method = "Bartlett",
+  format = "list"
 )
 
 test_that(
@@ -198,8 +201,9 @@ hs_model_2 <- ' visual =~ x1 + x2 + x3
                 textual =~ x4 + x5 + x6
                 speed =~ x7 + x8 + x9 '
 test_object_fs_multi_2 <- get_fs(HolzingerSwineford1939,
-                                 hs_model_2,
-                                 group = "school")
+                                  hs_model_2,
+                                  group = "school",
+                                  format = "list")
 
 ########## Testing section ############
 
@@ -250,8 +254,9 @@ test_that(
 
 # Bartlett scores
 test_object_fs_multi_2_bar <- get_fs(HolzingerSwineford1939,
-                                     hs_model_2,
-                                     group = "school")
+                                      hs_model_2,
+                                      group = "school",
+                                      format = "list")
 
 test_that(
   "Standard errors for each observation are the same within groups",
@@ -285,21 +290,24 @@ test_that(
 fs_config <- get_fs(HolzingerSwineford1939,
                     hs_model_2,
                     group = "school",
-                    corrected_fsT = TRUE
+                    corrected_fsT = TRUE,
+                    format = "list"
 )
 
 fs_metric <- get_fs(HolzingerSwineford1939,
                     hs_model_2,
                     group = "school",
                     group.equal = "loadings",
-                    corrected_fsT = TRUE
+                    corrected_fsT = TRUE,
+                    format = "list"
 )
 
 fs_single <- get_fs(
   HolzingerSwineford1939 |>
     subset(school == "Grant-White"),
   hs_model_2,
-  corrected_fsT = TRUE
+  corrected_fsT = TRUE,
+  format = "list"
 )
 
 test_that("Correction factor is similar with single or multiple groups", {
@@ -317,6 +325,28 @@ test_that("Same factor scores as `lme4::ranef()`", {
   expect_equal(as.data.frame(get_fs_lmer(lme1)[, 1:2]),
                ranef(lme1)[[1]],
                ignore_attr = TRUE)
+})
+
+test_that("get_fs() S3 dispatch on merMod object", {
+  lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+  fs_direct <- get_fs(lme1)
+  fs_wrapper <- get_fs_lmer(lme1)
+  expect_equal(as.data.frame(fs_direct[, 1:2]),
+               as.data.frame(fs_wrapper[, 1:2]),
+               ignore_attr = TRUE)
+})
+
+test_that("get_fs_blocks.merMod() produces correct block structure", {
+  lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+  blocks <- R2spa:::get_fs_blocks.merMod(lme1)
+  n_clusters <- nlevels(sleepstudy$Subject)
+  expect_equal(length(blocks), n_clusters)
+  for (b in blocks) {
+    expect_true(is.list(b))
+    expect_true(all(c("case_idx", "fs", "fsL", "fsT") %in% names(b)))
+    expect_true(length(b$case_idx) > 0)
+    expect_equal(nrow(b$fs), 1)
+  }
 })
 ########## Computing reliability ##########
 

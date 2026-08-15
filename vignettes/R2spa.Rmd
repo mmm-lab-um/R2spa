@@ -135,8 +135,7 @@ fs_dat_visual <- get_fs(data = HolzingerSwineford1939,
 fs_dat_speed <- get_fs(data = HolzingerSwineford1939, 
                        model = "speed =~ x7 + x8 + x9", 
                        group = "school")
-fs_hs <- cbind(do.call(rbind, fs_dat_visual),
-               do.call(rbind, fs_dat_speed))
+fs_hs <- cbind(fs_dat_visual, fs_dat_speed)
 ```
 
 To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = regression relation. Specify standard error as either a list or a data frame. Values for standard error can be found at column named `fs_[variable name]_se`. For example, the standard error of the multigroup variable visual can be found at column `fs_visual_se` in the `fs_hs` data frame. To get the standard errors for each group faster, `unique()` can be called upon the standard error column. For example, in this case, `unique(fs_hs$fs_visual_se)` can be called to get the standard errors for multigroup variable visual.

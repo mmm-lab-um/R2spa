@@ -10,11 +10,12 @@ get_fs_lmer(
   method = c("EB"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
-  fsm = FALSE
+  fsm = FALSE,
+  ...
 )
 }
 \arguments{
-\item{object}{A fiited model object of class \link[lme4:lmerMod-class]{lme4::lmerMod}.}
+\item{object}{A fitted model object of class \link[lme4:lmerMod-class]{lme4::lmerMod}.}
 
 \item{method}{Currently only \code{"EB"} for empirical Bayes.}
 
@@ -25,6 +26,7 @@ get_fs_lmer(
 \item{fsm}{Currently not used.}
 }
 \description{
-Get Factor Scores and the Corresponding Scoring Matrices for
-Mixed-Effect Models
+\code{get_fs_lmer()} is superseded by \code{\link[=get_fs]{get_fs()}}. It is retained for backward
+compatibility and delegates to \code{get_fs(object)} internally. New code should
+call \code{\link[=get_fs]{get_fs()}} directly.
 }

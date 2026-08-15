@@ -95,10 +95,12 @@
 #' # get factor scores
 #' fs_dat_visual <- get_fs(data = HolzingerSwineford1939,
 #'                         model = "visual =~ x1 + x2 + x3",
-#'                         group = "school")
+#'                         group = "school",
+#'                         format = "list")
 #' fs_dat_speed <- get_fs(data = HolzingerSwineford1939,
 #'                        model = "speed =~ x7 + x8 + x9",
-#'                        group = "school")
+#'                        group = "school",
+#'                        format = "list")
 #' fs_hs <- cbind(do.call(rbind, fs_dat_visual),
 #'                do.call(rbind, fs_dat_speed))
 #'
@@ -136,7 +138,11 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
   if (!is.data.frame(se_fs)) {
     se_fs <- as.data.frame(as.list(se_fs))
   }
-  multigroup <- nrow(se_fs) > 1 | is.list(fsT)
+  multigroup <- if (!is.null(fsT)) {
+    is.list(fsT) && length(fsT) > 1
+  } else {
+    nrow(se_fs) > 1
+  }
 
   if (xor(is.null(fsT), is.null(fsL))) {
     stop("Please provide both or none of fsT and fsL.")
@@ -145,9 +151,9 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
   if (!is.null(fsT)) {
     if (multigroup) {
       fs_names <- colnames(fsT[[1]])
-      dat_names <- names(data[[1]])
+      dat_names <- if (is.data.frame(data)) names(data) else names(data[[1]])
     } else {
-      fs_names <- colnames(fsT)
+      fs_names <- if (is.list(fsT)) colnames(fsT[[1]]) else colnames(fsT)
       dat_names <- names(data)
     }
     names_match <- lapply(fs_names, function(x) x %in% dat_names) |> unlist()
@@ -226,8 +232,13 @@ tspa_sf <- function(model, data, se = NULL) {
 }
 
 tspa_mf <- function(model, data, fsT, fsL, fsb) {
-  if (is.list(fsT)) {
+  if (is.list(fsT) && length(fsT) > 1) {
     ngroup <- length(fsT)
+    fsL1 <- fsL[[1]]
+    fsT_in <- !upper.tri(fsT[[1]])
+  } else if (is.list(fsT)) {
+    # Single-group with list-valued attributes from unified get_fs() output
+    ngroup <- 1
     fsL1 <- fsL[[1]]
     fsT_in <- !upper.tri(fsT[[1]])
   } else {
@@ -279,7 +290,7 @@ tspa_mf <- function(model, data, fsT, fsL, fsb) {
     "# structural model",
     model
   ),
-  collpase = "\n")
+  collapse = "\n")
 
   return(tspaModel)
 }

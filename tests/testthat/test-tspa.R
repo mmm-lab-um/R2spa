@@ -24,8 +24,8 @@ dem60 =~ y1 + y2 + y3 + y4
 "
 
 # get factor scores
-fs_single1 <- get_fs(PoliticalDemocracy, cfa_single1)
-fs_single2 <- get_fs(PoliticalDemocracy, cfa_single2)
+fs_single1 <- get_fs(PoliticalDemocracy, cfa_single1, format = "list")
+fs_single2 <- get_fs(PoliticalDemocracy, cfa_single2, format = "list")
 fs_dat_single <- cbind(fs_single1, fs_single2)
 
 cfa_model_single <- '
@@ -127,9 +127,9 @@ cfa_3var3 <- '
                            '
 
 # get factor scores
-fs_3var1 <- get_fs(PoliticalDemocracy, cfa_3var1)
-fs_3var2 <- get_fs(PoliticalDemocracy, cfa_3var2)
-fs_3var3 <- get_fs(PoliticalDemocracy, cfa_3var3)
+fs_3var1 <- get_fs(PoliticalDemocracy, cfa_3var1, format = "list")
+fs_3var2 <- get_fs(PoliticalDemocracy, cfa_3var2, format = "list")
+fs_3var3 <- get_fs(PoliticalDemocracy, cfa_3var3, format = "list")
 fs_dat_3var <- cbind(fs_3var1, fs_3var2, fs_3var3)
 
 sem_model_3var <- '
@@ -293,10 +293,12 @@ test_that("test if the se of variance is similar for two methods", {
 # get factor scores
 fs_dat_visual <- get_fs(data = HolzingerSwineford1939,
                         model = "visual =~ x1 + x2 + x3",
-                        group = "school")
+                        group = "school",
+                        format = "list")
 fs_dat_speed <- get_fs(data = HolzingerSwineford1939,
                        model = "speed =~ x7 + x8 + x9",
-                       group = "school")
+                       group = "school",
+                       format = "list")
 fs_dat_multi <- cbind(
   do.call(rbind, fs_dat_visual),
   do.call(rbind, fs_dat_speed)
@@ -391,7 +393,7 @@ mod4 <- "
 
 "
 fs_dat4 <- get_fs(HolzingerSwineford1939, model = mod4, std.lv = TRUE,
-                  group = "school")
+                  group = "school", format = "list")
 tspa_mod_m <- tspa_mf(
   model = "visual ~ speed
            textual ~ visual + speed",
@@ -429,7 +431,7 @@ tspa_fit_m <- tspa(
   fsL = attr(fs_dat4, "fsL")
 )
 fs_dat4b <- get_fs(HolzingerSwineford1939, model = mod4,
-                   group = "school", method = "Bartlett")
+                    group = "school", method = "Bartlett", format = "list")
 sem_fit_m <- sem(
   model = "visual =~ fs_visual
            speed =~ fs_speed
@@ -512,7 +514,7 @@ m_g3 ~ i3 * 1
 m_g5 ~ i3 * 1
 m_g8 ~ i3 * 1
 "
-fs_growth_dat <- get_fs(sim_dat, model = strict_mod)
+fs_growth_dat <- get_fs(sim_dat, model = strict_mod, format = "list")
 
 growth_mod <- "
 i =~ 1 * eta1 + 1 * eta2 + 1 * eta3
@@ -578,7 +580,7 @@ test_that(
     dem60 =~ y1 + y2 + y3 + y4
     dem65 =~ y5 + y6 + y7 + y8
   "
-    fs_dat2 <- get_fs(PoliticalDemocracy, model = mod2, std.lv = TRUE)
+    fs_dat2 <- get_fs(PoliticalDemocracy, model = mod2, std.lv = TRUE, format = "list")
     ecov_fs <- attr(fs_dat2, "fsT")
     dimnames(ecov_fs) <- lapply(dimnames(ecov_fs),
       FUN = \(x) paste0("bs_", x)
@@ -613,7 +615,7 @@ test_that("Test indicator names not starting with 'fs_'", {
     dem60 =~ y1 + y2 + y3 + y4
     dem65 =~ y5 + y6 + y7 + y8
   "
-  fs_dat2 <- get_fs(PoliticalDemocracy, model = mod2, std.lv = TRUE)
+  fs_dat2 <- get_fs(PoliticalDemocracy, model = mod2, std.lv = TRUE, format = "list")
   names(fs_dat2) <- gsub("fs_", "bs_", names(fs_dat2))
   ecov_fs <- attr(fs_dat2, "fsT")
   dimnames(ecov_fs) <- lapply(dimnames(ecov_fs),
@@ -629,7 +631,7 @@ test_that("Test indicator names not starting with 'fs_'", {
   )
   fs_fit <- tspa(model = "dem60 ~ ind60
                           dem65 ~ ind60 + dem60",
-                 data = get_fs(PoliticalDemocracy, model = mod2, std.lv = TRUE),
+                  data = get_fs(PoliticalDemocracy, model = mod2, std.lv = TRUE, format = "list"),
                  fsT = attr(fs_dat2, "fsT"),
                  fsL = attr(fs_dat2, "fsL"))
   expect_identical(

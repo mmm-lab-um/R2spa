@@ -9,7 +9,8 @@ get_fs_lavaan(
   method = c("regression", "Bartlett"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
-  reliability = FALSE
+  reliability = FALSE,
+  ...
 )
 }
 \arguments{
@@ -31,21 +32,33 @@ to obtain corrected covariances and standard errors for
 \code{\link[=tspa]{tspa()}} results. This is currently ignored.}
 
 \item{reliability}{Logical. Whether to return the reliability of factor
-scores.}
+scores. Available only for single-factor lavaan models.}
+
+\item{...}{additional arguments passed to \code{\link[lavaan]{cfa}}
+(when \code{data} is a data frame). See \code{\link[lavaan]{lavOptions}}
+for a complete list.}
 }
 \value{
 A data frame containing the factor scores (with prefix \code{"fs_"}),
 the standard errors (with suffix \code{"_se"}), the implied loadings
-of factor \code{"_by_"} factor scores, and the error variance-covariance
-of the factor scores (with prefix \code{"evfs_"}). The following are
-also returned as attributes:
-* \code{fsT}: error covariance of factor scores
-* \code{fsL}: loading matrix of factor scores
-* \code{fsb}: intercepts of factor scores
+of indicator \verb{_by_} factor scores, and the error variance-covariance
+of the factor scores (with prefix \code{"ev_"} or \code{"ecov_"}).
+For multi-group lavaan models in \code{"unified"} format, a \code{group} column
+is included. The following attributes are attached:
+* \code{fsT}: error covariance of factor scores (matrix or named list by group)
+* \code{fsL}: loading matrix of factor scores (matrix or named list by group)
+* \code{fsb}: intercepts of factor scores (vector or named list by group)
 * \code{scoring_matrix}: weights for computing factor scores from items
 }
 \description{
-Get Factor Scores and the Corresponding Standard Error of Measurement
+\code{get_fs()} is an S3 generic that extracts factor scores from fitted models.
+Methods are available for \code{data.frame} (fits a CFA internally), \code{lavaan}
+objects, and \code{lmerMod} objects. Support for \code{mirt} models is planned.
+}
+\details{
+\code{get_fs_lavaan()} is superseded by \code{\link[=get_fs]{get_fs()}}. It is retained for backward
+compatibility and delegates to \code{get_fs(object, format = "list")} internally.
+New code should call \code{\link[=get_fs]{get_fs()}} directly.
 }
 \examples{
 library(lavaan)
