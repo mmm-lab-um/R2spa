@@ -32,7 +32,8 @@ get_fs_lmer(
 Note the legacy output is name-compatible, not byte-identical,
 with the pre-refactor result: it additionally carries
 score-error columns (\code{u0_eb_se}, ...), per-cluster \code{fsL}/\code{fsT}
-array attributes, and has NULL row names (the pre-refactor
+array attributes, a per-cluster \code{scoring_matrix} list attribute
+(see \code{\link[=get_fs]{get_fs()}}), and has NULL row names (the pre-refactor
 output had no \verb{_se} columns, no attributes, and used the ranef
 subject IDs as row names).}
 }

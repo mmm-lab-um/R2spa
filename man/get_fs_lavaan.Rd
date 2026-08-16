@@ -50,7 +50,13 @@ is included. The following attributes are attached:
 * \code{fsT}: error covariance of factor scores (matrix or named list by group)
 * \code{fsL}: loading matrix of factor scores (matrix or named list by group)
 * \code{fsb}: intercepts of factor scores (vector or named list by group)
-* \code{scoring_matrix}: weights for computing factor scores from items
+* \code{scoring_matrix}: weights for computing factor scores from the
+observed data, as a named list. For lavaan models: one
+score x item matrix per group. For \code{merMod} models: one
+\code{num_re} x \code{n_j} matrix per cluster, where the cluster's EB
+scores are \code{S_j \%*\% (y_j - X_j \%*\% beta)} with \code{y_j}/\code{X_j} the
+cluster's rows of the model response and the fixed-effects
+design.
 }
 \description{
 \code{get_fs()} is an S3 generic that extracts factor scores from fitted models.

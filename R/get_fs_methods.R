@@ -245,29 +245,59 @@ get_fs_blocks.merMod <- function(object, legacy_names = FALSE, ...) {
   re_names <- if (legacy_names) paste0(base_names, "_eb") else base_names
   fs_names <- paste0("fs_", re_names)
 
-  u_eb <- as.data.frame(lme4::ranef(object)[[1]])
-  colnames(u_eb) <- re_names
+  # Grouping factor for the first RE term. lme4 canonicalizes its levels
+  # (sorted for atomic vectors, user-specified order for pre-factorized
+  # factors) and EVERY structure read below follows that level order --
+  # not the row order of the data: split() on a factor, the Z columns,
+  # the b/u random-effect vector, and ranef() rows are all indexed by
+  # level position. Names must therefore come from the levels, never
+  # from first-appearance order in the data.
+  f1 <- as.factor(object@flist[[1]])
+  n_clus <- nlevels(f1)
 
-  cluster_levels <- unique(as.character(object@flist[[1]]))
-  mf <- model.frame(object)
-  case_idx <- split(seq_len(nrow(mf)), object@flist[[1]])
+  # Row indices per cluster, in level order (split() follows factor
+  # levels, so block j corresponds to level j regardless of row order).
+  case_idx <- split(seq_len(length(f1)), f1)
 
-  Xlist <- split(data.frame(object@pp$X), object@flist[[1]])
+  # Random-effects design Z (full n x sum_p matrix from lme4). Its columns
+  # are ordered by RE term, then by level index of the first term's
+  # grouping factor, so the first term's block for level (i.e. block) j
+  # occupies columns (j - 1) * num_re + seq_len(num_re). Multi-term models
+  # make Z wider; we slice the first bar only, matching the `[[1]]`
+  # convention used for b/cnms/flist below. The random design -- not the
+  # fixed design -- determines Kz: with Z != X the fixed-design code
+  # produces non-conformable products.
+  Zmat <- as.matrix(lme4::getME(object, "Z"))
   D <- get_D(object@theta)
   s <- stats::sigma(object)
 
-  n_clus <- length(Xlist)
+  stopifnot(ncol(Zmat) >= num_re * n_clus)
+
+  # EB scores for the first term: getME("b") = crossprod(Lambdat, u),
+  # bit-identical to ranef(object)[[1]] values but computed level-major
+  # without ranef()'s per-term work (cheaper for multi-term models).
+  b <- lme4::getME(object, "b")
+  stopifnot(length(b) >= num_re * n_clus)
+  u_b <- matrix(
+    b[seq_len(num_re * n_clus)],
+    nrow = n_clus,
+    ncol = num_re,
+    byrow = TRUE
+  )
+  rownames(u_b) <- levels(f1)
+
   blocks <- vector("list", n_clus)
 
   for (j in seq_len(n_clus)) {
-    xj <- as.matrix(Xlist[[j]])
-    Kz <- crossprod(xj)
+    idx <- case_idx[[j]]
+    zj <- Zmat[idx, (j - 1L) * num_re + seq_len(num_re), drop = FALSE]
+    Kz <- crossprod(zj)
     DKz <- D %*% Kz
     inv_W <- solve(DKz + diag(nrow(Kz)))
     fsL_j <- DKz - DKz %*% inv_W %*% DKz
     fsT_j <- s^2 * inv_W %*% DKz %*% D %*% t(inv_W)
 
-    fs_row <- as.matrix(u_eb[j, , drop = FALSE])
+    fs_row <- u_b[j, , drop = FALSE]
     colnames(fs_row) <- re_names
 
     # colnames = indicator/lv names, rownames = fs names (augment_fs convention)
@@ -277,17 +307,25 @@ get_fs_blocks.merMod <- function(object, legacy_names = FALSE, ...) {
 
     rownames(fsT_j) <- colnames(fsT_j) <- fs_names
 
+    # Scoring matrix: S_j %*% (y_j - X_j %*% beta) reproduces the EB scores
+    # (ranef), where y_j/X_j are the cluster's rows of the model frame and
+    # fixed-effects design. See vignettes/scoring-matrices.Rmd.
+    scoring_matrix_j <- inv_W %*% D %*% t(zj)
+    rownames(scoring_matrix_j) <- fs_names
+    colnames(scoring_matrix_j) <- as.character(seq_len(nrow(zj)))
+
     blocks[[j]] <- list(
-      case_idx = case_idx[[j]],
+      case_idx = idx,
       fs = fs_row,
       fsL = fsL_j,
       fsT = fsT_j,
       fsb = NULL,
-      scoring_matrix = NULL
+      scoring_matrix = scoring_matrix_j
     )
   }
 
-  setNames(blocks, cluster_levels)
+  # Names in canonical level order (matches ranef() row names / @cnms).
+  setNames(blocks, levels(f1))
 }
 get_D <- function(theta) {
   L_D <- lme4::vec2mlist(theta, symm = FALSE)[[1]]
@@ -309,7 +347,8 @@ get_D <- function(theta) {
 #'        output is name-compatible, not byte-identical, with the
 #'        pre-refactor `get_fs_lmer()` result: it additionally carries
 #'        score-error columns (`u0_eb_se`, ...), per-cluster `fsL`/`fsT`
-#'        array attributes, and has NULL row names (the pre-refactor
+#'        array attributes, a per-cluster `scoring_matrix` list attribute
+#'        (see [get_fs()]), and has NULL row names (the pre-refactor
 #'        output had none of these and used the ranef subject IDs as row
 #'        names).
 #' @export
@@ -373,6 +412,13 @@ get_fs.merMod <- function(
   }
   attr(out, "fsL") <- fsL_arr
   attr(out, "fsT") <- fsT_arr
+
+  # Per-cluster scoring matrices as a named list (one p x n_j matrix per
+  # cluster; list, not array, because cluster sizes can differ).
+  attr(out, "scoring_matrix") <- setNames(
+    lapply(blocks, function(b) b$scoring_matrix),
+    names(blocks)
+  )
 
   out
 }

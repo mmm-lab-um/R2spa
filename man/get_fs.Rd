@@ -99,7 +99,8 @@ for a complete list.}
 output is name-compatible, not byte-identical, with the
 pre-refactor \code{get_fs_lmer()} result: it additionally carries
 score-error columns (\code{u0_eb_se}, ...), per-cluster \code{fsL}/\code{fsT}
-array attributes, and has NULL row names (the pre-refactor
+array attributes, a per-cluster \code{scoring_matrix} list attribute
+(see \code{\link[=get_fs]{get_fs()}}), and has NULL row names (the pre-refactor
 output had none of these and used the ranef subject IDs as row
 names).}
 }
@@ -113,7 +114,13 @@ is included. The following attributes are attached:
 * \code{fsT}: error covariance of factor scores (matrix or named list by group)
 * \code{fsL}: loading matrix of factor scores (matrix or named list by group)
 * \code{fsb}: intercepts of factor scores (vector or named list by group)
-* \code{scoring_matrix}: weights for computing factor scores from items
+* \code{scoring_matrix}: weights for computing factor scores from the
+observed data, as a named list. For lavaan models: one
+score x item matrix per group. For \code{merMod} models: one
+\code{num_re} x \code{n_j} matrix per cluster, where the cluster's EB
+scores are \code{S_j \%*\% (y_j - X_j \%*\% beta)} with \code{y_j}/\code{X_j} the
+cluster's rows of the model response and the fixed-effects
+design.
 }
 \description{
 \code{get_fs()} is an S3 generic that extracts factor scores from fitted models.

@@ -64,6 +64,8 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
   - `fs_<name>` score | `<name>_se` SE | `ev_<name>` error variance
   - `ecov_<name1>_<name2>` error covariance | `<indicator>_by_<name>` implied loading
   - Attributes: `fsT` (error cov), `fsL` (loadings), `fsb` (intercepts), `scoring_matrix`
+    (lavaan: per-group score×item matrices; `merMod`: named list of per-cluster
+    `num_re × n_j` matrices)
 - Roxygen: markdown (`Roxygen: list(markdown = TRUE)` in `DESCRIPTION`).
 - Internal helpers: `snake_case`, co-located with their caller — don't move to shared `utils.R`.
 

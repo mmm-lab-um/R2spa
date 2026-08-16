@@ -56,7 +56,13 @@
 #'         * `fsT`: error covariance of factor scores (matrix or named list by group)
 #'         * `fsL`: loading matrix of factor scores (matrix or named list by group)
 #'         * `fsb`: intercepts of factor scores (vector or named list by group)
-#'         * `scoring_matrix`: weights for computing factor scores from items
+#'         * `scoring_matrix`: weights for computing factor scores from the
+#'           observed data, as a named list. For lavaan models: one
+#'           score x item matrix per group. For `merMod` models: one
+#'           `num_re` x `n_j` matrix per cluster, where the cluster's EB
+#'           scores are `S_j %*% (y_j - X_j %*% beta)` with `y_j`/`X_j` the
+#'           cluster's rows of the model response and the fixed-effects
+#'           design.
 #' @importFrom lavaan cfa sem
 #' @importFrom lavaan lavInspect lavTech coef
 #' @importFrom stats setNames
@@ -450,7 +456,8 @@ assemble_fs_blocks <- function(
 #'        Note the legacy output is name-compatible, not byte-identical,
 #'        with the pre-refactor result: it additionally carries
 #'        score-error columns (`u0_eb_se`, ...), per-cluster `fsL`/`fsT`
-#'        array attributes, and has NULL row names (the pre-refactor
+#'        array attributes, a per-cluster `scoring_matrix` list attribute
+#'        (see [get_fs()]), and has NULL row names (the pre-refactor
 #'        output had no `_se` columns, no attributes, and used the ranef
 #'        subject IDs as row names).
 #'

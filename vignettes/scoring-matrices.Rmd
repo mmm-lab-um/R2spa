@@ -1,0 +1,217 @@
+---
+title: "Scoring Matrices: lavaan CFA and lme4"
+author: "Mark Lai"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{scoring-matrices}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Overview
+
+The **scoring matrix** is the linear operator that converts the modelled
+observed data into the factor / empirical-Bayes (EB) scores reported by
+`get_fs()`. Together with the score error-covariance (`fsT`), implied
+loadings (`fsL`) and implied intercepts (`fsb`), it fully specifies how
+each reported score is constructed from the model. `get_fs()` exposes the
+scoring matrix as the `scoring_matrix` attribute alongside these three:
+
+- for **lavaan** CFA models it is a named list of one (score x item)
+  matrix per group;
+- for **lme4** models it is a named list of one (random-effect x
+  observation) matrix per cluster.
+
+In this vignette we reconstruct the scores **by hand** from the stored
+scoring matrix and the modelled data, demonstrating the identity in both
+settings. (The vignette [2S-PA with Random Effects](multilevel.html) shows
+the downstream 2S-PA use of the `ev_`/`ecov_` columns that `get_fs()`
+derives from `fsT`.)
+
+```{r, message = FALSE}
+library(R2spa)
+library(lavaan)
+library(lme4)
+```
+
+## lavaan CFA
+
+We fit a single-factor CFA on `lavaan::PoliticalDemocracy` with a
+mean structure, so that the observed-item intercepts `nu` and the factor
+intercept `alpha` are estimated parameters:
+
+```{r, message = FALSE}
+cfa_fit <- cfa("f =~ y1 + y2 + y3 + y4",
+               data = lavaan::PoliticalDemocracy,
+               meanstructure = TRUE)
+fs <- get_fs(cfa_fit)
+head(fs)
+```
+
+The `scoring_matrix` attribute is a named list keyed by group label
+(an empty string for single-group fits); each entry is the matrix `S`
+with one row per factor and one column per item:
+
+```{r}
+sm <- attr(fs, "scoring_matrix")
+S <- sm[[1]]
+S
+# Same results as in lavaan
+attr(lavPredict(cfa_fit, fsm = TRUE), "fsm")
+```
+
+### Reconstructing the scores by hand
+
+`get_fs()` computes the regression scores as
+
+`f = S %*% (y' - (lambda %*% alpha + nu))' + alpha`,
+
+where `lambda` is the item-loading matrix, `nu` the item intercepts, and
+`alpha` the factor intercept. From `lavInspect(cfa_fit, "est")` we can
+therefore recompute the scores directly from the raw data:
+
+```{r}
+est <- lavInspect(cfa_fit, "est")
+Lambda <- as.matrix(est$lambda)
+Theta  <- as.matrix(est$theta)
+nu     <- as.numeric(est$nu)
+alpha  <- as.numeric(est$alpha)
+y      <- lavInspect(cfa_fit, "data")
+fs_hand <- S %*% (t(y) - (as.vector(Lambda %*% alpha) + nu)) + as.vector(alpha)
+max(abs(fs_hand - fs$fs_f))
+```
+
+The maximum deviation from the reported `fs_f` column is at the level of
+machine precision. The same `S` also generates the companion attributes,
+so all of them are redundant views of the same linear operator:
+
+- `fsL = S %*% Lambda`: implied loadings of the items on the factor
+  scores (i.e. the factor score's regression on the items, in loading
+  form);
+- `fsb = alpha - fsL %*% alpha`: implied intercepts of the factor
+  scores;
+- `fsT = S %*% Theta %*% t(S)`: error variance-covariance of the
+  regression scores.
+
+```{r}
+max(abs(attr(fs, "fsL")[[1]] - S %*% Lambda))
+max(abs(attr(fs, "fsb")[[1]] - (alpha - attr(fs, "fsL")[[1]] %*% alpha)))
+max(abs(attr(fs, "fsT")[[1]] - S %*% Theta %*% t(S)))
+```
+
+## lme4
+
+We fit the classic `sleepstudy` growth model with a random intercept and
+slope for `Subject`, using ML estimation (the 2S-PA convention; see the
+Notes there). Each cluster (subject) obtains a single 2-dimensional EB
+estimate of the random effect:
+
+```{r, message = FALSE}
+lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy,
+             REML = FALSE)
+fs1 <- get_fs(lme1)
+head(fs1)
+```
+
+Its `scoring_matrix` attribute is a named list with one entry per
+cluster; each entry `S_j` has one row per random effect and one column
+per observation in the cluster:
+
+```{r}
+sm1 <- attr(fs1, "scoring_matrix")
+length(sm1)
+names(sm1)
+knitr::kable(sm1[["308"]], digits = 3,
+             caption = "Scoring matrix for subject 308")
+```
+
+### Reconstructing the scores by hand
+
+The theoretical EB score of cluster `j` is
+
+`u_hat_j = S_j %*% (y_j - X_j %*% beta)`,
+
+with
+
+`S_j = (G^{-1} + Z_j' Z_j / sigma^2)^{-1} Z_j' / sigma^2`,
+
+where `y_j` is the cluster's response vector, `X_j` its rows of the
+fixed-effects design, `Z_j` its rows of the random-effects design,
+`beta = fixef(.)` the fixed-effect estimates, and `G`, `sigma^2` the
+random-effects and residual variances. `R2spa` reconstructs the scaled
+matrix `D = G / sigma^2` from the LME4 theta via `get_D()`; because
+`Kz = Z_j' Z_j` is unscaled, `sigma^2` cancels in `S_j`. As with lavaan,
+`S_j` also determines the companion attributes:
+
+- `fsL_j = S_j %*% Z_j`: loading of the EB estimate on the random
+  effect, i.e. the operator of `E[u_hat_j | u_j]`;
+- `fsT_j = sigma^2 %*% S_j %*% t(S_j)`: conditional
+  (measurement-error) covariance of the EB scores, `Var(u_hat_j | u_j)`.
+
+Reconstructing the scores from the raw data per cluster:
+
+```{r}
+mf   <- model.frame(lme1)
+y    <- model.response(mf)
+X    <- as.matrix(lme1@pp$X)
+beta <- fixef(lme1)
+idx_list <- split(seq_len(nrow(mf)), lme1@flist[[1]])
+fs_hand1 <- t(vapply(names(sm1), function(lv) {
+  idx <- idx_list[[lv]]
+  sm1[[lv]] %*% (y[idx] - as.numeric(X[idx, ] %*% beta))
+}, numeric(2)))
+max(abs(fs_hand1 - as.matrix(fs1[, 1:2])))
+max(abs(fs_hand1 - as.matrix(ranef(lme1)[[1]])))
+```
+
+Both the `get_fs()` output and `lme4::ranef()` are recovered to
+machine precision.
+
+### Notes
+
+- Only the **first random-effect term** is scored (`[[1]]` convention,
+  matching `ranef(lme1)[[1]]`).
+- Cluster sizes may differ (unbalanced designs); the per-cluster list
+  accommodates differing matrix widths.
+- The fixed and random designs need not coincide (`Z != X`); the scoring
+  identity is based on the random design `Z`.
+- The identity holds under both ML and REML estimation; the vignette
+  uses ML by 2S-PA convention.
+
+## Comparison
+
+```{r}
+knitr::kable(
+  rbind(
+    c("scoring matrix `S`",
+      "regression (default):
+      S = Psi Lambda' (Lambda Psi Lambda' + Theta)^{-1};
+      \"Bartlett\":
+      S = (Lambda' Theta^{-1} Lambda)^{-1} Lambda' Theta^{-1}",
+      "S_j = (G^{-1} + Z_j' Z_j / sigma^2)^{-1} Z_j' / sigma^2 (EB
+      weights)"),
+    c("shape & orientation",
+      "score x item (q x p), shared within a group",
+      "num_re x n_j per cluster j (p x n_j)"),
+    c("container",
+      "named list of one matrix per group",
+      "named list of one matrix per cluster
+      (list, not array: n_j can differ)"),
+    c("score reconstruction",
+      "f = S %*% (y' - (Lambda %*% alpha + nu))' + alpha
+      (all cases in one product)",
+      "u_hat_j = S_j %*% (y_j - X_j %*% beta)
+      (one product per cluster)")
+  ),
+  col.names = c("property", "lavaan CFA", "lme4"),
+  escape = FALSE
+)
+```

@@ -424,6 +424,152 @@ test_that("get_fs_lmer() defaults to legacy u0_eb-style names", {
       "ev_u0_eb", "ecov_u0_eb_u1_eb", "ev_u1_eb")
   )
 })
+
+test_that("merMod scoring_matrix reproduces EB scores (score identity)", {
+  lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+  sm <- attr(get_fs(lme1), "scoring_matrix")
+  mf <- model.frame(lme1)
+  y <- model.response(mf)
+  Xfull <- as.matrix(lme1@pp$X)
+  beta <- fixef(lme1)
+  flist <- lme1@flist[[1]]
+  case_idx <- split(seq_len(nrow(mf)), flist)
+  for (j in seq_along(case_idx)) {
+    lv <- levels(flist)[j]
+    idx <- case_idx[[j]]
+    rec <- t(sm[[lv]] %*% (y[idx] - as.numeric(Xfull[idx, , drop = FALSE] %*% beta)))
+    expect_equal(
+      as.numeric(rec),
+      as.numeric(ranef(lme1)[[1]][j, ]),
+      tolerance = 1e-10
+    )
+  }
+})
+
+test_that("merMod scoring_matrix has correct structure (per-cluster list)", {
+  lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+  sm <- attr(get_fs(lme1), "scoring_matrix")
+  expect_named(sm, as.character(levels(sleepstudy$Subject)))
+  expect_length(sm, 18)
+  for (m in sm) {
+    expect_equal(dim(m), c(2L, 10L))
+    expect_equal(rownames(m), c("fs_u0", "fs_u1"))
+  }
+})
+
+test_that("get_fs.merMod() works when random and fixed designs differ (Z != X)", {
+  lme2 <- lmer(Reaction ~ Days + (1 | Subject), sleepstudy)
+  fs <- get_fs(lme2)
+  sm <- attr(fs, "scoring_matrix")
+  mf <- model.frame(lme2)
+  y <- model.response(mf)
+  Xfull <- as.matrix(lme2@pp$X)
+  beta <- fixef(lme2)
+  flist <- lme2@flist[[1]]
+  case_idx <- split(seq_len(nrow(mf)), flist)
+  expect_length(sm, nlevels(flist))
+  for (j in seq_along(case_idx)) {
+    lv <- levels(flist)[j]
+    idx <- case_idx[[j]]
+    expect_equal(dim(sm[[lv]]), c(1L, 10L))
+    rec <- t(sm[[lv]] %*% (y[idx] - as.numeric(Xfull[idx, , drop = FALSE] %*% beta)))
+    expect_equal(
+      as.numeric(rec),
+      as.numeric(ranef(lme2)[[1]][j, 1]),
+      tolerance = 1e-10
+    )
+  }
+})
+
+test_that("merMod scoring_matrix works with unbalanced clusters", {
+  # drop one row from each of two different subjects: 9 vs 10 obs/cluster
+  ss <- sleepstudy[-c(1, 111), ]
+  lmu <- lmer(Reaction ~ Days + (Days | Subject), ss)
+  sm <- attr(get_fs(lmu), "scoring_matrix")
+  mf <- model.frame(lmu)
+  y <- model.response(mf)
+  Xfull <- as.matrix(lmu@pp$X)
+  beta <- fixef(lmu)
+  flist <- lmu@flist[[1]]
+  case_idx <- split(seq_len(nrow(mf)), flist)
+  expect_length(sm, nlevels(flist))
+  sizes <- vapply(sm, ncol, integer(1))
+  expect_setequal(unique(sizes), c(9L, 10L))
+  for (j in seq_along(case_idx)) {
+    lv <- levels(flist)[j]
+    idx <- case_idx[[j]]
+    expect_equal(ncol(sm[[lv]]), length(idx))
+    rec <- t(sm[[lv]] %*% (y[idx] - as.numeric(Xfull[idx, , drop = FALSE] %*% beta)))
+    expect_equal(
+      as.numeric(rec),
+      as.numeric(ranef(lmu)[[1]][j, ]),
+      tolerance = 1e-10
+    )
+  }
+})
+
+test_that("get_fs_lmer() carries the scoring_matrix attribute", {
+  lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+  sm_new <- attr(get_fs(lme1), "scoring_matrix")
+  sm_leg <- attr(get_fs_lmer(lme1), "scoring_matrix")
+  expect_false(is.null(sm_leg))
+  expect_named(sm_leg, names(sm_new))
+  for (j in seq_along(sm_new)) {
+    expect_equal(sm_leg[[j]], sm_new[[j]], ignore_attr = TRUE)
+  }
+})
+
+test_that("get_fs.merMod() is robust to row order (shuffled data)", {
+  set.seed(42)
+  sh <- sleepstudy[sample(nrow(sleepstudy)), ]
+  lms <- lmer(Reaction ~ Days + (1 | Subject), sh)
+  fs <- get_fs(lms)
+  sm <- attr(fs, "scoring_matrix")
+  # Cluster names follow the factor's level (canonical) order, not the
+  # first-appearance order induced by the shuffled row order.
+  expect_named(sm, as.character(sort(unique(sh$Subject))))
+  expect_equal(names(sm), dimnames(attr(fs, "fsT"))[[3]])
+  expect_equal(names(sm), dimnames(attr(fs, "fsL"))[[3]])
+  # Scores (one row per cluster, in that same order) align with ranef.
+  rn <- as.data.frame(ranef(lms)[[1]])
+  score_col <- grep("^fs_u0$", colnames(fs))[1]
+  expect_equal(as.numeric(fs[[score_col]]), as.numeric(rn[[1]]),
+               tolerance = 1e-10)
+})
+
+test_that("get_fs.merMod() follows user-specified factor level order", {
+  d <- sleepstudy
+  d$SubF <- factor(d$Subject, levels = rev(sort(unique(d$Subject))))
+  fm <- lmer(Reaction ~ Days + (1 | SubF), d)
+  fs <- get_fs(fm)
+  sm <- attr(fs, "scoring_matrix")
+  expect_named(sm, levels(d$SubF))
+  rn <- as.data.frame(ranef(fm)[[1]])
+  expect_equal(rownames(rn), levels(d$SubF))
+  score_col <- grep("^fs_u0$", colnames(fs))[1]
+  expect_equal(as.numeric(fs[[score_col]]), as.numeric(rn[[1]]),
+               tolerance = 1e-10)
+})
+
+test_that("get_fs.merMod() is robust to non-monotonic numeric cluster ids", {
+  d <- sleepstudy
+  sids <- unique(d$Subject)
+  idmap <- c(9L, 4L, 7L, 2L, 8L, 1L, 11L, 3L, 19L, 5L, 17L, 6L,
+             21L, 10L, 13L, 15L, 16L, 20L)
+  d$nid <- idmap[match(d$Subject, sids)]
+  fn <- lmer(Reaction ~ Days + (1 | nid), d)
+  fs <- get_fs(fn)
+  sm <- attr(fs, "scoring_matrix")
+  # Names are in lme4's canonical (sorted) numeric level order, not in
+  # data-appearance order (9, 4, 7, ...).
+  expect_equal(names(sm), rownames(as.data.frame(ranef(fn)[[1]])))
+  # canonical order starts at "1"; appearance order would start at "9"
+  expect_equal(names(sm)[1], "1")
+  score_col <- grep("^fs_u0$", colnames(fs))[1]
+  rn <- as.data.frame(ranef(fn)[[1]])
+  expect_equal(as.numeric(fs[[score_col]]), as.numeric(rn[[1]]),
+               tolerance = 1e-10)
+})
 ########## Computing reliability ##########
 
 test_that("Reliability of regression factor scores", {
