@@ -17,6 +17,8 @@
   vfsLT = FALSE,
   reliability = FALSE,
   format = c("unified", "list"),
+  prior_mean = NULL,
+  prior_cov = NULL,
   ...
 )
 
@@ -29,6 +31,8 @@
   vfsLT = FALSE,
   reliability = FALSE,
   format = c("unified", "list"),
+  prior_mean = NULL,
+  prior_cov = NULL,
   ...
 )
 
@@ -83,6 +87,28 @@ for multiple groups, attributes \code{fsT}, \code{fsL}, \code{fsb}, and \code{sc
 are named lists keyed by group label. \code{"list"} returns the legacy
 shape: a named list of data frames (one per group) with per-group
 matrix attributes. Use \code{\link[=fs_to_group_list]{fs_to_group_list()}} to convert between the two.}
+
+\item{prior_mean}{An optional numeric vector of length \code{q} (the number of
+latent variables) giving fixed external prior means for the latent
+variables. \code{NULL} (default) uses the lavaan-estimated (group-specific)
+latent means. Non-NULL values are treated as fixed external priors
+shared across all lavaan groups. Only supported for lavaan objects
+with regression (EB) scoring; \code{reliability = TRUE} is not supported
+together with user-supplied \code{prior_mean}/\code{prior_cov}. Conceptually
+similar to the \code{mean} argument of \code{mirt::fscores()}.}
+
+\item{prior_cov}{An optional numeric \verb{q x q} covariance matrix (a scalar or
+1 x 1 matrix is accepted when \code{q = 1}) giving fixed external prior
+covariance for the latent variables. \code{NULL} (default) uses the
+lavaan-estimated (group-specific) latent covariance. Non-NULL values
+must be finite, symmetric and positive definite, and are treated as
+fixed external priors shared across all lavaan groups. Only supported
+for lavaan objects with regression (EB) scoring;
+\code{reliability = TRUE} is not supported together with user-supplied
+\code{prior_mean}/\code{prior_cov}. With \code{corrected_fsT = TRUE} or
+\code{vfsLT = TRUE} the supplied covariance is treated as fixed, i.e. no
+sampling uncertainty from the prior itself is propagated.
+Conceptually similar to the \code{cov} argument of \code{mirt::fscores()}.}
 
 \item{...}{additional arguments passed to \code{\link[lavaan]{cfa}}
 (when \code{data} is a data frame). See \code{\link[lavaan]{lavOptions}}
@@ -154,4 +180,11 @@ get_fs(HolzingerSwineford1939, hs_model, group = "school")
 # Or without the model
 get_fs(HolzingerSwineford1939[c("school", "x4", "x5", "x6")],
        group = "school")
+
+# Fixed external latent prior (shared across groups) for regression scores;
+# conceptually similar to mirt::fscores(mean, cov)
+fit <- cfa("visual =~ x1 + x2 + x3",
+           data = HolzingerSwineford1939,
+           group = "school", group.equal = c("loadings", "intercepts"))
+get_fs(fit, prior_mean = c(visual = -0.12), prior_cov = 0.33)
 }

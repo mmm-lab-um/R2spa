@@ -289,7 +289,8 @@ compute_fspars <- function(
   par,
   lavobj,
   method = c("regression", "Bartlett"),
-  what = c("a", "evfs", "ldfs")
+  what = c("a", "evfs", "ldfs"),
+  psi_override = NULL
 ) {
   method <- match.arg(method)
   what <- match.arg(what)
@@ -311,6 +312,9 @@ compute_fspars <- function(
       for (i in free_list[[l]]) {
         mat[[l]][which(free[[l]] == i)] <- par[i]
       }
+    }
+    if (!is.null(psi_override)) {
+      mat$psi <- psi_override
     }
     pat <- mp[[g]]$pat
     if (is.null(pat)) {
@@ -339,8 +343,19 @@ compute_fspars <- function(
   out
 }
 
-compute_a <- function(par, lavobj, method = c("regression", "Bartlett")) {
-  compute_fspars(par, lavobj = lavobj, method = method, what = "a")
+compute_a <- function(
+  par,
+  lavobj,
+  method = c("regression", "Bartlett"),
+  psi_override = NULL
+) {
+  compute_fspars(
+    par,
+    lavobj = lavobj,
+    method = method,
+    what = "a",
+    psi_override = psi_override
+  )
 }
 
 compute_a_from_mat <- function(
@@ -378,7 +393,11 @@ compute_a_bartlett <- function(lambda, theta, psi = NULL) {
   solve(tlam_invth %*% lambda, tlam_invth)
 }
 
-correct_evfs <- function(fit, method = c("regression", "Bartlett")) {
+correct_evfs <- function(
+  fit,
+  method = c("regression", "Bartlett"),
+  psi_override = NULL
+) {
   method <- match.arg(method)
   # Direct slot access; avoids lavInspect()'s per-call version check.
   ngrp <- fit@Data@ngroups
@@ -393,12 +412,14 @@ correct_evfs <- function(fit, method = c("regression", "Bartlett")) {
     jac_a <- vector("list", length = p)
     for (i in seq_len(p)) {
       jac_a[[i]] <- lavaan::lav_func_jacobian_complex(
-        function(x, fit, method) {
-          compute_a(x, lavobj = fit, method = method)[[g]][i, ]
+        function(x, fit, method, psi_override) {
+          compute_a(x, lavobj = fit, method = method,
+                    psi_override = psi_override)[[g]][i, ]
         },
         coef(fit),
         fit = fit,
-        method = method
+        method = method,
+        psi_override = psi_override
       )
     }
     out <- matrix(nrow = p, ncol = p)
@@ -417,36 +438,70 @@ correct_evfs <- function(fit, method = c("regression", "Bartlett")) {
   outs
 }
 
-compute_evfs <- function(par, lavobj, method = c("regression", "Bartlett")) {
-  compute_fspars(par, lavobj = lavobj, method = method, what = "evfs")
+compute_evfs <- function(
+  par,
+  lavobj,
+  method = c("regression", "Bartlett"),
+  psi_override = NULL
+) {
+  compute_fspars(
+    par,
+    lavobj = lavobj,
+    method = method,
+    what = "evfs",
+    psi_override = psi_override
+  )
 }
 
-compute_ldfs <- function(par, lavobj, method = c("regression", "Bartlett")) {
-  compute_fspars(par, lavobj = lavobj, method = method, what = "ldfs")
+compute_ldfs <- function(
+  par,
+  lavobj,
+  method = c("regression", "Bartlett"),
+  psi_override = NULL
+) {
+  compute_fspars(
+    par,
+    lavobj = lavobj,
+    method = method,
+    what = "ldfs",
+    psi_override = psi_override
+  )
 }
 
-compute_grad_ld_evfs <- function(fit, method = c("regression", "Bartlett")) {
+compute_grad_ld_evfs <- function(
+  fit,
+  method = c("regression", "Bartlett"),
+  psi_override = NULL
+) {
   method <- match.arg(method)
   lavaan::lav_func_jacobian_complex(
-    function(x, fit, method) {
-      evfs <- compute_evfs(x, lavobj = fit, method = method)
+    function(x, fit, method, psi_override) {
+      evfs <- compute_evfs(x, lavobj = fit, method = method,
+                           psi_override = psi_override)
       evfs_lower <- lapply(evfs, function(x) {
         x[lower.tri(x, diag = TRUE)]
       })
       c(
-        unlist(compute_ldfs(x, lavobj = fit, method = method)),
+        unlist(compute_ldfs(x, lavobj = fit, method = method,
+                            psi_override = psi_override)),
         unlist(evfs_lower)
       )
     },
     coef(fit),
     fit = fit,
-    method = method
+    method = method,
+    psi_override = psi_override
   )
 }
 
-vcov_ld_evfs <- function(fit, method = c("regression", "Bartlett")) {
+vcov_ld_evfs <- function(
+  fit,
+  method = c("regression", "Bartlett"),
+  psi_override = NULL
+) {
   method <- match.arg(method)
-  jac <- compute_grad_ld_evfs(fit, method = method)
+  jac <- compute_grad_ld_evfs(fit, method = method,
+                              psi_override = psi_override)
   jac %*% lavaan::vcov(fit) %*% t(jac)
 }
 

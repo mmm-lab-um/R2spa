@@ -4,7 +4,7 @@ Tracks remaining work from completed plans (see `archive/`). Update status as
 items are resolved; move finished items to the **Closed** section with the
 date and commit/PR reference.
 
-**Last updated:** 2026-08-16 (PLAN 03 + follow-up — merMod `scoring_matrix`, cluster-name robustness, `scoring_matrix` documentation vignette)
+**Last updated:** 2026-08-16 (PLAN 03 (fs priors) — user-supplied latent priors `prior_mean`/`prior_cov` for `get_fs()`, lavaan-only)
 
 ## Open
 
@@ -31,8 +31,9 @@ date and commit/PR reference.
 | 7 | **Dead-code cleanup** — remaining pieces removed: commented-out `# fs_se[is.nan(fs_se)] <- 0` line in `augment_fs()` (`get_fscore.R`) and the unreachable `is.data.frame()` guard in `get_fs.data.frame()` (`get_fs_methods.R`); the merMod `fsT_j` rownames + duplicate `re_names` sub-bullets were fixed in Step 2. | 2026-08-16 | PLAN 02, Step 6 |
 | 8 | **merMod `scoring_matrix` + Z-design fix + vignette** — `get_fs.merMod()` now emits a per-cluster `scoring_matrix` (named list, one `num_re × n_j` matrix per cluster; score = `S_j %*% (y_j − X_j β)`), and `get_fs_blocks.merMod()` builds `Kz` from the random-effects design `Z` (`lme4::getME(object, "Z")`) instead of the fixed-effects `pp$X` — fixing the `Z ≠ X` crash (e.g. `Reaction ~ Days + (1 \| Subject)` → "non-conformable arguments"). Numerically inert where the old code worked (`Z == X` ⇒ `crossprod(zj) == crossprod(xj)` exactly). Roxygen (`get_fs`/`get_fs.merMod`/`get_fs_lmer`) + `AGENTS.md` attribute listing document the new attribute for both backends; new vignette `vignettes/scoring-matrices.Rmd` (lavaan CFA + lme4, hand-reconstruction of scores, comparison table). 5 new `test_that` blocks (score identity vs `ranef()`, structure, Z≠X regression, unbalanced clusters, legacy `get_fs_lmer()`). | 2026-08-16 | PLAN 03 |
 | 9 | **merMod cluster-name robustness + efficiency pass** — `get_fs_blocks.merMod()` named blocks by *first appearance* in the data (`unique(as.character(object@flist[[1]]))`) while every lme4 structure it consumes (`split()`/factor levels, the `Z` columns, the `b` random-effect vector, `ranef()` row order) follows the *canonical level order* — blocks were mislabeled whenever appearance order ≠ level order (shuffled rows, reversed factor levels, non-monotonic numeric cluster ids; values were always correct, only the labels wrong). Now names/rows come from `levels(as.factor(object@flist[[1]]))`, Z is sliced by level index `(j−1)·num_re+1:num_re`, and EB scores use `lme4::getME(object, "b")` reshaped level-major (bit-identical to `ranef()`, ~7× faster) — also dropping the unused `model.frame(object)` call. Verified: lme4 2.0.6 exposes no `pp$Z` (refclass `merPredD` has only `Zt`), so exported `getME()` is both the only and the stable choice; direct-slot access is not faster (sub-µs either way); per-cluster sparse `Zt[rws, idx]` slicing benchmarked and rejected (~55 µs/call vs 0.2 ms full densification at K=300). 3 new regression tests (shuffled rows, reversed factor levels, non-monotonic numeric ids); each confirmed to fail against the appearance-order naming. | 2026-08-16 | PLAN 03, follow-up |
+| 10 | **User-supplied latent priors `prior_mean`/`prior_cov` for `get_fs()`** (lavaan-only) — new arguments on `get_fs.data.frame()`, `get_fs.lavaan()`, and the `get_fs_lavaan()` wrapper (placed before `...` so they are never forwarded to `lavaan::cfa()`); non-NULL priors are treated as **fixed external priors shared across all lavaan groups**. Semantics: NULL preserves current behavior exactly; priors may be supplied independently; `prior_mean` is a length-q vector, `prior_cov` a q×q matrix (scalar/1×1 for q = 1); named inputs validated against latent names and reordered to model order; `prior_cov` validated finite/square/symmetric/positive-definite. Restrictions: regression/EB only (Bartlett/ML error), `reliability = TRUE` errors, merMod + `get_fs_lmer()` reject via `...`. Math: `psi_override` threaded through `compute_fspars()`/`compute_a()`/`compute_evfs()`/`compute_ldfs()`/`compute_grad_ld_evfs()`/`vcov_ld_evfs()`/`correct_evfs()`, so `corrected_fsT = TRUE` and `vfsLT = TRUE` treat the supplied covariance as fixed (no prior sampling uncertainty propagated); `prepare_fs()` in `get_fs_blocks.lavaan()` uses the overridden `psi`/`alpha` for complete data, every missing-data pattern, and every group. All derived outputs (`fs`, `fsT`, `fsL`, `fsb`, `scoring_matrix`, `se_*`, `ev_*`, `ecov_*`) are recomputed from the prior-based scoring matrix — verified equivalent to manual `compute_fscore()` calls. Roxygen docs + multi-group example; 22 new `test_that` blocks in `test-get_fs_priors.R` (equivalence, attributes, reordering, all validation errors, corrected-SE/vcov, `vcov_corrected()` on a prior-adjusted `tspa()` fit, data.frame/matrix/legacy entry points, q = 1 forms, multi-group incl. identical-group invariance, missing data, merMod rejection). `fs_to_group_list()` round-trip verified on prior-adjusted unified output. Out of scope (unchanged): group-specific priors, reliability under priors, merMod priors, `augment_lav_predict()`/OpenMx-facing helpers. | 2026-08-16 | PLAN 03 (fs priors) |
 
-## Verification state (2026-08-16 — PLAN 02 + PLAN 03)
+## Verification state (2026-08-16 — PLAN 02, PLAN 03 [mermod], PLAN 03 [fs priors])
 
 - `devtools::test()`: **596 pass, 0 fail, 0 warn** (435 at the PLAN 02
   close; +151 expectations from PLAN 03's 5 new `test_that` blocks in
@@ -66,6 +67,18 @@ date and commit/PR reference.
   pre-existing baseline items (S3 consistency for `get_fs.lavaan()`/
   `get_fs.merMod()`, undocumented `fsm`/`...` Rd args; `.lintr`, unused
   `Matrix` Import, top-level files incl. the PLAN 03 plan file).
+- PLAN 03 (fs priors) verification (2026-08-16): `devtools::test()`
+  **658 pass, 0 fail, 0 warn, 0 skip** (596 at the PLAN 03 [mermod] close;
+  +62 expectations from the 22 new `test_that` blocks in
+  `test-get_fs_priors.R`, A/B-verified by running the suite with the new file
+  removed). `devtools::document()` OK and idempotent (regenerates
+  `man/get_fs.Rd`, `man/get_fs_lavaan.Rd`; re-run changes nothing). Full
+  `devtools::check()` (as-cran default; `checking examples ... OK` incl. the
+  new multi-group prior example; all 14 vignettes rebuild; tests OK under
+  check): **0 errors, 2 WARNINGs, 3 NOTEs** — byte-for-byte the pre-existing
+  baseline items (S3-consistency for `get_fs.lavaan()`/`get_fs.merMod()`;
+  undocumented `fsm`/`...` Rd args; `.lintr` hidden file, unused `Matrix`
+  Import, top-level files). No new check findings introduced.
 - Vignette build history: exactly **3 of 13 failed** on the pre-PLAN 02
   Step-1 tree (`corrected-se.Rmd`, `multilevel.rmd`, `tspa-vignette-mx.Rmd`
   — the "7/8 of 13" reports were wrong); **13/13 build on 2026-08-16**
@@ -77,12 +90,17 @@ date and commit/PR reference.
 
 ## Notes
 
-- PLAN 01/02 code is committed (258b673..5f72883; plan file archived in
-  9c60ff8). Working-tree changes for **PLAN 03** are **uncommitted** as
-  of 2026-08-16; the edits sit in shared files, so commit scope must be
-  decided explicitly. PLAN 03's new/untracked items:
-  `vignettes/scoring-matrices.Rmd` and
-  `_PLAN_03_mermod_scoring_matrix.md` (the plan file itself, to be
-  archived into `archive/` like PLAN 02's).
-- Suggested order (PLAN 02 + PLAN 03 complete): 4 (user-facing bug) →
+- PLAN 01/02 code is committed (258b673..5f72883; plan files archived in
+  9c60ff8). PLAN 03 (merMod `scoring_matrix`) code is committed (00bf670);
+  its plan file is archived as `archive/PLAN_03_mermod_scoring_matrix.md`.
+- Working-tree changes for **PLAN 03 (fs priors)** are **uncommitted** as of
+  2026-08-16: `R/get_fscore.R`, `R/get_fs_methods.R`, `R/get_fscore_math.R`,
+  `man/get_fs.Rd`, `man/get_fs_lavaan.Rd` (all roxygen-generated), new
+  `tests/testthat/test-get_fs_priors.R`, plus `.Rbuildignore`/`.gitignore`
+  housekeeping (`^R2spa_.*\.tar\.gz$`, `^\.opencode$`, `.opencode`). The plan
+  file itself is archived as `archive/PLAN_03_fs_priors.md`. The edits sit in
+  shared files, so commit scope must be decided explicitly. Note: the plan
+  reuses the "PLAN 03" number of the already-archived merMod plan (its file
+  was named `_PLAN_03.md` at creation); archive slug disambiguates.
+- Suggested order (all plans complete): 4 (user-facing bug) →
   5 (perf) → F1 (future).

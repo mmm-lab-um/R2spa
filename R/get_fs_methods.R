@@ -7,6 +7,90 @@ normalize_fs_method <- function(method) {
   switch(method, ML = "Bartlett", EB = "regression", method)
 }
 
+validate_fs_priors <- function(prior_mean, prior_cov, lv_names) {
+  q <- length(lv_names)
+
+  if (!is.null(prior_mean)) {
+    prior_nms <- names(prior_mean)
+    prior_mean <- as.numeric(prior_mean)
+    if (!is.null(prior_nms)) {
+      if (!setequal(prior_nms, lv_names)) {
+        stop(
+          "'prior_mean' names must match the latent variable names (",
+          paste(lv_names, collapse = ", "), ").",
+          call. = FALSE
+        )
+      }
+      prior_mean <- prior_mean[match(lv_names, prior_nms)]
+    } else {
+      if (length(prior_mean) != q) {
+        stop(
+          "'prior_mean' must have length ", q,
+          " (the number of latent variables).",
+          call. = FALSE
+        )
+      }
+    }
+    if (any(!is.finite(prior_mean))) {
+      stop("'prior_mean' must contain only finite values.", call. = FALSE)
+    }
+    names(prior_mean) <- lv_names
+  }
+
+  if (!is.null(prior_cov)) {
+    if (!is.matrix(prior_cov)) {
+      prior_cov <- as.matrix(prior_cov)
+    }
+    if (any(!is.finite(prior_cov))) {
+      stop("'prior_cov' must contain only finite values.", call. = FALSE)
+    }
+    if (nrow(prior_cov) != ncol(prior_cov)) {
+      stop("'prior_cov' must be a square matrix.", call. = FALSE)
+    }
+    if (nrow(prior_cov) != q) {
+      stop(
+        "'prior_cov' must be a ", q, " x ", q, " matrix (one row and ",
+        "column per latent variable).",
+        call. = FALSE
+      )
+    }
+    pcv <- prior_cov
+    dimnames(pcv) <- NULL
+    if (!isTRUE(all.equal(pcv, t(pcv)))) {
+      stop("'prior_cov' must be symmetric.", call. = FALSE)
+    }
+    eig_vals <- eigen(pcv, symmetric = TRUE, only.values = TRUE)$values
+    if (any(eig_vals <= 0)) {
+      stop("'prior_cov' must be positive definite.", call. = FALSE)
+    }
+    rn <- rownames(prior_cov)
+    cn <- colnames(prior_cov)
+    if (q == 1) {
+      if (is.null(rn) && !is.null(cn)) {
+        rn <- cn
+      }
+      if (is.null(cn) && !is.null(rn)) {
+        cn <- rn
+      }
+    }
+    if (!is.null(rn) || !is.null(cn)) {
+      if (!setequal(rn, lv_names) || !setequal(cn, lv_names)) {
+        stop(
+          "'prior_cov' names must match the latent variable names (",
+          paste(lv_names, collapse = ", "), ").",
+          call. = FALSE
+        )
+      }
+      prior_cov <- prior_cov[match(lv_names, rn),
+                             match(lv_names, cn),
+                             drop = FALSE]
+    }
+    rownames(prior_cov) <- colnames(prior_cov) <- lv_names
+  }
+
+  list(mean = prior_mean, cov = prior_cov)
+}
+
 #' @rdname get_fs
 #' @export
 get_fs.data.frame <- function(
@@ -18,6 +102,8 @@ get_fs.data.frame <- function(
   vfsLT = FALSE,
   reliability = FALSE,
   format = c("unified", "list"),
+  prior_mean = NULL,
+  prior_cov = NULL,
   ...
 ) {
   if (is.null(model)) {
@@ -34,26 +120,37 @@ get_fs.data.frame <- function(
     corrected_fsT = corrected_fsT,
     vfsLT = vfsLT,
     reliability = reliability,
-    format = format
+    format = format,
+    prior_mean = prior_mean,
+    prior_cov = prior_cov
   )
 }
 
-get_fs_blocks.lavaan <- function(object, method, add_to_evfs, ...) {
+get_fs_blocks.lavaan <- function(
+  object,
+  method,
+  add_to_evfs,
+  prior_mean = NULL,
+  prior_cov = NULL,
+  ...
+) {
   method <- match.arg(method, c("regression", "Bartlett"))
   est <- lavInspect(object, what = "est")
   y <- lavInspect(object, what = "data")
   miss_pat <- object@Data@Mp
 
   prepare_fs <- function(y, est, add, mp, method) {
+    psi_use <- if (is.null(prior_cov)) est$psi else prior_cov
+    alpha_use <- if (is.null(prior_mean)) est$alpha else prior_mean
     if (is.null(mp)) {
       fscore <-
         compute_fscore(
           y,
           lambda = est$lambda,
           theta = est$theta,
-          psi = est$psi,
+          psi = psi_use,
           nu = est$nu,
-          alpha = est$alpha,
+          alpha = alpha_use,
           method = method,
           fs_matrices = TRUE
         )
@@ -78,9 +175,9 @@ get_fs_blocks.lavaan <- function(object, method, add_to_evfs, ...) {
             y[idx_m, pat_m, drop = FALSE],
             lambda = est$lambda[pat_m, , drop = FALSE],
             theta = est$theta[pat_m, pat_m, drop = FALSE],
-            psi = est$psi,
+            psi = psi_use,
             nu = est$nu[pat_m, , drop = FALSE],
-            alpha = est$alpha,
+            alpha = alpha_use,
             method = method,
             fs_matrices = TRUE
           )
@@ -162,6 +259,8 @@ get_fs.lavaan <- function(
   vfsLT = FALSE,
   reliability = FALSE,
   format = c("unified", "list"),
+  prior_mean = NULL,
+  prior_cov = NULL,
   ...
 ) {
   method <- normalize_fs_method(method)
@@ -170,11 +269,41 @@ get_fs.lavaan <- function(
   }
   format <- match.arg(format)
 
+  has_priors <- !is.null(prior_mean) || !is.null(prior_cov)
+  if (has_priors) {
+    if (method == "Bartlett") {
+      stop(
+        "'prior_mean'/'prior_cov' are only supported for 'regression' ",
+        "(EB) scoring.",
+        call. = FALSE
+      )
+    }
+    if (reliability) {
+      stop(
+        "'reliability = TRUE' is not supported with user-supplied ",
+        "'prior_mean'/'prior_cov'.",
+        call. = FALSE
+      )
+    }
+    est_first <- lavInspect(object, what = "est")
+    if (object@Data@ngroups > 1) {
+      est_first <- est_first[[1]]
+    }
+    lv_names <- colnames(est_first$lambda)
+    priors <- validate_fs_priors(prior_mean, prior_cov, lv_names)
+  } else {
+    priors <- list(mean = NULL, cov = NULL)
+  }
+
   if (reliability) {
     corrected_fsT <- TRUE
   }
   if (corrected_fsT) {
-    add_to_evfs <- correct_evfs(object, method = method)
+    add_to_evfs <- correct_evfs(
+      object,
+      method = method,
+      psi_override = priors$cov
+    )
   } else {
     # Direct slot access; see note in get_fs_blocks.lavaan() -- avoids
     # lavInspect()'s expensive per-call version check.
@@ -184,7 +313,9 @@ get_fs.lavaan <- function(
   blocks_by_group <- get_fs_blocks.lavaan(
     object,
     method = method,
-    add_to_evfs = add_to_evfs
+    add_to_evfs = add_to_evfs,
+    prior_mean = priors$mean,
+    prior_cov = priors$cov
   )
 
   group_var <- object@Data@group
@@ -197,7 +328,11 @@ get_fs.lavaan <- function(
   )
 
   if (vfsLT) {
-    attr(out, "vfsLT") <- vcov_ld_evfs(object, method = method)
+    attr(out, "vfsLT") <- vcov_ld_evfs(
+      object,
+      method = method,
+      psi_override = priors$cov
+    )
   }
   if (reliability) {
     est <- lavInspect(object, what = "est")
@@ -364,6 +499,13 @@ get_fs.merMod <- function(
 ) {
   if (!inherits(object, "merMod")) {
     stop("`object` must be an `lmerMod` model object.", call. = FALSE)
+  }
+  prior_dots <- list(...)[c("prior_mean", "prior_cov")]
+  if (!is.null(prior_dots$prior_mean) || !is.null(prior_dots$prior_cov)) {
+    stop(
+      "'prior_mean'/'prior_cov' are not supported for `lmerMod` objects.",
+      call. = FALSE
+    )
   }
 
   blocks <- get_fs_blocks.merMod(object, legacy_names = legacy_names)

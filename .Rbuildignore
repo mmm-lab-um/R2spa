@@ -10,3 +10,5 @@
 ^\.Rproj\.user$
 ^vignettes/reliability-multivariate\.Rmd
 ^\.vscode$
+^R2spa_.*\.tar\.gz$
+^\.opencode$

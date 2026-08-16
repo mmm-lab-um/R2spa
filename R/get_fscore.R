@@ -38,6 +38,26 @@
 #'              [tspa()] results. This is currently ignored.
 #' @param reliability Logical. Whether to return the reliability of factor
 #'                    scores. Available only for single-factor lavaan models.
+#' @param prior_mean An optional numeric vector of length `q` (the number of
+#'        latent variables) giving fixed external prior means for the latent
+#'        variables. `NULL` (default) uses the lavaan-estimated (group-specific)
+#'        latent means. Non-NULL values are treated as fixed external priors
+#'        shared across all lavaan groups. Only supported for lavaan objects
+#'        with regression (EB) scoring; `reliability = TRUE` is not supported
+#'        together with user-supplied `prior_mean`/`prior_cov`. Conceptually
+#'        similar to the `mean` argument of `mirt::fscores()`.
+#' @param prior_cov An optional numeric `q x q` covariance matrix (a scalar or
+#'        1 x 1 matrix is accepted when `q = 1`) giving fixed external prior
+#'        covariance for the latent variables. `NULL` (default) uses the
+#'        lavaan-estimated (group-specific) latent covariance. Non-NULL values
+#'        must be finite, symmetric and positive definite, and are treated as
+#'        fixed external priors shared across all lavaan groups. Only supported
+#'        for lavaan objects with regression (EB) scoring;
+#'        `reliability = TRUE` is not supported together with user-supplied
+#'        `prior_mean`/`prior_cov`. With `corrected_fsT = TRUE` or
+#'        `vfsLT = TRUE` the supplied covariance is treated as fixed, i.e. no
+#'        sampling uncertainty from the prior itself is propagated.
+#'        Conceptually similar to the `cov` argument of `mirt::fscores()`.
 #' @param format Output format when `data` is a lavaan or merMod object.
 #'        `"unified"` (default) returns a single data frame with a `group` column;
 #'        for multiple groups, attributes `fsT`, `fsL`, `fsb`, and `scoring_matrix`
@@ -87,6 +107,13 @@
 #' # Or without the model
 #' get_fs(HolzingerSwineford1939[c("school", "x4", "x5", "x6")],
 #'        group = "school")
+#'
+#' # Fixed external latent prior (shared across groups) for regression scores;
+#' # conceptually similar to mirt::fscores(mean, cov)
+#' fit <- cfa("visual =~ x1 + x2 + x3",
+#'            data = HolzingerSwineford1939,
+#'            group = "school", group.equal = c("loadings", "intercepts"))
+#' get_fs(fit, prior_mean = c(visual = -0.12), prior_cov = 0.33)
 
 get_fs <- function(data, ...) {
   UseMethod("get_fs")
@@ -107,6 +134,8 @@ get_fs_lavaan <- function(
   corrected_fsT = FALSE,
   vfsLT = FALSE,
   reliability = FALSE,
+  prior_mean = NULL,
+  prior_cov = NULL,
   ...
 ) {
   get_fs(
@@ -116,6 +145,8 @@ get_fs_lavaan <- function(
     vfsLT = vfsLT,
     reliability = reliability,
     format = "list",
+    prior_mean = prior_mean,
+    prior_cov = prior_cov,
     ...
   )
 }
