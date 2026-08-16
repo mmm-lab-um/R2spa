@@ -44,6 +44,7 @@ Suggests:
     DiagrammeR,
     ggplot2,
     knitr,
+    lintr,
     magrittr,
     mirt,
     numDeriv,

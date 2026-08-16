@@ -138,14 +138,30 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
   if (!is.data.frame(se_fs)) {
     se_fs <- as.data.frame(as.list(se_fs))
   }
+  if (xor(is.null(fsT), is.null(fsL))) {
+    stop("Please provide both or none of fsT and fsL.")
+  }
+
+  # A plain matrix stands for a single group, so a length-1 list may be mixed
+  # with a plain matrix (single-group unified get_fs() output); only differing
+  # group counts are an error.
+  if (!is.null(fsT)) {
+    nT <- if (is.list(fsT)) length(fsT) else 1
+    nL <- if (is.list(fsL)) length(fsL) else 1
+    if (nT != nL) {
+      stop(
+        if (nT > nL) {
+          "'fsL' must be a list of the same length as 'fsT' for a multigroup model."
+        } else {
+          "'fsT' must be a list of the same length as 'fsL' for a multigroup model."
+        }
+      )
+    }
+  }
   multigroup <- if (!is.null(fsT)) {
     is.list(fsT) && length(fsT) > 1
   } else {
     nrow(se_fs) > 1
-  }
-
-  if (xor(is.null(fsT), is.null(fsL))) {
-    stop("Please provide both or none of fsT and fsL.")
   }
 
   if (!is.null(fsT)) {
@@ -232,19 +248,30 @@ tspa_sf <- function(model, data, se = NULL) {
 }
 
 tspa_mf <- function(model, data, fsT, fsL, fsb) {
+  # `fsT`/`fsL` are plain matrices for a single-group model or named lists
+  # of them for a multigroup model. Single-group unified get_fs() output
+  # carries length-1 list attributes, so either shape is accepted on either
+  # side (e.g. list-valued `fsT` with a plain identity `fsL` for Bartlett).
   if (is.list(fsT) && length(fsT) > 1) {
+    if (!is.list(fsL) || length(fsL) != length(fsT)) {
+      stop("'fsL' must be a list of the same length as 'fsT' for a ",
+           "multigroup model.")
+    }
     ngroup <- length(fsT)
     fsL1 <- fsL[[1]]
     fsT_in <- !upper.tri(fsT[[1]])
-  } else if (is.list(fsT)) {
-    # Single-group with list-valued attributes from unified get_fs() output
-    ngroup <- 1
+  } else if (is.list(fsL) && length(fsL) > 1) {
+    if (!is.list(fsT) || length(fsT) != length(fsL)) {
+      stop("'fsT' must be a list of the same length as 'fsL' for a ",
+           "multigroup model.")
+    }
+    ngroup <- length(fsL)
     fsL1 <- fsL[[1]]
     fsT_in <- !upper.tri(fsT[[1]])
   } else {
     ngroup <- 1
-    fsL1 <- fsL
-    fsT_in <- !upper.tri(fsT)
+    fsL1 <- if (is.list(fsL)) fsL[[1]] else fsL
+    fsT_in <- !upper.tri(if (is.list(fsT)) fsT[[1]] else fsT)
   }
   var <- colnames(fsL1)
   nvar <- length(var)

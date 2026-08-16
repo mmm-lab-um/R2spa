@@ -82,7 +82,9 @@ grand_standardized_solution <- function(object, model_list = NULL,
                                       se = TRUE, acov_par = NULL,
                                       free_list = NULL, level = .95) {
   if (is.null(model_list)) model_list <- lavTech(object, what = "est")
-  ns <- lavInspect(object, what = "nobs")
+  # The nobs slot is a per-group list; unlist to the vector form that
+  # lavInspect(what = "nobs") returns.
+  ns <- unlist(object@Data@nobs)
   if (length(ns) == 1) ns <- NULL
   if (is.null(ns)) {
     message(

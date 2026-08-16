@@ -20,9 +20,6 @@ get_fs.data.frame <- function(
   format = c("unified", "list"),
   ...
 ) {
-  if (!is.data.frame(data)) {
-    data <- as.data.frame(data)
-  }
   if (is.null(model)) {
     ind_names <- colnames(data)
     if (!is.null(group)) {
@@ -224,7 +221,9 @@ get_fs.lavaan <- function(
       } else {
         is_std.lv <- all(unlist(lapply(est, function(x) x$psi)) == 1)
         rels <- compute_fsrel(object, method = method)
-        group_n <- lavInspect(object, what = "norig")
+        # The norig slot is a per-group list; unlist to the vector form
+        # that lavInspect(what = "norig") returns.
+        group_n <- unlist(object@Data@norig)
         rels[ngroups + 1] <- sum(unlist(rels) * group_n / sum(group_n))
         attr(out, "reliability") <-
           setNames(rels, c(group_labels, "overall"))
@@ -240,9 +239,11 @@ get_fs.lavaan <- function(
   out
 }
 
-get_fs_blocks.merMod <- function(object, ...) {
+get_fs_blocks.merMod <- function(object, legacy_names = FALSE, ...) {
   num_re <- length(object@cnms[[1]])
-  re_names <- paste0("u", seq_len(num_re) - 1, "_eb")
+  base_names <- paste0("u", seq_len(num_re) - 1)
+  re_names <- if (legacy_names) paste0(base_names, "_eb") else base_names
+  fs_names <- paste0("fs_", re_names)
 
   u_eb <- as.data.frame(lme4::ranef(object)[[1]])
   colnames(u_eb) <- re_names
@@ -269,13 +270,12 @@ get_fs_blocks.merMod <- function(object, ...) {
     fs_row <- as.matrix(u_eb[j, , drop = FALSE])
     colnames(fs_row) <- re_names
 
-    # colnames = lv names, rownames = fs names (for augment_fs consistency)
+    # colnames = indicator/lv names, rownames = fs names (augment_fs convention)
     colnames(fsL_j) <- re_names
-    rownames(fsL_j) <- paste0("fs_", re_names)
+    rownames(fsL_j) <- fs_names
     attr(fs_row, "fsL") <- fsL_j
 
-    rownames(fsT_j) <- colnames(fsT_j) <- paste0("fs_", re_names)
-    rownames(fsT_j) <- colnames(fsT_j) <- re_names
+    rownames(fsT_j) <- colnames(fsT_j) <- fs_names
 
     blocks[[j]] <- list(
       case_idx = case_idx[[j]],
@@ -300,6 +300,18 @@ get_D <- function(theta) {
 #'        a `group` column; `"list"` returns a list of data frames per group.
 #'        For `merMod` objects there is always a single implicit group, so
 #'        `"list"` returns a bare data frame.
+#' @param legacy_names Logical. Random-effect score naming convention for
+#'        `merMod` objects. `FALSE` (default) uses `fs_u0`-style names
+#'        (`fs_u0`/`fs_u1`/..., with loadings `u0_by_fs_u0` and error terms
+#'        `ev_fs_u0`, `ecov_fs_u1_fs_u0`). `TRUE` reproduces the pre-refactor
+#'        `u0_eb`-style *column names* (`u0_eb`, `u0_by_u0_eb`, `ev_u0_eb`,
+#'        `ecov_u0_eb_u1_eb`) in the legacy column order. Note the legacy
+#'        output is name-compatible, not byte-identical, with the
+#'        pre-refactor `get_fs_lmer()` result: it additionally carries
+#'        score-error columns (`u0_eb_se`, ...), per-cluster `fsL`/`fsT`
+#'        array attributes, and has NULL row names (the pre-refactor
+#'        output had none of these and used the ranef subject IDs as row
+#'        names).
 #' @export
 get_fs.merMod <- function(
   object,
@@ -308,13 +320,14 @@ get_fs.merMod <- function(
   vfsLT = FALSE,
   fsm = FALSE,
   format = c("unified", "list"),
+  legacy_names = FALSE,
   ...
 ) {
   if (!inherits(object, "merMod")) {
     stop("`object` must be an `lmerMod` model object.", call. = FALSE)
   }
 
-  blocks <- get_fs_blocks.merMod(object)
+  blocks <- get_fs_blocks.merMod(object, legacy_names = legacy_names)
 
   # NOTE: merMod does NOT route through assemble_fs_blocks(). The shared
   # assembler assumes one data row per individual case (nrow = n_cases),
@@ -330,21 +343,28 @@ get_fs.merMod <- function(
   out <- do.call(rbind, aug_list)
   rownames(out) <- NULL
 
+  # Legacy `u<k>_eb`-style names are not produced by augment_fs() (which
+  # unconditionally prefixes scores with "fs_" and emits `ecov` columns in
+  # row/col iteration order), so translate the column names when requested.
+  if (legacy_names) {
+    colnames(out) <- rename_legacy_fs_cols(colnames(out))
+  }
+
   # Per-cluster fsL/fsT as array attributes (merMod-specific: each cluster
   # has its own covariance matrix, unlike lavaan groups where attributes are
-  # shared within a group).
+  # shared within a group). Names come from the first block's fsL.
   n_clus <- length(blocks)
-  num_re <- ncol(blocks[[1]]$fsT)
-  re_names <- paste0("u", seq_len(num_re) - 1, "_eb")
-  fs_names <- paste0("fs_", re_names)
+  fsL_1 <- blocks[[1]]$fsL
+  re_names <- colnames(fsL_1)
+  fs_names <- rownames(fsL_1)
   fsL_arr <- array(
     0,
-    dim = c(num_re, num_re, n_clus),
+    dim = c(nrow(fsL_1), ncol(fsL_1), n_clus),
     dimnames = list(fs_names, re_names, names(blocks))
   )
   fsT_arr <- array(
     0,
-    dim = c(num_re, num_re, n_clus),
+    dim = c(nrow(fsL_1), ncol(fsL_1), n_clus),
     dimnames = list(fs_names, fs_names, names(blocks))
   )
   for (j in seq_len(n_clus)) {
@@ -355,4 +375,49 @@ get_fs.merMod <- function(
   attr(out, "fsT") <- fsT_arr
 
   out
+}
+
+# Translate augment_fs() column names into the pre-refactor `u<k>_eb`-style
+# names. augment_fs() unconditionally prefixes scores with "fs_" and emits
+# `ecov` columns in matrix row/col iteration order; the legacy convention
+# needs neither that prefix (scores/SEs/ev), nor a bare (no "_eb") indicator
+# side on loadings, nor the ascending `ecov` order — hence the per-category
+# rules below.
+rename_legacy_fs_cols <- function(x) {
+  vapply(
+    x,
+    function(nm) {
+      if (grepl("_by_", nm, fixed = TRUE)) {
+        # <ind>_eb_by_fs_<fs>_eb -> <ind>_by_<fs>_eb
+        sub("^(u[0-9]+)_eb_by_fs_(u[0-9]+)_eb$", "\\1_by_\\2_eb", nm)
+      } else if (grepl("^ecov_", nm)) {
+        # ecov_fs_uA_eb_fs_uB_eb -> ecov_uA_eb_uB_eb, ascending in u<k>
+        reorder_ecov_col(
+          sub("^ecov_fs_(u[0-9]+)_eb_fs_(u[0-9]+)_eb$",
+              "ecov_\\1_eb_\\2_eb",
+              nm
+          )
+        )
+      } else if (grepl("^ev_", nm)) {
+        # ev_fs_u0_eb -> ev_u0_eb
+        sub("^ev_fs_", "ev_", nm)
+      } else {
+        # scores (fs_u0_eb) and SEs (fs_u0_eb_se): drop the leading "fs_"
+        sub("^fs_", "", nm)
+      }
+    },
+    character(1),
+    USE.NAMES = FALSE
+  )
+}
+
+# Reorder `ecov_uA_eb_uB_eb` so the u<k> indices are ascending (A < B).
+# Comparing the extracted integers (not the strings) keeps this correct for
+# 10+ random effects as well.
+reorder_ecov_col <- function(nm) {
+  m <- regmatches(nm, regexec("^ecov_u([0-9]+)_eb_u([0-9]+)_eb$", nm))[[1]]
+  if (length(m) != 3L) return(nm)
+  a <- as.integer(m[2])
+  b <- as.integer(m[3])
+  if (a <= b) nm else paste0("ecov_u", b, "_eb_u", a, "_eb")
 }

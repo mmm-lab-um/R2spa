@@ -29,6 +29,12 @@ test_that("test the data input", {
   expect_s3_class(PoliticalDemocracy, "data.frame")
 })
 
+test_that("matrix input is converted and re-dispatched identically", {
+  fs_mat <- get_fs(as.matrix(PoliticalDemocracy), single_model,
+                  format = "list")
+  expect_identical(fs_mat, test_object_fs)
+})
+
 # Class of output
 
 test_that("Gives an output of data frame", {
@@ -381,6 +387,42 @@ test_that("get_fs_blocks.merMod() produces correct block structure", {
     expect_true(length(b$case_idx) > 0)
     expect_equal(nrow(b$fs), 1)
   }
+})
+
+test_that("get_fs.merMod() default uses fs_u0-style names (no _eb)", {
+  lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+  fs <- get_fs(lme1)
+  expect_equal(
+    colnames(fs),
+    c("fs_u0", "fs_u1",
+      "fs_u0_se", "fs_u1_se",
+      "u0_by_fs_u0", "u0_by_fs_u1", "u1_by_fs_u0", "u1_by_fs_u1",
+      "ev_fs_u0", "ecov_fs_u1_fs_u0", "ev_fs_u1")
+  )
+})
+
+test_that("get_fs.merMod(legacy_names = TRUE) reproduces u0_eb-style names", {
+  lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+  fs <- get_fs(lme1, legacy_names = TRUE)
+  expect_equal(
+    colnames(fs),
+    c("u0_eb", "u1_eb",
+      "u0_eb_se", "u1_eb_se",
+      "u0_by_u0_eb", "u0_by_u1_eb", "u1_by_u0_eb", "u1_by_u1_eb",
+      "ev_u0_eb", "ecov_u0_eb_u1_eb", "ev_u1_eb")
+  )
+})
+
+test_that("get_fs_lmer() defaults to legacy u0_eb-style names", {
+  lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+  fs <- get_fs_lmer(lme1)
+  expect_equal(
+    colnames(fs),
+    c("u0_eb", "u1_eb",
+      "u0_eb_se", "u1_eb_se",
+      "u0_by_u0_eb", "u0_by_u1_eb", "u1_by_u0_eb", "u1_by_u1_eb",
+      "ev_u0_eb", "ecov_u0_eb_u1_eb", "ev_u1_eb")
+  )
 })
 ########## Computing reliability ##########
 

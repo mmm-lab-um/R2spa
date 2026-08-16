@@ -607,6 +607,66 @@ test_that(
   }
 )
 
+# Single-group unified get_fs() output carries length-1 list attributes;
+# tspa() must accept them in any combination with plain matrices (e.g. an
+# identity `fsL` for Bartlett scores).
+mod2sg <- "
+  # latent variables
+    ind60 =~ x1 + x2 + x3
+    dem60 =~ y1 + y2 + y3 + y4
+"
+fs_dat_uni <- get_fs(PoliticalDemocracy, model = mod2sg, std.lv = TRUE)
+
+test_that("Single-group list-valued attributes mixed with plain matrices", {
+  fsT_u <- attr(fs_dat_uni, "fsT")
+  fsL_u <- attr(fs_dat_uni, "fsL")
+  expect_true(is.list(fsT_u) && length(fsT_u) == 1)
+  expect_true(is.list(fsL_u) && length(fsL_u) == 1)
+  identity_ld <- diag(2) |>
+    `dimnames<-`(list(c("fs_ind60", "fs_dem60"), c("ind60", "dem60")))
+  # list fsT + matrix fsL (the Bartlett identity-loadings case)
+  fit_tl <- tspa(model = "dem60 ~ ind60", data = fs_dat_uni,
+                 fsT = fsT_u, fsL = identity_ld)
+  fit_mm <- tspa(model = "dem60 ~ ind60", data = fs_dat_uni,
+                 fsT = fsT_u[[1]], fsL = identity_ld)
+  expect_equal(
+    parameterestimates(fit_tl)[c("est", "se")],
+    parameterestimates(fit_mm)[c("est", "se")],
+    tolerance = 1e-10
+  )
+  # matrix fsT + list fsL (the reverse combination)
+  fit_lt <- tspa(model = "dem60 ~ ind60", data = fs_dat_uni,
+                 fsT = fsT_u[[1]], fsL = fsL_u)
+  fit_mm2 <- tspa(model = "dem60 ~ ind60", data = fs_dat_uni,
+                  fsT = fsT_u[[1]], fsL = fsL_u[[1]])
+  expect_equal(
+    parameterestimates(fit_lt)[c("est", "se")],
+    parameterestimates(fit_mm2)[c("est", "se")],
+    tolerance = 1e-10
+  )
+})
+
+test_that("Multigroup fsT/fsL shape mismatch is a clear error", {
+  expect_error(
+    tspa(model = "visual ~ speed
+                 textual ~ visual + speed",
+         data = fs_dat4,
+         group = "school",
+         fsT = attr(fs_dat4, "fsT"),
+         fsL = attr(fs_dat4, "fsL")[[1]]),
+    "must be a list of the same length"
+  )
+  expect_error(
+    tspa(model = "visual ~ speed
+                 textual ~ visual + speed",
+         data = fs_dat4,
+         group = "school",
+         fsT = attr(fs_dat4, "fsT")[[1]],
+         fsL = attr(fs_dat4, "fsL")),
+    "must be a list of the same length"
+  )
+})
+
 test_that("Test indicator names not starting with 'fs_'", {
   data("PoliticalDemocracy", package = "lavaan")
   mod2 <- "

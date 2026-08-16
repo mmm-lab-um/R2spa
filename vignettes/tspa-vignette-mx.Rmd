@@ -33,7 +33,8 @@ my_cfa <- "
     ind60 =~ x1 + x2 + x3
     dem60 =~ y1 + y2 + y3 + y4
 "
-(fs_dat <- get_fs(PoliticalDemocracy, model = my_cfa, std.lv = TRUE)) |> head()
+(fs_dat <- get_fs(PoliticalDemocracy, model = my_cfa, std.lv = TRUE,
+                  format = "list")) |> head()
 ```
 
 ```{r}
@@ -111,7 +112,8 @@ my_cfa <- "
     ind60 + dem60 ~ 1
 "
 fs_dat <- get_fs(PoliticalDemocracy, model = my_cfa,
-                 meanstructure = TRUE)
+                 meanstructure = TRUE,
+                 format = "list")
 ```
 
 lavaan

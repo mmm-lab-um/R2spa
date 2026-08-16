@@ -21,29 +21,175 @@
     425 pass / 0 fail / 0 warn. `R CMD check --ignore-vignettes`: 2 WARNINGs
     / 3 NOTEs, A/B-verified (via `git stash`) to be pre-existing and
     identical on the pre-change tree.
-  - **Not committed yet** — working tree also contains the uncommitted
-    PLAN 01 refactor (style reformat + `lintr` setup); Step 1 edits are
-    interleaved in the same files, so decide commit scope explicitly.
-- [ ] Step 2 — merMod score naming (`fs_u0` vs. `u0_eb`) + `legacy_names` —
-      not started.
-- [ ] Step 3 — vignette breakage on `format = "unified"` (STATUS item 2) —
-      not started. **Start from the verified failure set noted in §3 below;
-      do not re-derive it.**
-- [ ] Step 4 — `get_fs(data = matrix)` dispatch (STATUS item 3) — not
-      started.
-- [ ] Step 5 — cheap-lookup `lavInspect()` sites (STATUS item 6) — not
-      started.
-- [ ] Step 6 — dead-code cleanup (STATUS item 7) — not started.
+   - **Committed in `db36781` (2026-08-15)** — by explicit decision that
+     commit also includes the PLAN 01 style reformat (interleaved in the
+     same files). Uncommitted PLAN 01 leftovers remain: `.lintr`
+     (untracked) and `Suggests: lintr` in `DESCRIPTION`.
+- [x] **Step 2 — merMod score naming (`fs_u0` vs. `u0_eb`) +
+      `legacy_names`** — done 2026-08-15.
+  - `get_fs_blocks.merMod()` / `get_fs.merMod()` take `legacy_names`
+    (default `FALSE`); base names get the `"_eb"` suffix **only** when
+    `legacy_names = TRUE`.
+  - Default (`fs_u0`-style) output: scores `fs_u0`/`fs_u1`, SEs
+    `fs_u0_se`/`fs_u1_se`, loadings `u0_by_fs_u0`, evs `ev_fs_u0`,
+    **`ecov_fs_u1_fs_u0`** — i.e. the natural `augment_fs()` row/col
+    iteration order. **Per user decision (2026-08-15)** the default is left
+    in that natural (u-later-first) order rather than coerced to
+    `ecov_fs_u0_fs_u1`, since no consumer pins it — avoids a reordering pass
+    on the new-default path.
+  - `legacy_names = TRUE`: post-processing rename in `get_fs.merMod()`
+    (helpers `rename_legacy_fs_cols()` + `reorder_ecov_col()`) reproduces
+    `u0_eb` / `u0_by_u0_eb` / `ev_u0_eb` / **`ecov_u0_eb_u1_eb` (ascending)**
+    — exactly what `vignettes/multilevel.rmd` hardcodes, so the legacy path
+    *does* reorder. This closes STATUS item 1 (merMod column-name
+    regression).
+  - `get_fs_lmer()` defaults `legacy_names = TRUE` (back-compat for
+    `multilevel.rmd`).
+  - Fixed the overwritten `fsT_j` rownames bug (single correct `fs_-`prefixed
+    assignment) and the duplicated `re_names`/`fs_names` recompute (now
+    derived from `colnames/rownames(blocks[[1]]$fsL)`) — STATUS item 7's
+    first + fourth sub-bullets, both covered as a side effect.
+   - 3 new tests in `tests/testthat/test-get_fscore.R` pin the default,
+     legacy, and `get_fs_lmer()` column-name sets.
+   - **Revised 2026-08-15 (review decision — compat relaxed):** the legacy
+     path is **name-compatible, not byte-compatible**, with the true
+     pre-refactor `get_fs_lmer()` output (d1faa7e, which had 9 columns and
+     no `_se`/attributes/subject row names). Decision: keep the extra
+     `_se` columns, `fsL`/`fsT` array attributes, and NULL row names
+     (all current consumers work — `vignettes/multilevel.rmd` /
+     `tspa_mx_model` verified end-to-end) and **document the delta** in the
+     roxygen of `get_fs_lmer()` and `get_fs.merMod()` instead of dropping
+     columns for byte-compat.
+   - **Lints deferred (user decision 2026-08-15):** 2 new style lints in
+     `rename_legacy_fs_cols()` (`R/get_fs_methods.R:392` indentation, `:397`
+     commented-code) and all pre-existing lints are intentionally not
+     addressed this pass.
+   - Verified: `load_all()` OK, `document()` OK (2 Rd, idempotent), `test()`
+     **428 pass / 0 fail / 0 warn**. Full `devtools::check()` (incl. vignette
+     build) reserved for the later STATUS-closing pass.
+- [x] Step 3 — vignette breakage on `format = "unified"` (STATUS item 2) —
+      done 2026-08-16.
+    - Root causes (verified 2026-08-16 on the post-Steps 1–2 tree; re-run
+      justified because `R/` changed):
+      - `corrected-se.Rmd` lines 270–288 (`group length is 0 but data length
+        > 0`): `tspa_mf()` assumed list `fsT` ⇒ list `fsL`; the vignette
+        legitimately passes list-valued unified `fsT` with a plain identity
+        `fsL` (Bartlett). `fsL[[1]]` on a matrix extracted a column, so
+        `colnames()` was empty and the split failed cryptically.
+      - `tspa-vignette-mx.Rmd` lines 61–79 (`incorrect number of
+        dimensions`): direct matrix indexing/arithmetic on the now
+        list-valued `fsT`/`fsL` attributes.
+      - `multilevel.rmd` already passed (Step 2 `legacy_names` default).
+    - `R/tspa.R`: `tspa()` now validates `fsT`/`fsL` group-count consistency
+      before the name check (plain matrix = 1 group, so a length-1 list may
+      be mixed with a plain matrix for a single-group model), gives a clear
+      `must be a list of the same length` error for true mismatches, and
+      derives `multigroup` from the validated `fsT` shape; `tspa_mf()`
+      accepts any matrix/length-1-list combination for single-group and
+      keeps the multigroup mismatch guards.
+    - `vignettes/tspa-vignette-mx.Rmd`: `format = "list"` on the two
+      single-group `get_fs()` calls (direct attribute arithmetic needs the
+      plain-matrix shape; `tspa_mx_model()` does not use the attributes).
+    - 6 new assertions in `tests/testthat/test-tspa.R`: single-group
+      list/matrix mixed shapes numerically equal the plain-matrix fit;
+      multigroup shape mismatch is a clear error in both directions.
+    - Verified 2026-08-16: `load_all()` OK; `document()` idempotent;
+      `test()` **434 pass / 0 fail / 0 warn** (428 baseline + 6 new).
+      Clean full vignette rebuild: **13/13 build, 0 failures** —
+      `corrected-se.Rmd` and `tspa-vignette-mx.Rmd` pass including the
+      previously untested chunks after their first failure. Scoped
+      `R CMD check --ignore-vignettes --no-manual`: 2 WARNINGs, 3 NOTEs —
+      identical to the pre-existing baseline documented in STATUS.md
+      (S3 consistency, undocumented `fsm`/`...`, `.lintr`, unused `Matrix`
+      import, missing `stats::model.frame`).
+    - STATUS.md item 2 closes in the final STATUS pass (per the
+      Verification section) after Step 6.
+- [x] Step 4 — `get_fs(data = matrix)` dispatch (STATUS item 3) — done
+      2026-08-16.
+    - No code change needed: `get_fs.data.frame()` already re-dispatches
+      matrices (`R/get_fs_methods.R` — `is.matrix(data)` →
+      `as.data.frame(data)` → `get_fs(data, ...)`), which was already in
+      place in the working tree (STATUS.md simply not updated).
+    - Live check 2026-08-16: `get_fs(as.matrix(PoliticalDemocracy), ...)`
+      is `identical()` to `get_fs(PoliticalDemocracy, ...)` incl.
+      `fsT`/`fsL`/`fsb` attributes; unsupported classes still hit the
+      clear `get_fs.data.frame()` stop message.
+    - Added regression test in `tests/testthat/test-get_fscore.R`:
+      `get_fs(as.matrix(...), single_model, format = "list")` is
+      `identical()` to the precomputed data-frame result.
+    - Verified: `test()` **435 pass / 0 fail / 0 warn** (434 after
+      Step 3 + 1 new).
+    - STATUS.md item 3 closes in the final STATUS pass as
+      already-resolved.
+- [x] Step 5 — cheap-lookup `lavInspect()` sites (STATUS item 6) — done
+      2026-08-16.
+    - Replaced exactly the 3 sites listed in STATUS item 6:
+      - `R/tspa_corrected_se.R:21` — `lavInspect(tspa_fit, "ngroups")` →
+        `tspa_fit@Data@ngroups`.
+      - `R/get_fs_methods.R:227` (line number post-Step 2 shifts; plan
+        said :197) — `lavInspect(object, "norig")` →
+        `unlist(object@Data@norig)`.
+      - `R/grandStandardizedSolution.R:85` — `lavInspect(object, "nobs")`
+        → `unlist(object@Data@nobs)`.
+    - Per-site behavior check (plan §5 requirement that surrounding logic
+      behaves identically):
+      - Slot values proven equal to `lavInspect()` for SG and MG fits:
+        `@Data@ngroups` identical; `unlist(@Data@nobs)` /
+        `unlist(@Data@norig)` `all.equal()` — both `nobs`- and `norig`
+        -slot list form unlists to the same named vector `lavInspect()`
+        returns.
+      - `grand_standardized_solution()` MG path: covered by
+        `test-grandStandardizedSolution.R`, which A/Bs the function's
+        `est.std`/`se` against a hand calculation that still uses
+        `lavInspect(fit3, "nobs")` — passes.
+      - `norig` reliability line (no unit test — only SG reliability
+        tested): live A/B 2026-08-16 on an MG single-factor CFA —
+        pre-edit `lavInspect("norig")` path vs. post-edit slot path give
+        identical per-group + overall reliability, and the actual
+        `get_fs(..., reliability = TRUE)` attribute matches both.
+      - `vcov_corrected()` (no unit test): runs end-to-end on an MG
+        `tspa()` fit — 18×18 finite symmetric matrix.
+    - Out of scope (noted, not fixed): `R/get_fscore_math.R:128`
+      (`lavInspect(lavobj, what = "ngroups")` in `augment_lav_predict()`)
+      is a fourth cheap lookup missing from the STATUS item 6 list —
+      candidate for a future step, deliberately not expanded here.
+    - Verified: `test()` **435 pass / 0 fail / 0 warn** (no new tests —
+      no roxygen tag changes, so no `document()` regeneration needed).
+    - STATUS.md item 6 closes in the final STATUS pass.
+- [x] Step 6 — dead-code cleanup (STATUS item 7) — done 2026-08-16.
+    - Removed the two remaining STATUS item 7 pieces:
+      - `R/get_fscore.R` (`augment_fs()`) — deleted commented-out
+        `# fs_se[is.nan(fs_se)] <- 0` line.
+      - `R/get_fs_methods.R` (`get_fs.data.frame()`) — deleted the
+        unreachable `if (!is.data.frame(data)) data <- as.data.frame(data)`
+        guard (S3 dispatch on `data.frame` class already guarantees it).
+      - The other two sub-bullets (overwritten `fsT` rownames, duplicate
+        `re_names` computation) were already fixed in Step 2.
+    - Verified: load_all + `document()` idempotent + `test()`
+      **435 pass / 0 fail / 0 warn**.
+    - Final full verification (plan §Verification item 4): `R CMD build .`
+      (knits all vignettes) + `R CMD check --no-manual` → all **13/13
+      vignettes rebuild** (`checking package vignettes ... OK`); check
+      status **2 WARNINGs, 3 NOTEs** — the same 5 pre-existing baseline
+      items, no new findings from any PLAN 02 step.
+    - Post-check cleanup: removed `R2spa.Rcheck/`, rebuilt tarball
+      restored (tracked file), `tests/testthat/_problems/` artifact removed.
+    - STATUS.md final pass done: items 1–3, 6, 7 closed (2026-08-16);
+      items 4, 5 left open; verification state refreshed.
 
 ## Scope
 
 1. `get_fs()` (data.frame + lavaan path): accept `method = "ML"` (alias for
    `"Bartlett"`) and `method = "EB"` (alias for `"regression"`), in addition
    to the existing `"regression"`/`"Bartlett"` spellings.
-2. `get_fs.lmer()`/`get_fs.merMod()`: rename random-effect score columns from
-   `u0_eb` to `fs_u0` (dropping the redundant `_eb` suffix now that `fs_`
-   signals "factor score" and the method is separately documented), with a
-   `legacy_names` argument for byte-compatible old-style output. This also
+2. `get_fs.lmer()`/`get_fs.merMod()`: new default `fs_u0`-style random-effect
+   score naming (dropping the legacy `_eb` suffix, now that `fs_` signals
+   "factor score" and the method is separately documented), with a
+   `legacy_names` argument for old-style `u0_eb`-style output. **Revised
+   2026-08-15 (review):** the legacy path only promises name-compatible
+   output (same legacy column names, same order) — not byte-compatible
+   (keeps the extra `_se` columns, `fsL`/`fsT` attributes, NULL row names;
+   delta documented on `get_fs_lmer()`/`get_fs.merMod()`). This also
    resolves STATUS.md item **1** (merMod column-name regression), so item 1
    will be closed as a side effect even though it wasn't explicitly listed.
 3. STATUS.md item **2** — vignette breakage under `format = "unified"`
@@ -109,9 +255,13 @@ New design:
   documented in AGENTS.md:
   - score: `fs_u0`
   - loading: `u0_by_fs_u0` (pattern `<indicator>_by_<name>`)
-  - error variance/covariance: `ev_fs_u0`, `ecov_fs_u0_fs_u1` (matches how
-    the lavaan path already names these — confirmed by reading
-    `augment_fs()`/`compute_fscore()`).
+  - error variance/covariance: `ev_fs_u0`, **`ecov_fs_u1_fs_u0`** — left in
+    `augment_fs()`'s natural row/col iteration order (u-later-first).
+    **Revised 2026-08-15 (user decision):** originally planned to coerce to
+    `ecov_fs_u0_fs_u1` (u0-first); since nothing pins the default-mode ecov
+    order, keeping the natural order is simpler (no reordering pass). Only the
+    LEGACY path reorders (below), because `vignettes/multilevel.rmd` hardcodes
+    the ascending `ecov_u0_eb_u1_eb`.
 - `legacy_names = TRUE`: reproduces the documented pre-refactor names
   (`u0_eb`, `u0_by_u0_eb`, `ecov_u0_eb_u1_eb`) via an explicit post-processing
   rename step in `get_fs.merMod()` after `augment_fs()` runs (since
@@ -125,10 +275,11 @@ New design:
     rather than the index-order-dependent `ecov_u1_eb_u0_eb` that
     `augment_fs()`'s row/col iteration currently produces. This is a
     self-contained rename table, not a change to `augment_fs()` itself.
-  - **Caveat to flag to the user during implementation:** this reordering
-    uses a numeric-aware sort so it's correct for `u0..u9`; models with 10+
-    random effects would need a small tweak (unlikely in practice, will note
-    but not over-engineer for).
+   - **Caveat — moot as shipped:** the initial worry was that a *lexicographic*
+     sort would misorder `u2` vs `u10`; the implemented `reorder_ecov_col()`
+     instead compares the **extracted integers** (`as.integer(m[2])` vs
+     `as.integer(m[3])`), so it is correct for any number of random effects,
+     not just `u0..u9`.
 - `get_fs_lmer()` (the deprecated back-compat wrapper in `R/get_fscore.R`)
   will call through with `legacy_names = TRUE` by default, so old code
   calling `get_fs_lmer()` keeps getting the exact old column names — this is
@@ -145,7 +296,13 @@ New design:
   `colnames(blocks[[1]]$fsL)` / `rownames(blocks[[1]]$fsL)` instead of
   recomputing from `object@cnms`.
 - Update roxygen for `get_fs.merMod()` and `get_fs_lmer()` to document the
-  new default naming and the `legacy_names` argument.
+  new default naming and the `legacy_names` argument. **Revised 2026-08-15
+  (review decision):** also document the legacy-path delta vs. the true
+  pre-refactor `get_fs_lmer()` output (d1faa7e): legacy mode additionally
+  returns `_se` score-error columns, per-cluster `fsL`/`fsT` array
+  attributes, and NULL row names (true legacy: no `_se` columns, no
+  attributes, ranef subject-ID row names). Byte-compat explicitly relaxed
+  to name-compat; no columns dropped.
 
 No existing test pins the exact merMod column names (confirmed by search —
 tests use `ignore_attr = TRUE` and slice `[, 1:2]`), so this is safe to

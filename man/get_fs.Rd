@@ -39,6 +39,7 @@
   vfsLT = FALSE,
   fsm = FALSE,
   format = c("unified", "list"),
+  legacy_names = FALSE,
   ...
 )
 
@@ -88,6 +89,19 @@ matrix attributes. Use \code{\link[=fs_to_group_list]{fs_to_group_list()}} to co
 for a complete list.}
 
 \item{object}{A fitted model object.}
+
+\item{legacy_names}{Logical. Random-effect score naming convention for
+\code{merMod} objects. \code{FALSE} (default) uses \code{fs_u0}-style names
+(\code{fs_u0}/\code{fs_u1}/..., with loadings \code{u0_by_fs_u0} and error terms
+\code{ev_fs_u0}, \code{ecov_fs_u1_fs_u0}). \code{TRUE} reproduces the pre-refactor
+\code{u0_eb}-style \emph{column names} (\code{u0_eb}, \code{u0_by_u0_eb}, \code{ev_u0_eb},
+\code{ecov_u0_eb_u1_eb}) in the legacy column order. Note the legacy
+output is name-compatible, not byte-identical, with the
+pre-refactor \code{get_fs_lmer()} result: it additionally carries
+score-error columns (\code{u0_eb_se}, ...), per-cluster \code{fsL}/\code{fsT}
+array attributes, and has NULL row names (the pre-refactor
+output had none of these and used the ranef subject IDs as row
+names).}
 }
 \value{
 A data frame containing the factor scores (with prefix \code{"fs_"}),

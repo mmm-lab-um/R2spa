@@ -257,7 +257,6 @@ fs_to_group_list <- function(fs) {
 
 augment_fs <- function(fs, fs_ev) {
   fs_se <- t(as.matrix(sqrt(diag(fs_ev))))
-  # fs_se[is.nan(fs_se)] <- 0
   colnames(fs) <- paste0("fs_", colnames(fs))
   colnames(fs_se) <- paste0(colnames(fs_se), "_se")
   num_lvs <- ncol(fs_ev)
@@ -445,6 +444,15 @@ assemble_fs_blocks <- function(
 #' @param corrected_fsT Currently not used.
 #' @param vfsLT Currently not used.
 #' @param fsm Currently not used.
+#' @param legacy_names Logical. Passed to [get_fs.merMod()]. Defaults to
+#'        `TRUE` so `get_fs_lmer()` keeps returning the pre-refactor
+#'        `u0_eb`-style *column names* (in the legacy column order).
+#'        Note the legacy output is name-compatible, not byte-identical,
+#'        with the pre-refactor result: it additionally carries
+#'        score-error columns (`u0_eb_se`, ...), per-cluster `fsL`/`fsT`
+#'        array attributes, and has NULL row names (the pre-refactor
+#'        output had no `_se` columns, no attributes, and used the ranef
+#'        subject IDs as row names).
 #'
 #' @export
 get_fs_lmer <- function(
@@ -453,7 +461,13 @@ get_fs_lmer <- function(
   corrected_fsT = FALSE,
   vfsLT = FALSE,
   fsm = FALSE,
+  legacy_names = TRUE,
   ...
 ) {
-  get_fs(object, format = "list", ...)
+  get_fs(
+    object,
+    format = "list",
+    legacy_names = legacy_names,
+    ...
+  )
 }

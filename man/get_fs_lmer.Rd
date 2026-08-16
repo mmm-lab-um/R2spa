@@ -11,6 +11,7 @@ get_fs_lmer(
   corrected_fsT = FALSE,
   vfsLT = FALSE,
   fsm = FALSE,
+  legacy_names = TRUE,
   ...
 )
 }
@@ -24,6 +25,16 @@ get_fs_lmer(
 \item{vfsLT}{Currently not used.}
 
 \item{fsm}{Currently not used.}
+
+\item{legacy_names}{Logical. Passed to \code{\link[=get_fs.merMod]{get_fs.merMod()}}. Defaults to
+\code{TRUE} so \code{get_fs_lmer()} keeps returning the pre-refactor
+\code{u0_eb}-style \emph{column names} (in the legacy column order).
+Note the legacy output is name-compatible, not byte-identical,
+with the pre-refactor result: it additionally carries
+score-error columns (\code{u0_eb_se}, ...), per-cluster \code{fsL}/\code{fsT}
+array attributes, and has NULL row names (the pre-refactor
+output had no \verb{_se} columns, no attributes, and used the ranef
+subject IDs as row names).}
 }
 \description{
 \code{get_fs_lmer()} is superseded by \code{\link[=get_fs]{get_fs()}}. It is retained for backward
