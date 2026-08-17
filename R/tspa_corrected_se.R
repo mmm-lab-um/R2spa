@@ -18,9 +18,9 @@ vcov_corrected <- function(tspa_fit, vfsLT, which_free = NULL, ...) {
         stop("corrected vcov requires a tspa model with ",
              "vc and cross-loadings specified.")
     }
-    # Direct slot access; avoids lavInspect()'s expensive per-call
-    # version check.
-    ngrp <- tspa_fit@Data@ngroups
+    # Consolidated through the lavaan compat boundary (single point of
+    # coupling; slot access with lavInspect fallback).
+    ngrp <- tsp_ngroups(tspa_fit)
     val_fsL <- attr(tspa_fit, "fsL")
     val_fsT <- attr(tspa_fit, "fsT")
     if (ngrp == 1) {

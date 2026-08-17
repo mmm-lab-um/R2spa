@@ -121,13 +121,11 @@ head(ind_2)
 ### 2S-PA with product factor score indicator
 
 ```{r}
-# Rename product factor scores to be used with `tspa()`
-ind_2$fs_xm <- ind_2$`fs_x:fs_m`
-ind_2$fs_xz <- ind_2$`fs_x:fs_z`
-ind_2$fs_mz <- ind_2$`fs_m:fs_z`
+# Product factor scores (`fs_x:fs_m`, etc.) are aliased to plain model names
+# (`fs_xm`, etc.) automatically by `tspa()`.
 tspa_fit <- tspa("
   y ~ x + m + z + xm + xz + mz
-", data = ind_2,
+ ", data = ind_2,
   se_fs = c(
     y = ind_2[1, "fs_y_se"],
     x = ind_2[1, "fs_x_se"],
@@ -173,13 +171,9 @@ head(ind_3)
 ### 2S-PA with product factor score indicator
 
 ```{r}
-# Rename product factor scores to be used with `tspa()`
-ind_3$fs_xm <- ind_3$`fs_x:fs_m`
-ind_3$fs_xz <- ind_3$`fs_x:fs_z`
-ind_3$fs_mz <- ind_3$`fs_m:fs_z`
 tspa_fit <- tspa("
   y ~ x + m + z + xm + xz + mz
-", data = ind_3,
+ ", data = ind_3,
   se_fs = c(
     y = ind_3[1, "se_fs_y"],
     x = ind_3[1, "se_fs_x"],

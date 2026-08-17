@@ -16,7 +16,7 @@
 #'
 #' @importFrom stats pnorm qnorm
 #' @importFrom utils tail
-#' @importFrom lavaan vcov lavInspect lav_func_jacobian_complex
+#' @importFrom lavaan vcov lav_func_jacobian_complex
 #'
 #' @export
 #'
@@ -81,10 +81,8 @@
 grand_standardized_solution <- function(object, model_list = NULL,
                                       se = TRUE, acov_par = NULL,
                                       free_list = NULL, level = .95) {
-  if (is.null(model_list)) model_list <- lavTech(object, what = "est")
-  # The nobs slot is a per-group list; unlist to the vector form that
-  # lavInspect(what = "nobs") returns.
-  ns <- unlist(object@Data@nobs)
+  if (is.null(model_list)) model_list <- tsp_model_matrices(object)
+  ns <- tsp_nobs(object)
   if (length(ns) == 1) ns <- NULL
   if (is.null(ns)) {
     message(
@@ -93,12 +91,12 @@ grand_standardized_solution <- function(object, model_list = NULL,
     )
   }
   if (is.null(acov_par)) acov_par <- vcov(object)
-  if (is.null(free_list)) free_list <- lavTech(object, what = "free")
+  if (is.null(free_list)) free_list <- tsp_free_matrices(object)
 
-  partable <- subset(lavInspect(object, what = "list"), op == "~")
+  partable <- subset(tsp_partable_read(object), op == "~")
   out <- partable[, c("lhs", "op", "rhs", "exo", "group",
                       "block", "label")]
-  partable_beta <- lavTech(object, what = "partable", list.by.group = TRUE)
+  partable_beta <- tsp_partable_mats(object)
 
   # Get standardized betas
   if (is.null(ns)) {

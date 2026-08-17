@@ -50,3 +50,84 @@ jobs:
         with:
           upload-snapshots: true
           build_args: 'c("--no-manual","--compact-vignettes=gs+qpdf")'
+
+  # Lavaan version axis (PLAN 04, decision 3): the estimation path couples to
+  # lavaan internals in R/lavaan_compat.R. The pinned baseline is the
+  # "tested up to" reference; the dev slot is the partable-drift tripwire and
+  # runs only the scoped test subset (OpenMx-heavy full check stays
+  # affordable). No 0.6.x slot: the code requires the 0.7-x `lavTech` export.
+  lavaan-baseline:
+    runs-on: ubuntu-latest
+    name: lavaan 0.7-2 pinned (full check)
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+
+      - name: Pin lavaan 0.7-2 (CRAN archive)
+        run: |
+          install.packages(
+            "https://cran.r-project.org/src/contrib/Archive/lavaan/lavaan_0.7-2.tar.gz",
+            repos = "https://cloud.r-project.org",
+            type = "source"
+          )
+        shell: R {0}
+
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          upload-snapshots: true
+          build_args: 'c("--no-manual","--compact-vignettes=gs+qpdf")'
+          check_args: 'c("--no-manual")'
+
+  lavaan-dev-tripwire:
+    runs-on: ubuntu-latest
+    name: lavaan dev (partable drift tripwire, scoped subset)
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::remotes
+          needs: heavy
+
+      - name: Install lavaan (development)
+        run: |
+          remotes::install_github("Lavaan/lavaan", dependencies = FALSE, quiet = TRUE)
+        shell: R {0}
+
+      - name: Install R2spa
+        run: R CMD INSTALL --no-multiarch --with-keep.source .
+        shell: R {0}
+
+      - name: Run scoped test subset (tspa/compat/get_fs_int)
+        run: |
+          testthat::test_local(
+            ".",
+            filter = "^(tspa|tspa_render|lavaan_compat|get_fs_int)$",
+            load_package = "installed",
+            stop_on_failure = TRUE
+          )
+        shell: R {0}

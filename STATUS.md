@@ -4,7 +4,7 @@ Tracks remaining work from completed plans (see `archive/`). Update status as
 items are resolved; move finished items to the **Closed** section with the
 date and commit/PR reference.
 
-**Last updated:** 2026-08-16 (PLAN 03 (fs priors) — user-supplied latent priors `prior_mean`/`prior_cov` for `get_fs()`, lavaan-only)
+**Last updated:** 2026-08-17 (PLAN 04 (tspa partable) — lavaan compat module + R2spa-owned stage-2 model schema/renderer, product-score auto-alias, CI lavaan axis)
 
 ## Open
 
@@ -78,7 +78,40 @@ date and commit/PR reference.
   check): **0 errors, 2 WARNINGs, 3 NOTEs** — byte-for-byte the pre-existing
   baseline items (S3-consistency for `get_fs.lavaan()`/`get_fs.merMod()`;
   undocumented `fsm`/`...` Rd args; `.lintr` hidden file, unused `Matrix`
-  Import, top-level files). No new check findings introduced.
+   Import, top-level files). No new check findings introduced.
+- PLAN 04 (tspa partable / schema renderer) verification (2026-08-17):
+  `devtools::test()` **763 pass, 0 fail, 0 warn, 0 skip** (658 at the PLAN 04
+  start; +40 expectations from the new `R/lavaan_compat.R` compat module and
+  its golden canary `tests/testthat/test-lavaan_compat.R`; +65 from
+  `tests/testthat/test-tspa_render.R` — pinned-format renderer tests, schema
+  construction, `tspa()` contract/attributes, product-score auto-alias incl.
+  ambiguity errors). Phase-2 A/B gate: schema renderer output
+  character-for-character identical to the legacy string-append builders in
+  10/10 canonical cases (SF SG/MG/3-predictor/verbatim user models incl.
+  comments and trailing newlines; MF SG 2- and 3-factor, list-attr and plain
+  matrix `fsT`/`fsL`, growth with intercepts); product-score auto-alias
+  bit-identical to the old manual-rename workaround (model, coef, vcov,
+  standardizedSolution; both vignette data paths). `DESCRIPTION` and
+  `NAMESPACE` unchanged by design (no new exports; lavaan bound
+  intentionally undeclared — drift defense is the compat module's
+  dependency-contract table, the "layout not supported" error naming the
+  tested-up-to version, the canary tests, and the new CI lavaan axis in
+  `.github/workflows/R-CMD-check.yaml`: pinned 0.7-2 full-check job +
+  lavaan-dev tripwire running only the `test-tspa*.R` /
+  `test-lavaan_compat.R` / `test-get_fs_int.R` subset). Vignettes:
+  `R2spa.Rmd` + `multiple-factors.Rmd` re-knit verification-only (all 5
+  printed `tspaModel` blocks unchanged, confirmed in the knit artifacts);
+  `get_fs_int-vignette.Rmd` now relies on the automatic product-score alias
+  (manual rename workaround removed; estimates identical). The cutover
+  fallback (`tspa_env$render = "string"` + verbatim legacy builders) was
+  removed at plan completion; the pinned format it guaranteed is frozen in
+  `test-tspa_render.R` as in-test reference builders `ref_sf()`/`ref_mf()`.
+  Full `devtools::check()` in the final state (as-cran default; all 16
+  vignettes rebuild; `checking tests ... OK`; vignette output re-build OK):
+  **0 errors, 2 WARNINGs, 3 NOTEs** — byte-for-byte the pre-existing
+   baseline items (S3-consistency for `get_fs.lavaan()`/`get_fs.merMod()`;
+   undocumented `fsm`/`...` Rd args; `.lintr` hidden file, unused `Matrix`
+   Import, top-level files). No new check findings introduced.
 - Vignette build history: exactly **3 of 13 failed** on the pre-PLAN 02
   Step-1 tree (`corrected-se.Rmd`, `multilevel.rmd`, `tspa-vignette-mx.Rmd`
   — the "7/8 of 13" reports were wrong); **13/13 build on 2026-08-16**
@@ -93,14 +126,18 @@ date and commit/PR reference.
 - PLAN 01/02 code is committed (258b673..5f72883; plan files archived in
   9c60ff8). PLAN 03 (merMod `scoring_matrix`) code is committed (00bf670);
   its plan file is archived as `archive/PLAN_03_mermod_scoring_matrix.md`.
-- Working-tree changes for **PLAN 03 (fs priors)** are **uncommitted** as of
-  2026-08-16: `R/get_fscore.R`, `R/get_fs_methods.R`, `R/get_fscore_math.R`,
-  `man/get_fs.Rd`, `man/get_fs_lavaan.Rd` (all roxygen-generated), new
-  `tests/testthat/test-get_fs_priors.R`, plus `.Rbuildignore`/`.gitignore`
-  housekeeping (`^R2spa_.*\.tar\.gz$`, `^\.opencode$`, `.opencode`). The plan
-  file itself is archived as `archive/PLAN_03_fs_priors.md`. The edits sit in
-  shared files, so commit scope must be decided explicitly. Note: the plan
-  reuses the "PLAN 03" number of the already-archived merMod plan (its file
-  was named `_PLAN_03.md` at creation); archive slug disambiguates.
+- PLAN 03 (fs priors) is committed (`32fc817`); its plan file is archived as
+  `archive/PLAN_03_fs_priors.md`.
+- Working-tree changes for **PLAN 04 (tspa partable)** are **uncommitted** as
+  of 2026-08-17: new `R/lavaan_compat.R` (the only file that reads lavaan
+  internals) and `tests/testthat/test-lavaan_compat.R` +
+  `tests/testthat/test-tspa_render.R`; modified `R/tspa.R` (R2spa-owned stage-2
+  schema + `tspa_render()` renderer + product-score auto-alias),
+  `R/grandStandardizedSolution.R` and `R/tspa_corrected_se.R` (migrated onto
+  the compat module), `.github/workflows/R-CMD-check.yaml` (lavaan axis), and
+  `vignettes/get_fs_int-vignette.Rmd` (auto-alias replaces the manual
+  rename). `DESCRIPTION`/`NAMESPACE`/`man/` unchanged by design. The plan
+  file is archived as `archive/PLAN_04_tspa_partable.md`; commit scope must
+  be decided explicitly (all listed files are PLAN 04's).
 - Suggested order (all plans complete): 4 (user-facing bug) →
   5 (perf) → F1 (future).

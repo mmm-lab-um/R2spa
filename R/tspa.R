@@ -185,6 +185,12 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
   }
 
   if (is.null(fsT)) { # single-factor measurement model
+    # Product-score columns (get_fs_int: `fs_a:fs_b`) are not valid lavaan
+    # variable names; the schema's generated model name for latent `v` is
+    # `fs_v`, so a matching product-score column is aliased into a working
+    # copy of the data. Manual pre-renames keep working (the alias is a
+    # no-op when `fs_v` already exists).
+    data <- tspa_sf_alias(data, se_fs)$data
     tspaModel <- tspa_sf(model, data, se_fs)
   } else { # multi-factor measurement model
     tspaModel <- tspa_mf(model, data, fsT, fsL, fsb)
@@ -206,48 +212,74 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
   return(tspa_fit)
 }
 
-tspa_sf <- function(model, data, se = NULL) {
-  if (nrow(se) != 0) {
-    ev <- se^2
-    var <- names(se)
-    len <- length(se)
-    group <- nrow(se)
-    # col <- colnames(data)
-    fs <- paste0("fs_", var)
-    tspaModel <- rep(NA, len)
-    latent_var <- rep(NA, len)
-    error_constraint <- rep(NA, len)
+# ---------------------------------------------------------------------------
+# Stage-2 model schema (PLAN 04): owned and frozen by R2spa, not by lavaan.
+# One row per (statement term, group):
+#   lhs   statement left-hand side (NA for verbatim user rows)
+#   op    "=~" | "~~" | "~" | "raw" ("raw" rows carry user syntax)
+#   rhs   right-hand variable ("1" for intercepts); "raw" rows carry the
+#         user's line verbatim
+#   value per-group fixed value (NA for "raw" rows)
+#   free  0 = fixed (every injected row); NA for "raw" rows
+#   group 1-based group index (NA for "raw" rows)
+#   label R2spa-generated label for the statement (__r2spa_ldN__ /
+#         __r2spa_evN__ / __r2spa_intN__): a generated namespace user
+#         labels/variable names cannot collide with; carried as row
+#         metadata, never emitted into the syntax
+#   kind  "user" | "struct" | "error_var" | "error_cov" | "intercept"
+# ---------------------------------------------------------------------------
 
-    latent_var <- lapply(seq_len(len), function(x) {
-      paste0(
-        var[x], "=~ c(",
-        paste0(rep(1, group), collapse = ", "), ") * ", fs[x], "\n"
-      )
-    })
-
-    error_constraint <- lapply(seq_len(len), function(x) {
-      paste0(
-        fs[x], "~~ c(", paste(ev[[x]], collapse = ", "), ") * ", fs[x], "\n"
-      )
-    })
-
-    latent_var_str <- paste(latent_var, collapse = "")
-    error_constraint_str <- paste(error_constraint, collapse = "")
-    tspaModel <- paste0(
-      c("# latent variables (indicated by factor scores)",
-        latent_var_str,
-        "# constrain the errors",
-        error_constraint_str,
-        "# structural model",
-        model),
-      collapse = "\n"
-    )
-
-    return(tspaModel)
-  }
+tspa_row <- function(lhs, op, rhs, value, group, kind, label) {
+  data.frame(
+    lhs = if (is.null(lhs)) NA_character_ else lhs,
+    op = op,
+    rhs = rhs,
+    value = value,
+    free = if (op == "raw") NA_integer_ else 0L,
+    group = if (is.null(group)) NA_integer_ else as.integer(group),
+    label = label,
+    kind = kind,
+    stringsAsFactors = FALSE
+  )
 }
 
-tspa_mf <- function(model, data, fsT, fsL, fsb) {
+# The user model string, carried verbatim as a single "raw" row (no
+# re-parsing and no round-trip through line splitting, so leading/trailing
+# newlines survive exactly as written).
+tspa_user_rows <- function(model) {
+  tspa_row(NA, "raw", paste0(model, collapse = "\n"), NA, NA, "user", NA)
+}
+
+# Single-factor (se_fs) schema: per latent, one fixed-loading struct row
+# and one error-variance row per group; values follow the se_fs rows
+# (groups) in order.
+tspa_schema_sf <- function(model, se) {
+  var <- colnames(se)
+  fs <- paste0("fs_", var)
+  ng <- nrow(se)
+  rows <- list(tspa_user_rows(model))
+  for (k in seq_along(var)) {
+    lab <- paste0("__r2spa_ld", k, "__")
+    for (g in seq_len(ng)) {
+      rows[[length(rows) + 1L]] <- tspa_row(
+        var[k], "=~", fs[k], 1, g, "struct", lab
+      )
+    }
+    ev_lab <- paste0("__r2spa_ev", k, "__")
+    for (g in seq_len(ng)) {
+      rows[[length(rows) + 1L]] <- tspa_row(
+        fs[k], "~~", fs[k], se[g, k]^2, g, "error_var", ev_lab
+      )
+    }
+  }
+  do.call(rbind, rows)
+}
+
+# Multi-factor (fsT/fsL/fsb) schema: per latent, one struct row per score
+# term and per group; error rows follow the lower triangle (incl. diagonal)
+# of fsT in column-major order — the legacy per-group value routing made
+# explicit and unit-testable; per-score intercept rows when fsb is given.
+tspa_schema_mf <- function(model, fsT, fsL, fsb) {
   # `fsT`/`fsL` are plain matrices for a single-group model or named lists
   # of them for a multigroup model. Single-group unified get_fs() output
   # carries length-1 list attributes, so either shape is accepted on either
@@ -258,66 +290,238 @@ tspa_mf <- function(model, data, fsT, fsL, fsb) {
            "multigroup model.")
     }
     ngroup <- length(fsT)
-    fsL1 <- fsL[[1]]
-    fsT_in <- !upper.tri(fsT[[1]])
+    L_list <- fsL
+    T_list <- fsT
   } else if (is.list(fsL) && length(fsL) > 1) {
     if (!is.list(fsT) || length(fsT) != length(fsL)) {
       stop("'fsT' must be a list of the same length as 'fsL' for a ",
            "multigroup model.")
     }
     ngroup <- length(fsL)
-    fsL1 <- fsL[[1]]
-    fsT_in <- !upper.tri(fsT[[1]])
+    L_list <- fsL
+    T_list <- fsT
   } else {
     ngroup <- 1
-    fsL1 <- if (is.list(fsL)) fsL[[1]] else fsL
-    fsT_in <- !upper.tri(if (is.list(fsT)) fsT[[1]] else fsT)
+    L_list <- if (is.list(fsL)) fsL else list(fsL)
+    T_list <- if (is.list(fsT)) fsT else list(fsT)
   }
+  fsL1 <- L_list[[1]]
   var <- colnames(fsL1)
-  nvar <- length(var)
   fs <- rownames(fsL1)
 
-  # latent variables
-  loadings_mat <- matrix(unlist(fsL), ncol = ngroup)
-  loadings <- apply(loadings_mat, 1, function(x) {
-    paste0("c(", paste0(x, collapse = ", "), ") * ")
-  }) |>
-    paste0(fs)
-  loadings_list <- split(loadings, factor(rep(var, each = nvar),
-                                          levels = var))
-  loadings_c <- lapply(loadings_list, function(x) {
-    paste0(x, collapse = " + ")
-  })
-  latent_var_str <- paste("# latent variables (indicated by factor scores)\n",
-                          var, "=~", loadings_c)
-  # error variances
-  ev_rhs <- fs[col(fsT_in)[fsT_in]]
-  ev_lhs <- fs[row(fsT_in)[fsT_in]]
-  errors_mat <- matrix(unlist(fsT), ncol = ngroup)[as.vector(fsT_in), ,
-                                                   drop = FALSE]
-  errors <- apply(errors_mat, 1, function(x) {
-    paste0("c(", paste0(x, collapse = ", "), ")")
-  })
-  error_constraint_str <- paste0("# constrain the errors\n",
-                                 ev_lhs, " ~~ ", errors, " * ", ev_rhs)
-  if (!is.null(fsb)) {
-    # intercepts
-    intercepts_mat <- matrix(unlist(fsb), ncol = ngroup)
-    intercepts <- split(intercepts_mat, rep(seq_len(nrow(intercepts_mat)), ngroup))
-    intercept_constraint <- paste0("# constrain the intercepts\n",
-                                   fs, " ~ ", intercepts, " * 1")
-  } else {
-    intercept_constraint <- ""
+  rows <- list(tspa_user_rows(model))
+  for (k in seq_along(var)) {
+    lab <- paste0("__r2spa_ld", k, "__")
+    for (i in seq_along(fs)) {
+      for (g in seq_len(ngroup)) {
+        rows[[length(rows) + 1L]] <- tspa_row(
+          var[k], "=~", fs[i], L_list[[g]][i, k], g, "struct", lab
+        )
+      }
+    }
   }
+  ev_count <- 0L
+  tri <- which(!upper.tri(T_list[[1]]), arr.ind = TRUE)
+  for (k in seq_len(nrow(tri))) {
+    i <- tri[k, 1]
+    j <- tri[k, 2]
+    ev_count <- ev_count + 1L
+    lab <- paste0("__r2spa_ev", ev_count, "__")
+    kind <- if (i == j) "error_var" else "error_cov"
+    for (g in seq_len(ngroup)) {
+      rows[[length(rows) + 1L]] <- tspa_row(
+        fs[i], "~~", fs[j], T_list[[g]][i, j], g, kind, lab
+      )
+    }
+  }
+  if (!is.null(fsb)) {
+    B_list <- if (is.list(fsb)) fsb else list(fsb)
+    for (i in seq_along(fs)) {
+      lab <- paste0("__r2spa_int", i, "__")
+      for (g in seq_len(ngroup)) {
+        rows[[length(rows) + 1L]] <- tspa_row(
+          fs[i], "~", "1", B_list[[g]][i], g, "intercept", lab
+        )
+      }
+    }
+  }
+  do.call(rbind, rows)
+}
 
-  tspaModel <- paste0(c(
-    latent_var_str,
-    error_constraint_str,
-    intercept_constraint,
-    "# structural model",
-    model
-  ),
-  collapse = "\n")
+# Statements of one schema: rows with the given identity grouped into
+# consecutive statements (order of first appearance).
+tspa_statements <- function(sch, id) {
+  id <- match(id, unique(id))
+  starts <- c(1L, which(diff(id) != 0L) + 1L)
+  lapply(starts, function(i) sch[id == id[i], , drop = FALSE])
+}
 
-  return(tspaModel)
+# Per-group values of a single-term statement, in group order.
+tspa_stmt_values <- function(st) {
+  gs <- sort(unique(st$group))
+  unlist(lapply(gs, function(g) st$value[st$group == g]))
+}
+
+# c(...) value string for a possibly multi-term statement; `terms` are the
+# ordered unique rhs values (one row value per group each).
+tspa_stmt_cvals <- function(st, terms) {
+  trm <- match(st$rhs, terms)
+  paste(
+    vapply(seq_along(terms), function(k) {
+      sub <- st[trm == k, , drop = FALSE]
+      paste0("c(", paste(tspa_stmt_values(sub), collapse = ", "), ")")
+    }, character(1)),
+    collapse = " + "
+  )
+}
+
+# The single renderer (PLAN 04): schema -> lavaan model syntax string.
+# Reproduces the legacy string builders character-for-character, including
+# their per-path spacing quirks, so parameter row order, estimates, and
+# vcov() are provably unchanged (Phase 2 A/B gate).
+tspa_render <- function(sch, style = c("sf", "mf")) {
+  style <- match.arg(style)
+  user_lines <- sch$rhs[sch$kind == "user"]
+  struct <- sch[sch$kind == "struct", , drop = FALSE]
+  errors <- sch[sch$kind %in% c("error_var", "error_cov"), , drop = FALSE]
+  ints <- sch[sch$kind == "intercept", , drop = FALSE]
+  if (style == "sf") {
+    latent_var_str <- paste(
+      vapply(tspa_statements(struct, struct$lhs), function(st) {
+        paste0(st$lhs[1], "=~ ", tspa_stmt_cvals(st, st$rhs[1]),
+               " * ", st$rhs[1], "\n")
+      }, character(1)),
+      collapse = ""
+    )
+    error_constraint_str <- paste(
+      vapply(tspa_statements(errors, paste(errors$lhs, errors$rhs,
+                                           sep = "|")),
+             function(st) {
+               paste0(st$lhs[1], "~~ ", tspa_stmt_cvals(st, st$rhs[1]),
+                      " * ", st$rhs[1], "\n")
+             }, character(1)),
+      collapse = ""
+    )
+    elems <- c(
+      "# latent variables (indicated by factor scores)",
+      latent_var_str,
+      "# constrain the errors",
+      error_constraint_str,
+      "# structural model",
+      paste(user_lines, collapse = "\n")
+    )
+  } else {
+    latent_var_str <- vapply(
+      tspa_statements(struct, struct$lhs),
+      function(st) {
+        terms <- unique(st$rhs)
+        loadings_c <- paste(
+          vapply(terms, function(t) {
+            tr <- st[st$rhs == t, , drop = FALSE]
+            paste0("c(", paste0(tspa_stmt_values(tr), collapse = ", "),
+                   ") * ", t)
+          }, character(1)),
+          collapse = " + "
+        )
+        paste("# latent variables (indicated by factor scores)\n",
+              st$lhs[1], "=~", loadings_c)
+      },
+      character(1)
+    )
+    error_constraint_str <- vapply(
+      tspa_statements(errors, paste(errors$lhs, errors$rhs, sep = "|")),
+      function(st) {
+        paste0("# constrain the errors\n", st$lhs[1], " ~~ ",
+               tspa_stmt_cvals(st, st$rhs[1]), " * ", st$rhs[1])
+      },
+      character(1)
+    )
+    if (nrow(ints) > 0) {
+      ng <- length(sort(unique(ints$group)))
+      intercept_constraint <- vapply(
+        tspa_statements(ints, ints$lhs),
+        function(st) {
+          vals <- tspa_stmt_values(st)
+          intercepts <- if (ng == 1) {
+            vals[1]
+          } else {
+            paste0("c(", paste0(vals, collapse = ", "), ")")
+          }
+          paste0("# constrain the intercepts\n", st$lhs[1], " ~ ",
+                 intercepts, " * 1")
+        },
+        character(1)
+      )
+    } else {
+      # The legacy builder emitted an empty element here (rendered as a
+      # blank line before the structural block) when no intercepts exist.
+      intercept_constraint <- ""
+    }
+    elems <- c(
+      latent_var_str,
+      error_constraint_str,
+      intercept_constraint,
+      "# structural model",
+      paste(user_lines, collapse = "\n")
+    )
+  }
+  paste0(elems, collapse = "\n")
+}
+
+tspa_sf <- function(model, data, se = NULL) {
+  if (nrow(se) != 0) {
+    return(tspa_render(tspa_schema_sf(model, se), style = "sf"))
+  }
+}
+
+tspa_mf <- function(model, data, fsT, fsL, fsb) {
+  tspa_render(tspa_schema_mf(model, fsT, fsL, fsb), style = "mf")
+}
+
+# ---------------------------------------------------------------------------
+# Product-score (get_fs_int) auto-alias: the schema's generated model name
+# for latent `v` is `fs_v`; a data column `fs_a:fs_b` (a,b latent names in
+# se_fs) whose names concatenate to `v` is copied into the working data as
+# `fs_v`. Old user models that pre-rename the product-score column keep
+# working because the alias is a no-op when `fs_v` already exists.
+# ---------------------------------------------------------------------------
+
+tspa_sf_alias <- function(data, se) {
+  is_lst <- inherits(data, "list") && !is.data.frame(data)
+  dnames <- if (is_lst) names(data[[1]]) else names(data)
+  se_names <- colnames(se)
+  aliases <- character()
+  for (v in se_names) {
+    tgt <- paste0("fs_", v)
+    if (tgt %in% dnames) next
+    cand <- character()
+    for (col in dnames) {
+      pos <- regexpr(":", col, fixed = TRUE)
+      if (pos < 1L) next
+      a <- substr(col, 1L, pos - 1L)
+      b <- substr(col, pos + 1L, nchar(col))
+      # Product-score columns are `fs_a:fs_b` (both parts score names).
+      if (!grepl("^fs_", a) || !grepl("^fs_", b)) next
+      a <- sub("^fs_", "", a)
+      b <- sub("^fs_", "", b)
+      if (!(a %in% se_names) || !(b %in% se_names)) next
+      if (paste0(a, b) == v || paste0(b, a) == v) cand <- c(cand, col)
+    }
+    if (length(cand) == 0) next
+    if (length(cand) > 1) {
+      stop(
+        "Cannot determine which product-score column in the input data ",
+        "corresponds to the latent variable '", v, "': ",
+        paste0("\"", cand, "\"", collapse = " or "),
+        ". Rename it to \"", tgt, "\" to disambiguate."
+      )
+    }
+    if (is_lst) {
+      for (i in seq_along(data)) data[[i]][[tgt]] <- data[[i]][[cand]]
+    } else {
+      data[[tgt]] <- data[[cand]]
+    }
+    aliases <- c(aliases, paste0(tgt, " <- ", cand))
+  }
+  list(data = data, aliases = aliases)
 }
