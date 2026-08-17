@@ -9,7 +9,7 @@
 \title{Get Factor Scores and the Corresponding Standard Error of Measurement}
 \usage{
 \method{get_fs}{data.frame}(
-  data,
+  object,
   model = NULL,
   group = NULL,
   method = c("regression", "Bartlett", "ML", "EB"),
@@ -22,7 +22,7 @@
   ...
 )
 
-\method{get_fs}{default}(data, ...)
+\method{get_fs}{default}(object, ...)
 
 \method{get_fs}{lavaan}(
   object,
@@ -47,19 +47,19 @@
   ...
 )
 
-get_fs(data, ...)
+get_fs(object, ...)
 }
 \arguments{
-\item{data}{A data frame, a fitted \link[lavaan:lavaan]{lavaan} model object, or a fitted
+\item{object}{A data frame, a fitted \link[lavaan:lavaan]{lavaan} model object, or a fitted
 \link[lme4:lmer]{lme4::lmer} model object (\code{merMod}).}
 
 \item{model}{An optional string specifying the measurement model
-in \code{lavaan} syntax. Only used when \code{data} is a data frame.
+in \code{lavaan} syntax. Only used when \code{object} is a data frame.
 See \code{\link[lavaan]{model.syntax}} for more information.}
 
 \item{group}{Character. Name of the grouping variable for multiple group
 analysis, which is passed to \code{\link[lavaan]{cfa}}.
-Only used when \code{data} is a data frame.}
+Only used when \code{object} is a data frame.}
 
 \item{method}{Character. Method for computing factor scores (options are
 "regression" or "Bartlett"; "ML" is an alias for "Bartlett"
@@ -81,7 +81,7 @@ to obtain corrected covariances and standard errors for
 \item{reliability}{Logical. Whether to return the reliability of factor
 scores. Available only for single-factor lavaan models.}
 
-\item{format}{Output format when \code{data} is a lavaan or merMod object.
+\item{format}{Output format when \code{object} is a lavaan or merMod object.
 \code{"unified"} (default) returns a single data frame with a \code{group} column;
 for multiple groups, attributes \code{fsT}, \code{fsL}, \code{fsb}, and \code{scoring_matrix}
 are named lists keyed by group label. \code{"list"} returns the legacy
@@ -111,10 +111,10 @@ sampling uncertainty from the prior itself is propagated.
 Conceptually similar to the \code{cov} argument of \code{mirt::fscores()}.}
 
 \item{...}{additional arguments passed to \code{\link[lavaan]{cfa}}
-(when \code{data} is a data frame). See \code{\link[lavaan]{lavOptions}}
+(when \code{object} is a data frame). See \code{\link[lavaan]{lavOptions}}
 for a complete list.}
 
-\item{object}{A fitted model object.}
+\item{fsm}{Currently not used.}
 
 \item{legacy_names}{Logical. Random-effect score naming convention for
 \code{merMod} objects. \code{FALSE} (default) uses \code{fs_u0}-style names
@@ -154,9 +154,9 @@ Methods are available for \code{data.frame} (fits a CFA internally), \code{lavaa
 objects, and \code{lmerMod} objects. Support for \code{mirt} models is planned.
 }
 \details{
-When \code{data} is a data frame and \code{model} is supplied as a lavaan syntax string,
+When \code{object} is a data frame and \code{model} is supplied as a lavaan syntax string,
 the function internally calls \code{\link[lavaan:cfa]{lavaan::cfa()}} and then dispatches to the
-\code{lavaan} method. When \code{data} is a fitted model object, the appropriate S3
+\code{lavaan} method. When \code{object} is a fitted model object, the appropriate S3
 method is called directly.
 
 \code{get_fs()} replaced \code{get_fs_lavaan()} and \code{get_fs_lmer()}, which are now

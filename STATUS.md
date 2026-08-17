@@ -4,7 +4,7 @@ Tracks remaining work from completed plans (see `archive/`). Update status as
 items are resolved; move finished items to the **Closed** section with the
 date and commit/PR reference.
 
-**Last updated:** 2026-08-17 (PLAN 04 (tspa partable) — lavaan compat module + R2spa-owned stage-2 model schema/renderer, product-score auto-alias, CI lavaan axis)
+**Last updated:** 2026-08-17 (PLAN 04 (tspa partable) — lavaan compat module + R2spa-owned stage-2 model schema/renderer, product-score auto-alias, CI lavaan axis; baseline check findings cleared — S3 `get_fs()` arg rename, Rd `fsm`/`...` docs, `Matrix` → Suggests, top-level `.Rbuildignore` exclusions; full check 0 errors / 0 warnings / 0 notes)
 
 ## Open
 
@@ -112,6 +112,41 @@ date and commit/PR reference.
    baseline items (S3-consistency for `get_fs.lavaan()`/`get_fs.merMod()`;
    undocumented `fsm`/`...` Rd args; `.lintr` hidden file, unused `Matrix`
    Import, top-level files). No new check findings introduced.
+- Check-cleanup verification (2026-08-17, after PLAN 04) — **all
+  pre-existing baseline findings cleared**:
+  1. **S3 generic/method consistency WARNING** (the `get_fs()` one):
+     first formal renamed `data` → `object` in the `get_fs()` generic
+     **and all four methods** (`tools:::checkS3methods` compares the
+     first positional arg symmetrically across every method, so the
+     generic-only rename would have just moved the warning onto
+     `.data.frame`/`.default`). Named call sites updated for identical
+     behavior: `R/tspa.R` `@examples` (4), `tests/testthat/test-tspa.R`
+     (2), `vignettes/R2spa.Rmd` (7), `vignettes/corrected-se.Rmd` (2),
+     `vignettes/categorical-interaction.Rmd` (1), `README.Rmd`/`README.md`
+     (2 each). One canonical `@param object` kept on the generic; 3
+     stale `@param object` lines removed from method blocks.
+  2. **Undocumented Rd args WARNING**: `@param fsm` ("Currently not
+     used." — signature-only arg) added to `get_fs.merMod`; `@param ...`
+     ("Additional arguments, passed on to `get_fs()`") added to
+     `get_fs_lmer`.
+  3. **Unused `Matrix` Import NOTE**: `Matrix` moved `Imports` →
+     `Suggests` in `DESCRIPTION` (still exercised by
+     `vignettes/correction-error.Rmd`, so no "suggested but not used"
+     flip).
+  4. **`.lintr` + top-level-files NOTEs**: `.Rbuildignore` now excludes
+     the dev-only top-level entries (`.lintr`, `archive/`, `legacy/`,
+     `PERF_FIX_SUMMARY.md`, `STATUS.md`, `dependency_analysis.md`,
+     `^_PLAN_.*\.md$` plan files).
+  `devtools::document()` regenerated only `man/get_fs.Rd`,
+  `man/get_fs_lavaan.Rd`, `man/get_fs_lmer.Rd`, `man/tspa.Rd`;
+  `NAMESPACE` byte-identical. `devtools::test()`: **763 pass, 0 fail,
+  0 warn, 0 skip** (count unchanged). Final full `devtools::check()`
+  (as-cran default; all 16 vignettes rebuild; `checking tests ... OK`;
+  vignette re-build OK; run 2026-08-17): **0 errors, 0 warnings,
+  0 notes** — first fully clean check in the recorded history. The only
+  intermediate finding was the untracked top-level `_PLAN_QUARANTINE.md`
+  (future quarantine plan doc, now excluded by the
+  `^_PLAN_.*\.md$` build-exclusion).
 - Vignette build history: exactly **3 of 13 failed** on the pre-PLAN 02
   Step-1 tree (`corrected-se.Rmd`, `multilevel.rmd`, `tspa-vignette-mx.Rmd`
   — the "7/8 of 13" reports were wrong); **13/13 build on 2026-08-16**
@@ -128,16 +163,25 @@ date and commit/PR reference.
   its plan file is archived as `archive/PLAN_03_mermod_scoring_matrix.md`.
 - PLAN 03 (fs priors) is committed (`32fc817`); its plan file is archived as
   `archive/PLAN_03_fs_priors.md`.
-- Working-tree changes for **PLAN 04 (tspa partable)** are **uncommitted** as
-  of 2026-08-17: new `R/lavaan_compat.R` (the only file that reads lavaan
-  internals) and `tests/testthat/test-lavaan_compat.R` +
-  `tests/testthat/test-tspa_render.R`; modified `R/tspa.R` (R2spa-owned stage-2
-  schema + `tspa_render()` renderer + product-score auto-alias),
-  `R/grandStandardizedSolution.R` and `R/tspa_corrected_se.R` (migrated onto
-  the compat module), `.github/workflows/R-CMD-check.yaml` (lavaan axis), and
-  `vignettes/get_fs_int-vignette.Rmd` (auto-alias replaces the manual
-  rename). `DESCRIPTION`/`NAMESPACE`/`man/` unchanged by design. The plan
-  file is archived as `archive/PLAN_04_tspa_partable.md`; commit scope must
-  be decided explicitly (all listed files are PLAN 04's).
+- Working-tree changes for **PLAN 04 (tspa partable) + check cleanup**
+  are **uncommitted** as of 2026-08-17: new `R/lavaan_compat.R` (the only
+  file that reads lavaan internals), `tests/testthat/test-lavaan_compat.R`,
+  `tests/testthat/test-tspa_render.R`, `archive/PLAN_04_tspa_partable.md`
+  (archived plan), and the untracked future-work plan
+  `_PLAN_QUARANTINE.md` (quarantine the `get_fs()`/`tspa()`-consuming code
+  into `.quarantine/` while those two are revised; phases not started;
+  excluded from the package build via `^_PLAN_.*\.md$`). Modified:
+  `R/tspa.R` (stage-2 schema + `tspa_render()` + product-score auto-alias),
+  `R/get_fscore.R` + `R/get_fs_methods.R` (S3 first-arg `data` → `object`
+  rename + `@param fsm`/`...` docs), `R/grandStandardizedSolution.R` +
+  `R/tspa_corrected_se.R` (migrated onto the compat module),
+  `DESCRIPTION` (`Matrix` moved `Imports` → `Suggests`),
+  `.Rbuildignore` (top-level dev-file exclusions),
+  `.github/workflows/R-CMD-check.yaml` (lavaan axis),
+  `tests/testthat/test-tspa.R` + 4 vignettes + `README.Rmd`/`README.md`
+  (named-arg call sites / auto-alias), and the regenerated
+  `man/get_fs.Rd`, `man/get_fs_lavaan.Rd`, `man/get_fs_lmer.Rd`,
+  `man/tspa.Rd`. `NAMESPACE` unchanged. Commit scope must be decided
+  explicitly (all listed files are PLAN 04 + check-cleanup work).
 - Suggested order (all plans complete): 4 (user-facing bug) →
   5 (perf) → F1 (future).

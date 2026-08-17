@@ -61,7 +61,7 @@ sampling uncertainty from the prior itself is propagated.
 Conceptually similar to the \code{cov} argument of \code{mirt::fscores()}.}
 
 \item{...}{additional arguments passed to \code{\link[lavaan]{cfa}}
-(when \code{data} is a data frame). See \code{\link[lavaan]{lavOptions}}
+(when \code{object} is a data frame). See \code{\link[lavaan]{lavOptions}}
 for a complete list.}
 }
 \value{

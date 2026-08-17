@@ -12,3 +12,10 @@
 ^\.vscode$
 ^R2spa_.*\.tar\.gz$
 ^\.opencode$
+^\.lintr$
+^archive$
+^legacy$
+^PERF_FIX_SUMMARY\.md$
+^STATUS\.md$
+^dependency_analysis\.md$
+^_PLAN_.*\.md$

@@ -291,11 +291,11 @@ test_that("test if the se of variance is similar for two methods", {
 ########## Multi-group example ##########
 
 # get factor scores
-fs_dat_visual <- get_fs(data = HolzingerSwineford1939,
+fs_dat_visual <- get_fs(HolzingerSwineford1939,
                         model = "visual =~ x1 + x2 + x3",
                         group = "school",
                         format = "list")
-fs_dat_speed <- get_fs(data = HolzingerSwineford1939,
+fs_dat_speed <- get_fs(HolzingerSwineford1939,
                        model = "speed =~ x7 + x8 + x9",
                        group = "school",
                        format = "list")

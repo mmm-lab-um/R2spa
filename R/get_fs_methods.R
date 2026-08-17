@@ -94,7 +94,7 @@ validate_fs_priors <- function(prior_mean, prior_cov, lv_names) {
 #' @rdname get_fs
 #' @export
 get_fs.data.frame <- function(
-  data,
+  object,
   model = NULL,
   group = NULL,
   method = c("regression", "Bartlett", "ML", "EB"),
@@ -107,13 +107,13 @@ get_fs.data.frame <- function(
   ...
 ) {
   if (is.null(model)) {
-    ind_names <- colnames(data)
+    ind_names <- colnames(object)
     if (!is.null(group)) {
       ind_names <- setdiff(ind_names, group)
     }
     model <- paste("f1 =~", paste(ind_names, collapse = " + "))
   }
-  fit <- cfa(model, data = data, group = group, ...)
+  fit <- cfa(model, data = object, group = group, ...)
   get_fs(
     fit,
     method = method,
@@ -227,20 +227,17 @@ get_fs_blocks.lavaan <- function(
 }
 
 #' @rdname get_fs
-#' @param object A fitted model object. For [get_fs()], the first argument is
-#'        named `data` (dispatch argument). Methods accept `object` as their
-#'        first parameter name internally.
 #' @param format Output format: `"unified"` returns a single data frame with
 #'        a `group` column; `"list"` returns a list of data frames per group.
 #' @export
-get_fs.default <- function(data, ...) {
-  if (is.matrix(data)) {
-    data <- as.data.frame(data)
-    return(get_fs(data, ...))
+get_fs.default <- function(object, ...) {
+  if (is.matrix(object)) {
+    object <- as.data.frame(object)
+    return(get_fs(object, ...))
   }
   stop(
     "get_fs() is not implemented for objects of class '",
-    paste(class(data), collapse = "', '"),
+    paste(class(object), collapse = "', '"),
     "'. Currently supported: 'data.frame', 'lavaan', ",
     "and 'lmerMod'. Support for 'mirt' models is planned.",
     call. = FALSE
@@ -248,7 +245,6 @@ get_fs.default <- function(data, ...) {
 }
 
 #' @rdname get_fs
-#' @param object A fitted model object.
 #' @param format Output format: `"unified"` returns a single data frame with
 #'        a `group` column; `"list"` returns a list of data frames per group.
 #' @export
@@ -468,7 +464,7 @@ get_D <- function(theta) {
 }
 
 #' @rdname get_fs
-#' @param object A fitted model object.
+#' @param fsm Currently not used.
 #' @param format Output format: `"unified"` returns a single data frame with
 #'        a `group` column; `"list"` returns a list of data frames per group.
 #'        For `merMod` objects there is always a single implicit group, so

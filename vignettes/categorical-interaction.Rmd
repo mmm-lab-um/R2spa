@@ -92,7 +92,7 @@ m <- vapply(
 ### Y
 
 ```{r}
-fsy <- get_fs(data = y, std.lv = TRUE)
+fsy <- get_fs(y, std.lv = TRUE)
 ```
 
 ### X

@@ -36,6 +36,8 @@ array attributes, a per-cluster \code{scoring_matrix} list attribute
 (see \code{\link[=get_fs]{get_fs()}}), and has NULL row names (the pre-refactor
 output had no \verb{_se} columns, no attributes, and used the ranef
 subject IDs as row names).}
+
+\item{...}{Additional arguments, passed on to \code{\link[=get_fs]{get_fs()}}.}
 }
 \description{
 \code{get_fs_lmer()} is superseded by \code{\link[=get_fs]{get_fs()}}. It is retained for backward

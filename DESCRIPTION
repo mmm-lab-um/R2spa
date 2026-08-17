@@ -37,7 +37,6 @@ Imports:
     lavaan,
     lme4,
     MASS,
-    Matrix,
     OpenMx
 Suggests: 
     boot,
@@ -46,6 +45,7 @@ Suggests:
     knitr,
     lintr,
     magrittr,
+    Matrix,
     mirt,
     numDeriv,
     rmarkdown,

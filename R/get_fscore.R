@@ -6,22 +6,22 @@
 #' objects, and `lmerMod` objects. Support for `mirt` models is planned.
 #'
 #' @details
-#' When `data` is a data frame and `model` is supplied as a lavaan syntax string,
+#' When `object` is a data frame and `model` is supplied as a lavaan syntax string,
 #' the function internally calls [lavaan::cfa()] and then dispatches to the
-#' `lavaan` method. When `data` is a fitted model object, the appropriate S3
+#' `lavaan` method. When `object` is a fitted model object, the appropriate S3
 #' method is called directly.
 #'
 #' `get_fs()` replaced `get_fs_lavaan()` and `get_fs_lmer()`, which are now
 #' thin wrappers retained for backward compatibility.
 #'
-#' @param data A data frame, a fitted [lavaan] model object, or a fitted
+#' @param object A data frame, a fitted [lavaan] model object, or a fitted
 #'        [lme4::lmer] model object (`merMod`).
 #' @param model An optional string specifying the measurement model
-#'              in \code{lavaan} syntax. Only used when `data` is a data frame.
+#'              in \code{lavaan} syntax. Only used when `object` is a data frame.
 #'              See \code{\link[lavaan]{model.syntax}} for more information.
 #' @param group Character. Name of the grouping variable for multiple group
 #'              analysis, which is passed to \code{\link[lavaan]{cfa}}.
-#'              Only used when `data` is a data frame.
+#'              Only used when `object` is a data frame.
 #' @param method Character. Method for computing factor scores (options are
 #'               "regression" or "Bartlett"; "ML" is an alias for "Bartlett"
 #'               and "EB" is an alias for "regression"). Currently, the
@@ -58,14 +58,14 @@
 #'        `vfsLT = TRUE` the supplied covariance is treated as fixed, i.e. no
 #'        sampling uncertainty from the prior itself is propagated.
 #'        Conceptually similar to the `cov` argument of `mirt::fscores()`.
-#' @param format Output format when `data` is a lavaan or merMod object.
+#' @param format Output format when `object` is a lavaan or merMod object.
 #'        `"unified"` (default) returns a single data frame with a `group` column;
 #'        for multiple groups, attributes `fsT`, `fsL`, `fsb`, and `scoring_matrix`
 #'        are named lists keyed by group label. `"list"` returns the legacy
 #'        shape: a named list of data frames (one per group) with per-group
 #'        matrix attributes. Use [fs_to_group_list()] to convert between the two.
 #' @param ... additional arguments passed to \code{\link[lavaan]{cfa}}
-#'            (when `data` is a data frame). See \code{\link[lavaan]{lavOptions}}
+#'            (when `object` is a data frame). See \code{\link[lavaan]{lavOptions}}
 #'            for a complete list.
 #' @return A data frame containing the factor scores (with prefix `"fs_"`),
 #'         the standard errors (with suffix `"_se"`), the implied loadings
@@ -115,7 +115,7 @@
 #'            group = "school", group.equal = c("loadings", "intercepts"))
 #' get_fs(fit, prior_mean = c(visual = -0.12), prior_cov = 0.33)
 
-get_fs <- function(data, ...) {
+get_fs <- function(object, ...) {
   UseMethod("get_fs")
 }
 
@@ -491,6 +491,7 @@ assemble_fs_blocks <- function(
 #'        (see [get_fs()]), and has NULL row names (the pre-refactor
 #'        output had no `_se` columns, no attributes, and used the ranef
 #'        subject IDs as row names).
+#' @param ... Additional arguments, passed on to [get_fs()].
 #'
 #' @export
 get_fs_lmer <- function(
