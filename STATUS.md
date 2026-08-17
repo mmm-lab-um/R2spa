@@ -4,7 +4,7 @@ Tracks remaining work from completed plans (see `archive/`). Update status as
 items are resolved; move finished items to the **Closed** section with the
 date and commit/PR reference.
 
-**Last updated:** 2026-08-17 (PLAN 04 (tspa partable) — lavaan compat module + R2spa-owned stage-2 model schema/renderer, product-score auto-alias, CI lavaan axis; baseline check findings cleared — S3 `get_fs()` arg rename, Rd `fsm`/`...` docs, `Matrix` → Suggests, top-level `.Rbuildignore` exclusions; full check 0 errors / 0 warnings / 0 notes)
+**Last updated:** 2026-08-17 (QUARANTINE — quarantined all in-package consumers of `get_fs()`/`tspa()` into `.quarantine/`; PLAN 04 (tspa partable) + check cleanup committed in `7c173ab`/`0d782b4`)
 
 ## Open
 
@@ -24,6 +24,7 @@ date and commit/PR reference.
 
 | # | Issue | Closed | Reference |
 |---|-------|--------|-----------|
+| 11 | **Quarantine of `get_fs()`/`tspa()`-consuming code** — while those two contracts are being revised, every in-package consumer moved to `.quarantine/{R,tests,vignettes}/` (excluded from the build via `^\.quarantine$` in `.Rbuildignore`): `R/get_fs_int.R`, `R/tspa_mx.R`, `R/tspa_corrected_se.R`, `R/grandStandardizedSolution.R`; full test files `test-get_fs_int.R`, `test-grandStandardizedSolution.R`; 8 vignettes + 3 RDS fixtures. Embedded blocks extracted into 2 new self-contained quarantined test files (`test-tspa_mx.R`: the Mx comparison block + umx/OpenMx missing-data block with copied setups; `test-vcov_corrected.R`: the MG `vcov_corrected()` + prior-adjusted `vcov_corrected()` tests with copied setups) and appended to the 2 quarantined files (product-score auto-alias section → `test-get_fs_int.R`; grandSS wrapper A/B → `test-grandStandardizedSolution.R`). Kept in-package by decision: `R/lavaan_compat.R` (now consumed only by its own canary tests — its only package consumers were the two quarantined files) and the 6 core vignettes. `NAMESPACE` shrinks to 8 exports + 4 `get_fs` S3 methods (no `OpenMx`/`utils`; `stats` = `setNames`; `lavaan::vcov` re-declared on `get_fs()` for the bare `vcov()` calls in `get_fscore_math.R`). Roxygen links to quarantined topics reworded. `tspa()` product-score auto-alias (`tspa_sf_alias`) retained (no `get_fs_int` dependency) with the ambiguous-candidates core test kept in `test-tspa_render.R`. Quarantined tests are self-contained (setups copied) with provenance headers for re-integration (`git mv` back → `document()` → `test()` → `check()`). `OpenMx` kept in `DESCRIPTION: Imports` until re-integration. | 2026-08-17 | `archive/PLAN_QUARANTINE.md` |
 | 1 | **merMod column-name regression** — restored pre-refactor `u0_eb`-style *column names* in the merMod path via `legacy_names` switch; `get_fs_lmer()` defaults `legacy_names = TRUE` so `vignettes/multilevel.rmd` (`tspa_mx_model`) works unchanged; default `get_fs()`/`get_fs.merMod()` now use `fs_u0`-style names. Legacy output is name-compatible (not byte-identical) with the pre-refactor result — extra `_se` columns, `fsL`/`fsT` attributes, NULL row names (delta documented on `get_fs_lmer()`/`get_fs.merMod()`). Fixed the related overwritten-`fsT`-rownames + duplicate-`re_names` bugs (item 7 sub-bullets). | 2026-08-15 | PLAN 02, Step 2 |
 | 2 | **Vignette breakage on `format = "unified"`** (verified failure set 3/13: `corrected-se.Rmd`, `multilevel.rmd`, `tspa-vignette-mx.Rmd`) — `multilevel.rmd` fixed by item 1; `R/tspa.R` now validates `fsT`/`fsL` group-count consistency (plain matrix = 1 group, so single-group length-1 list attributes may be mixed with plain matrices, e.g. Bartlett identity `fsL`) with a clear mismatch error, and `tspa_mf()` accepts all single-group shape combinations; `tspa-vignette-mx.Rmd` uses `format = "list"` for its direct attribute arithmetic. 6 new regression tests. **13/13 vignettes build** (verified 2026-08-16). | 2026-08-16 | PLAN 02, Step 3 |
 | 3 | **`get_fs(data = matrix)` dispatch** — already resolved in the working tree: `get_fs.data.frame()` re-dispatches matrices (`is.matrix(data)` → `as.data.frame(data)` → `get_fs()`). Live check: `get_fs(as.matrix(...))` is `identical()` to `get_fs(data.frame)` incl. attributes. Locked in with a regression test in `test-get_fscore.R`. | 2026-08-16 | PLAN 02, Step 4 |
@@ -33,7 +34,7 @@ date and commit/PR reference.
 | 9 | **merMod cluster-name robustness + efficiency pass** — `get_fs_blocks.merMod()` named blocks by *first appearance* in the data (`unique(as.character(object@flist[[1]]))`) while every lme4 structure it consumes (`split()`/factor levels, the `Z` columns, the `b` random-effect vector, `ranef()` row order) follows the *canonical level order* — blocks were mislabeled whenever appearance order ≠ level order (shuffled rows, reversed factor levels, non-monotonic numeric cluster ids; values were always correct, only the labels wrong). Now names/rows come from `levels(as.factor(object@flist[[1]]))`, Z is sliced by level index `(j−1)·num_re+1:num_re`, and EB scores use `lme4::getME(object, "b")` reshaped level-major (bit-identical to `ranef()`, ~7× faster) — also dropping the unused `model.frame(object)` call. Verified: lme4 2.0.6 exposes no `pp$Z` (refclass `merPredD` has only `Zt`), so exported `getME()` is both the only and the stable choice; direct-slot access is not faster (sub-µs either way); per-cluster sparse `Zt[rws, idx]` slicing benchmarked and rejected (~55 µs/call vs 0.2 ms full densification at K=300). 3 new regression tests (shuffled rows, reversed factor levels, non-monotonic numeric ids); each confirmed to fail against the appearance-order naming. | 2026-08-16 | PLAN 03, follow-up |
 | 10 | **User-supplied latent priors `prior_mean`/`prior_cov` for `get_fs()`** (lavaan-only) — new arguments on `get_fs.data.frame()`, `get_fs.lavaan()`, and the `get_fs_lavaan()` wrapper (placed before `...` so they are never forwarded to `lavaan::cfa()`); non-NULL priors are treated as **fixed external priors shared across all lavaan groups**. Semantics: NULL preserves current behavior exactly; priors may be supplied independently; `prior_mean` is a length-q vector, `prior_cov` a q×q matrix (scalar/1×1 for q = 1); named inputs validated against latent names and reordered to model order; `prior_cov` validated finite/square/symmetric/positive-definite. Restrictions: regression/EB only (Bartlett/ML error), `reliability = TRUE` errors, merMod + `get_fs_lmer()` reject via `...`. Math: `psi_override` threaded through `compute_fspars()`/`compute_a()`/`compute_evfs()`/`compute_ldfs()`/`compute_grad_ld_evfs()`/`vcov_ld_evfs()`/`correct_evfs()`, so `corrected_fsT = TRUE` and `vfsLT = TRUE` treat the supplied covariance as fixed (no prior sampling uncertainty propagated); `prepare_fs()` in `get_fs_blocks.lavaan()` uses the overridden `psi`/`alpha` for complete data, every missing-data pattern, and every group. All derived outputs (`fs`, `fsT`, `fsL`, `fsb`, `scoring_matrix`, `se_*`, `ev_*`, `ecov_*`) are recomputed from the prior-based scoring matrix — verified equivalent to manual `compute_fscore()` calls. Roxygen docs + multi-group example; 22 new `test_that` blocks in `test-get_fs_priors.R` (equivalence, attributes, reordering, all validation errors, corrected-SE/vcov, `vcov_corrected()` on a prior-adjusted `tspa()` fit, data.frame/matrix/legacy entry points, q = 1 forms, multi-group incl. identical-group invariance, missing data, merMod rejection). `fs_to_group_list()` round-trip verified on prior-adjusted unified output. Out of scope (unchanged): group-specific priors, reliability under priors, merMod priors, `augment_lav_predict()`/OpenMx-facing helpers. | 2026-08-16 | PLAN 03 (fs priors) |
 
-## Verification state (2026-08-16 — PLAN 02, PLAN 03 [mermod], PLAN 03 [fs priors])
+## Verification state (2026-08-16/17 — PLAN 02, PLAN 03 [mermod], PLAN 03 [fs priors], PLAN 04 + check cleanup, QUARANTINE)
 
 - `devtools::test()`: **596 pass, 0 fail, 0 warn** (435 at the PLAN 02
   close; +151 expectations from PLAN 03's 5 new `test_that` blocks in
@@ -147,6 +148,20 @@ date and commit/PR reference.
   intermediate finding was the untracked top-level `_PLAN_QUARANTINE.md`
   (future quarantine plan doc, now excluded by the
   `^_PLAN_.*\.md$` build-exclusion).
+- QUARANTINE verification (2026-08-17): `devtools::test()` **707 pass,
+  0 fail, 0 warn, 0 skip** (763 pre-quarantine; the delta is exactly the
+  56 expectations in the quarantined blocks: Mx comparison + umx/OpenMx
+  missing-data in `test-tspa.R`/`test-get_fscore.R`, `vcov_corrected()` in
+  `test-tspa_render.R`/`test-get_fs_priors.R`, product-score auto-alias in
+  `test-tspa_render.R`, grandSS wrapper A/B in `test-lavaan_compat.R`).
+  `devtools::document()` idempotent — re-run changes nothing; `NAMESPACE`
+  and `man/` diffs are purely the removed exports (4 Rd files deleted,
+  `get_fs.Rd`/`get_fs_lavaan.Rd`/`augment_lav_predict.Rd` updated for the
+  reworded `vfsLT` param / de-linked `tspa_mx_model()`). Full
+  `devtools::check()`: **0 errors, 0 warnings, 1 NOTE** — the sole NOTE is
+  "'OpenMx' in DESCRIPTION Imports but not imported from anywhere", the
+  expected direct consequence of keeping `OpenMx` in `Imports` until the
+  OpenMx path is re-integrated. No new findings beyond that expected NOTE.
 - Vignette build history: exactly **3 of 13 failed** on the pre-PLAN 02
   Step-1 tree (`corrected-se.Rmd`, `multilevel.rmd`, `tspa-vignette-mx.Rmd`
   — the "7/8 of 13" reports were wrong); **13/13 build on 2026-08-16**
@@ -163,25 +178,23 @@ date and commit/PR reference.
   its plan file is archived as `archive/PLAN_03_mermod_scoring_matrix.md`.
 - PLAN 03 (fs priors) is committed (`32fc817`); its plan file is archived as
   `archive/PLAN_03_fs_priors.md`.
-- Working-tree changes for **PLAN 04 (tspa partable) + check cleanup**
-  are **uncommitted** as of 2026-08-17: new `R/lavaan_compat.R` (the only
-  file that reads lavaan internals), `tests/testthat/test-lavaan_compat.R`,
-  `tests/testthat/test-tspa_render.R`, `archive/PLAN_04_tspa_partable.md`
-  (archived plan), and the untracked future-work plan
-  `_PLAN_QUARANTINE.md` (quarantine the `get_fs()`/`tspa()`-consuming code
-  into `.quarantine/` while those two are revised; phases not started;
-  excluded from the package build via `^_PLAN_.*\.md$`). Modified:
-  `R/tspa.R` (stage-2 schema + `tspa_render()` + product-score auto-alias),
-  `R/get_fscore.R` + `R/get_fs_methods.R` (S3 first-arg `data` → `object`
-  rename + `@param fsm`/`...` docs), `R/grandStandardizedSolution.R` +
-  `R/tspa_corrected_se.R` (migrated onto the compat module),
-  `DESCRIPTION` (`Matrix` moved `Imports` → `Suggests`),
-  `.Rbuildignore` (top-level dev-file exclusions),
-  `.github/workflows/R-CMD-check.yaml` (lavaan axis),
-  `tests/testthat/test-tspa.R` + 4 vignettes + `README.Rmd`/`README.md`
-  (named-arg call sites / auto-alias), and the regenerated
-  `man/get_fs.Rd`, `man/get_fs_lavaan.Rd`, `man/get_fs_lmer.Rd`,
-  `man/tspa.Rd`. `NAMESPACE` unchanged. Commit scope must be decided
-  explicitly (all listed files are PLAN 04 + check-cleanup work).
+- **PLAN 04 (tspa partable) + check cleanup is committed** —
+  `7c173ab` (schema renderer + compat module + render tests + CI lavaan
+  axis) and `0d782b4` (S3 `get_fs()` arg rename, Rd `fsm`/`...` docs,
+  `Matrix` → `Suggests`, top-level `.Rbuildignore` exclusions); plan
+  archived as `archive/PLAN_04_tspa_partable.md`.
+- Working-tree changes for the **QUARANTINE** are **uncommitted** as of
+  2026-08-17 (commit scope decision pending, as usual): 17 staged renames
+  into `.quarantine/{R,tests,vignettes}/` (4 R files, 2 test files,
+  8 vignettes + 3 RDS fixtures) + 8 untracked quarantined `.html` builds,
+  unstaged edits (embedded-block deletions in
+  `test-tspa.R`, `test-get_fscore.R`, `test-tspa_render.R`,
+  `test-get_fs_priors.R`, `test-lavaan_compat.R`; appends in the 2
+  quarantined test files), 2 new untracked quarantined test files
+  (`test-tspa_mx.R`, `test-vcov_corrected.R`), plus the hygiene changes
+  (`.Rbuildignore`, `NAMESPACE`, `man/`, `vfsLT` reword + `@importFrom
+  lavaan vcov` in `R/get_fscore.R`, de-linked roxygen in
+  `R/get_fscore_math.R`). The plan file is untracked and archived as
+  `archive/PLAN_QUARANTINE.md`.
 - Suggested order (all plans complete): 4 (user-facing bug) →
   5 (perf) → F1 (future).

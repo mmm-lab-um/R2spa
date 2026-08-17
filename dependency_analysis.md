@@ -237,3 +237,182 @@ flowchart TD
 ```
 
 **Central functions:** `get_fs_lavaan()` (stage-1 orchestration), `compute_fscore()` (mathematical core), `tspa()` (stage-2 entry). These three form the backbone: data → factor scores → path model.
+
+---
+
+## Post-Quarantine Dependency Map (2026-08-17)
+
+> Everything above this line is the **pre-quarantine** state, preserved for
+> historical reference. Since 2026-08-17 (plan: `archive/PLAN_QUARANTINE.md`),
+> all in-package code that **consumes** `get_fs()` / `tspa()` has been moved to
+> `.quarantine/{R,tests,vignettes}/` while the `get_fs()`/`tspa()` contracts are
+> under revision. The quarantined files remain functional and self-contained;
+> restore by `git mv`-ing them back, then `document()` → `test()` → `check()`.
+
+### What left the package
+
+- **Exports removed from `NAMESPACE`:** `get_fs_int`, `tspa_mx_model`,
+  `vcov_corrected`, `grand_standardized_solution`,
+  `grandStandardizedSolution`.
+- **`.quarantine/R/`:** `get_fs_int.R`, `tspa_mx.R`, `tspa_corrected_se.R`,
+  `grandStandardizedSolution.R`.
+- **`.quarantine/tests/`:** `test-get_fs_int.R`, `test-grandStandardizedSolution.R`
+  (each with the sections extracted from other test files appended, provenance
+  headers included) + 2 new self-contained files `test-tspa_mx.R` and
+  `test-vcov_corrected.R` (extracted Mx / corrected-SE blocks + copied setups).
+- **`.quarantine/vignettes/`:** `get_fs_int-vignette.Rmd`,
+  `categorical-interaction.Rmd`, `reliability.Rmd`, `corrected-se.Rmd`,
+  `tspa-vignette-mx.Rmd`, `missing-data.Rmd`, `multilevel.rmd`,
+  `gr-std-coef.Rmd` + fixtures `sim_results_reliability.RDS`, `boo_joint.RDS`,
+  `boo_separate.RDS` (+ their untracked `.html` builds).
+- **Imports that left `NAMESPACE`:** `OpenMx` (6 fns; `tspa_mx.R` was the only
+  consumer), `stats::pnorm`/`qnorm`, `utils::combn`/`tail`,
+  `lavaan::lav_func_jacobian_complex` (bare calls in staying code are covered by
+  the re-declared `importFrom(lavaan, vcov)` plus namespaced calls). `OpenMx`
+  **stays in `DESCRIPTION: Imports`** until re-integration — hence exactly one
+  check NOTE (`'OpenMx' in Imports but not imported from`), expected and
+  accepted.
+- **`R/lavaan_compat.R`** (`tsp_*` lavaan-drift canary) **stays** but is now
+  unconsumed by package code (its only consumers were `tspa_corrected_se.R` and
+  `grandStandardizedSolution.R`, both quarantined) — it is exercised solely by
+  its canary tests, `tests/testthat/test-lavaan_compat.R`. Kept by user decision.
+
+### Surviving exports (8 + 4 S3 methods)
+
+`get_fs()` (+ `.data.frame`, `.lavaan`, `.merMod`, `.default`),
+`get_fs_lavaan()`, `get_fs_lmer()` (legacy wrappers), `compute_fscore()`,
+`augment_lav_predict()`, `fs_to_group_list()`, `block_diag()`, `tspa()`.
+
+`R/` now holds 7 files (~2,500 lines): `get_fscore.R`, `get_fs_methods.R`,
+`get_fscore_math.R`, `tspa.R`, `lavaan_compat.R`, `helper.R`, `globals.R`;
+9 test files in `tests/testthat/`; 6 vignettes in `vignettes/`.
+
+### Post-quarantine dependency diagram (Mermaid)
+
+```mermaid
+flowchart TD
+    subgraph STAGE_1["STAGE 1: Factor Score Extraction"]
+        direction TB
+
+        get_fs["<b>get_fs()</b><br/>(S3 generic, entry)"]
+
+        get_fs -->|data.frame input| gfdf["<b>get_fs.data.frame()</b><br/>lavaan::cfa() then re-dispatch"]
+        get_fs -->|lavaan object| gflm["<b>get_fs.lavaan()</b><br/>(hub)"]
+        get_fs -->|merMod object| gfm["<b>get_fs.merMod()</b>"]
+        get_fs -->|anything else| gfd["get_fs.default()<br/>(clear error)"]
+
+        gflm --> gfbl["get_fs_blocks.lavaan()<br/>(prepare_fs per group)"]
+        gfbl --> compute_fscore["<b>compute_fscore()</b><br/>(core math)"]
+        gflm --> correct_evfs["correct_evfs()"]
+        gflm --> compute_fsrel["compute_fsrel()<br/>coef() / lavInspect()"]
+        gflm --> assemble["assemble_fs_blocks()"]
+
+        assemble --> augment_fs["augment_fs()"]
+        assemble --> cbi["check_blocks_identical()"]
+
+        correct_evfs --> cfsp["compute_fspars()"]
+        compute_fsrel --> compa["compute_a()"]
+
+        cfsp --> ce["compute_evfs()"]
+        cfsp --> cl["compute_ldfs()"]
+        cfsp --> compa
+        ce --> caf["compute_a_from_mat()"]
+        cl --> caf
+        compa --> caf
+        compute_fscore --> caf
+        caf --> car["compute_a_reg()<br/>MASS::ginv"]
+        caf --> cab["compute_a_bartlett()<br/>MASS::ginv"]
+
+        gfm --> gfbbm["get_fs_blocks.merMod()<br/>lme4::getME('Z','b')"]
+        gfbbm --> augment_fs
+
+        aul["<b>augment_lav_predict()</b><br/>(exported; lavaan::lavPredict /<br/>lavInspect)"] --> clfm["compute_lav_fs_matrices()"]
+        aul --> augs2["augment_fs2()"]
+        aul --> gfmn["get_fs_mat_names()"]
+
+        glav["get_fs_lavaan()<br/>(legacy wrapper)"] -->|delegates| get_fs
+        glmer["get_fs_lmer()<br/>(legacy wrapper)"] -->|delegates| get_fs
+        fsgl["<b>fs_to_group_list()</b><br/>(unified df → list)"]
+    end
+
+    subgraph STAGE_2["STAGE 2: Path Analysis (lavaan only)"]
+        direction TB
+        tspa["<b>tspa()</b><br/>(entry)"] --> sfalias["tspa_sf_alias()<br/>(product-score auto-alias)"]
+        tspa --> tssf["tspa_schema_sf()"]
+        tspa --> tsmf["tspa_schema_mf()<br/>(consumes fsT / fsL / fsb attrs)"]
+        tssf --> rend["tspa_render()<br/>(frozen partable schema)"]
+        tsmf --> rend
+        tspa --> sem["lavaan::sem()"]
+    end
+
+    subgraph COMPAT["Lavaan Drift Canary (R/lavaan_compat.R)"]
+        compat["tsp_* wrappers<br/>(lavaan::lavTech + slots)<br/>currently consumed only by<br/>test-lavaan_compat.R"]
+    end
+
+    subgraph QUAR["QUARANTINED — .quarantine/ (excluded from build/tests)"]
+        direction TB
+        q1["get_fs_int()"]
+        q2["tspa_mx_model()<br/>(OpenMx path)"]
+        q3["vcov_corrected()<br/>(delta-method SE)"]
+        q4["grand_standardized_<br/>solution()"]
+    end
+
+    STAGE_1 -->|scores + fsT/fsL/fsb attrs| STAGE_2
+    aul -.->|feeds ld/ev matrices| q2
+    fsgl -.->|list attrs consumed by| STAGE_2
+    compat -.->|wrappers used by| q3
+    compat -.->|wrappers used by| q4
+
+    classDef exported fill:#d4f1ff,stroke:#1890ff,stroke-width:2px
+    classDef core fill:#fff1d0,stroke:#fa8c16,stroke-width:2px
+    classDef internal fill:#f6ffed,stroke:#52c41a,stroke-width:1px,stroke-dasharray: 3 3
+    classDef quarantined fill:#f5f5f5,stroke:#999,stroke-width:1px,stroke-dasharray: 5 5,color:#666
+
+    class get_fs,gfdf,gflm,gfm,gfd,compute_fscore,aul,fsgl,tspa,glav,glmer exported
+    class compute_fscore,rend core
+    class gfbl,correct_evfs,compute_fsrel,assemble,augment_fs,cbi,cfsp,ce,cl,compa,caf,car,cab,gfbbm,clfm,augs2,gfmn,sfalias,tssf,tsmf,gfd internal
+    class compat internal
+    class q1,q2,q3,q4 quarantined
+```
+
+### Post-quarantine architecture summary
+
+```
+                     External Packages
+    ┌──────────┬──────────┬───────────┬──────────────┐
+    │  lavaan  │   lme4   │   MASS    │   OpenMx     │
+    │(cfa, sem,│(getME Z, │  (ginv)   │(Imports-only,│
+    │ lavPredict,│  b)    │           │ unimported — │
+    │ lavInspect)│        │           │ NOTE until   │
+    │          │          │           │ re-integration)│
+    └────┬─────┴────┬─────┴─────┬─────┴──────┬───────┘
+         │          │           │            │
+         ▼          ▼           ▼            ▼ (only .quarantine/R/tspa_mx.R)
+ ┌─────────────────────────────────────────────────────┐
+ │        STAGE 1 — Factor Score Extraction            │
+ │                                                     │
+ │  get_fs ─┬─► get_fs.data.frame ─► get_fs.lavaan     │
+ │          ├─► get_fs.lavaan ─► get_fs_blocks.lavaan  │
+ │          └─► get_fs.merMod ─► get_fs_blocks.merMod  │
+ │                       │                             │
+ │                       ▼                             │
+ │             compute_fscore (core math)              │
+ │             + correct_evfs / compute_fsrel          │
+ │                                                     │
+ │  augment_lav_predict (OpenMx-workflow helper)       │
+ └──────────────────────────┬──────────────────────────┘
+                            │ scores + fsT / fsL / fsb
+                            ▼
+ ┌─────────────────────────────────────────────────────┐
+ │        STAGE 2 — Path Analysis (lavaan::sem)        │
+ │                                                     │
+ │  tspa ─► tspa_schema_sf/mf ─► tspa_render ─► sem   │
+ │                                                     │
+ │  (vcov_corrected / tspa_mx_model quarantined)       │
+ └─────────────────────────────────────────────────────┘
+```
+
+**Central functions (unchanged):** `get_fs.lavaan()` (stage-1 orchestration),
+`compute_fscore()` (mathematical core), `tspa()` (stage-2 entry). The delta-method
+SE correction and grand-standardization utilities moved to `.quarantine/` with
+everything else that consumes the stage-1/stage-2 output contracts.
