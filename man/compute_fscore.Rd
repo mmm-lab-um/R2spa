@@ -11,10 +11,11 @@ compute_fscore(
   psi = NULL,
   nu = NULL,
   alpha = NULL,
-  method = c("regression", "Bartlett"),
+  method = c("regression", "Bartlett", "mean"),
   center_y = TRUE,
   acov = FALSE,
-  fs_matrices = FALSE
+  fs_matrices = FALSE,
+  sum_items = NULL
 )
 }
 \arguments{
@@ -31,11 +32,14 @@ is only one observation, it should be a matrix of one row.}
 
 \item{alpha}{A vector of length q of latent means.}
 
-\item{method}{A character string indicating the method for computing factor
-scores. Currently, only "regression" is supported.}
+\item{method}{A character string indicating the method for computing
+factor scores: \code{"regression"} (default), \code{"Bartlett"}, or
+\code{"mean"} (sum scores, i.e. the plain uncentered item means;
+see \code{\link[=get_fs]{get_fs()}} for the full description).}
 
-\item{center_y}{Logical indicating whether \code{y} should be mean-centered.
-Default to \code{TRUE}.}
+\item{center_y}{Logical indicating whether \code{y} should be
+mean-centered. Default to \code{TRUE}. Ignored for
+\code{method = "mean"}, whose scores are raw item means.}
 
 \item{acov}{Logical indicating whether the asymptotic covariance matrix
 of factor scores should be returned as an attribute.}
@@ -49,6 +53,11 @@ loadings and intercepts by the model when using the
 factor scores as indicators of the latent variables.
 If \code{TRUE}, these matrices will be added as
 attributes.}
+
+\item{sum_items}{For \code{method = "mean"} only: a named list mapping factor
+names to the items included in each factor's sum score.
+\code{NULL} (default) auto-derives the assignment from the
+loadings. See \code{\link[=get_fs]{get_fs()}} for the full description.}
 }
 \value{
 An N x p matrix of factor scores.

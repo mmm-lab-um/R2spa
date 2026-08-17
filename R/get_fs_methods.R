@@ -3,7 +3,10 @@
 # Future methods (e.g. get_fs.mirt()) should be added to this file.
 
 normalize_fs_method <- function(method) {
-  method <- match.arg(method, c("regression", "Bartlett", "ML", "EB"))
+  method <- match.arg(
+    method,
+    c("regression", "Bartlett", "ML", "EB", "mean")
+  )
   switch(method, ML = "Bartlett", EB = "regression", method)
 }
 
@@ -97,13 +100,14 @@ get_fs.data.frame <- function(
   object,
   model = NULL,
   group = NULL,
-  method = c("regression", "Bartlett", "ML", "EB"),
+  method = c("regression", "Bartlett", "ML", "EB", "mean"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
   reliability = FALSE,
   format = c("unified", "list"),
   prior_mean = NULL,
   prior_cov = NULL,
+  sum_items = NULL,
   ...
 ) {
   if (is.null(model)) {
@@ -122,7 +126,8 @@ get_fs.data.frame <- function(
     reliability = reliability,
     format = format,
     prior_mean = prior_mean,
-    prior_cov = prior_cov
+    prior_cov = prior_cov,
+    sum_items = sum_items
   )
 }
 
@@ -132,9 +137,10 @@ get_fs_blocks.lavaan <- function(
   add_to_evfs,
   prior_mean = NULL,
   prior_cov = NULL,
+  sum_items = NULL,
   ...
 ) {
-  method <- match.arg(method, c("regression", "Bartlett"))
+  method <- match.arg(method, c("regression", "Bartlett", "mean"))
   est <- lavInspect(object, what = "est")
   y <- lavInspect(object, what = "data")
   miss_pat <- object@Data@Mp
@@ -152,7 +158,8 @@ get_fs_blocks.lavaan <- function(
           nu = est$nu,
           alpha = alpha_use,
           method = method,
-          fs_matrices = TRUE
+          fs_matrices = TRUE,
+          sum_items = sum_items
         )
       list(
         case_idx = seq_len(nrow(y)),
@@ -179,7 +186,8 @@ get_fs_blocks.lavaan <- function(
             nu = est$nu[pat_m, , drop = FALSE],
             alpha = alpha_use,
             method = method,
-            fs_matrices = TRUE
+            fs_matrices = TRUE,
+            sum_items = sum_items
           )
         blocks[[m]] <- list(
           case_idx = idx_m,
@@ -250,18 +258,50 @@ get_fs.default <- function(object, ...) {
 #' @export
 get_fs.lavaan <- function(
   object,
-  method = c("regression", "Bartlett", "ML", "EB"),
+  method = c("regression", "Bartlett", "ML", "EB", "mean"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
   reliability = FALSE,
   format = c("unified", "list"),
   prior_mean = NULL,
   prior_cov = NULL,
+  sum_items = NULL,
   ...
 ) {
   method <- normalize_fs_method(method)
   if (!inherits(object, "lavaan")) {
     stop("`object` must be a `lavaan` model object.")
+  }
+  if (method == "mean") {
+    # "mean" scores are raw item means: they bypass the corrected-FS-T /
+    # vfsLT / reliability / prior machinery, which only supports
+    # regression and Bartlett scores.
+    # A FIML-style fit carries @Data@Mp even for complete data (a single
+    # all-TRUE pattern), so missingness is read from the patterns, not from
+    # the slot's presence.
+    if (!all(vapply(object@Data@Mp, function(mp) {
+      is.null(mp) || all(mp$pat)
+    }, logical(1)))) {
+      stop(
+        "method = 'mean' does not support models fitted with missing ",
+        "data; use method = 'regression' or 'Bartlett'.",
+        call. = FALSE
+      )
+    }
+    incompatible <- c(
+      if (corrected_fsT) "corrected_fsT",
+      if (vfsLT) "vfsLT",
+      if (reliability) "reliability",
+      if (!is.null(prior_mean)) "prior_mean",
+      if (!is.null(prior_cov)) "prior_cov"
+    )
+    if (length(incompatible) > 0) {
+      stop(
+        "method = 'mean' is not supported together with: ",
+        paste(incompatible, collapse = ", "), ".",
+        call. = FALSE
+      )
+    }
   }
   format <- match.arg(format)
 
@@ -311,7 +351,8 @@ get_fs.lavaan <- function(
     method = method,
     add_to_evfs = add_to_evfs,
     prior_mean = priors$mean,
-    prior_cov = priors$cov
+    prior_cov = priors$cov,
+    sum_items = sum_items
   )
 
   group_var <- object@Data@group
@@ -370,7 +411,13 @@ get_fs.lavaan <- function(
   out
 }
 
-get_fs_blocks.merMod <- function(object, legacy_names = FALSE, ...) {
+get_fs_blocks.merMod <- function(
+  object,
+  method = c("EB", "ML"),
+  legacy_names = FALSE,
+  ...
+) {
+  method <- match.arg(method)
   num_re <- length(object@cnms[[1]])
   base_names <- paste0("u", seq_len(num_re) - 1)
   re_names <- if (legacy_names) paste0(base_names, "_eb") else base_names
@@ -399,23 +446,34 @@ get_fs_blocks.merMod <- function(object, legacy_names = FALSE, ...) {
   # fixed design -- determines Kz: with Z != X the fixed-design code
   # produces non-conformable products.
   Zmat <- as.matrix(lme4::getME(object, "Z"))
-  D <- get_D(object@theta)
   s <- stats::sigma(object)
 
   stopifnot(ncol(Zmat) >= num_re * n_clus)
 
-  # EB scores for the first term: getME("b") = crossprod(Lambdat, u),
-  # bit-identical to ranef(object)[[1]] values but computed level-major
-  # without ranef()'s per-term work (cheaper for multi-term models).
-  b <- lme4::getME(object, "b")
-  stopifnot(length(b) >= num_re * n_clus)
-  u_b <- matrix(
-    b[seq_len(num_re * n_clus)],
-    nrow = n_clus,
-    ncol = num_re,
-    byrow = TRUE
-  )
-  rownames(u_b) <- levels(f1)
+  if (method == "EB") {
+    D <- get_D(object@theta)
+    # EB scores for the first term: getME("b") = crossprod(Lambdat, u),
+    # bit-identical to ranef(object)[[1]] values but computed level-major
+    # without ranef()'s per-term work (cheaper for multi-term models).
+    b <- lme4::getME(object, "b")
+    stopifnot(length(b) >= num_re * n_clus)
+    u_b <- matrix(
+      b[seq_len(num_re * n_clus)],
+      nrow = n_clus,
+      ncol = num_re,
+      byrow = TRUE
+    )
+    rownames(u_b) <- levels(f1)
+  } else {
+    # ML (prior-free) scores: per cluster, the MLE of u_j with u treated as
+    # fixed is the OLS fit of the cluster's fixed-effects-adjusted residuals
+    # on its random-effects design block. Residuals are reconstructed as
+    # y_j - X_j %*% beta (no offset()/weights support, same as the EB
+    # scoring identity).
+    y <- stats::model.response(stats::model.frame(object))
+    X <- as.matrix(lme4::getME(object, "X"))
+    beta <- lme4::fixef(object)
+  }
 
   blocks <- vector("list", n_clus)
 
@@ -423,12 +481,28 @@ get_fs_blocks.merMod <- function(object, legacy_names = FALSE, ...) {
     idx <- case_idx[[j]]
     zj <- Zmat[idx, (j - 1L) * num_re + seq_len(num_re), drop = FALSE]
     Kz <- crossprod(zj)
-    DKz <- D %*% Kz
-    inv_W <- solve(DKz + diag(nrow(Kz)))
-    fsL_j <- DKz - DKz %*% inv_W %*% DKz
-    fsT_j <- s^2 * inv_W %*% DKz %*% D %*% t(inv_W)
 
-    fs_row <- u_b[j, , drop = FALSE]
+    if (method == "ML") {
+      # u_hat_j = (Z'Z)^+ Z' r_j: Bartlett-analog (estimator uses no prior D);
+      # fsL = I (score = u_j + (Z'Z)^+ Z' e_j), fsT = sigma^2 (Z'Z)^+ (Penrose:
+      # (Z'Z)^+ Z'Z (Z'Z)^+ = (Z'Z)^+). ginv handles rank-deficient Z blocks
+      # (e.g. a random slope on a within-cluster constant predictor) with the
+      # minimum-norm solution.
+      rj <- y[idx] - as.numeric(X[idx, , drop = FALSE] %*% beta)
+      Gz <- MASS::ginv(Kz)
+      fs_row <- t(Gz %*% crossprod(zj, rj))
+      fsL_j <- diag(num_re)
+      fsT_j <- s^2 * Gz
+      scoring_matrix_j <- Gz %*% t(zj)
+    } else {
+      DKz <- D %*% Kz
+      inv_W <- solve(DKz + diag(nrow(Kz)))
+      fsL_j <- DKz - DKz %*% inv_W %*% DKz
+      fsT_j <- s^2 * inv_W %*% DKz %*% D %*% t(inv_W)
+      fs_row <- u_b[j, , drop = FALSE]
+      scoring_matrix_j <- inv_W %*% D %*% t(zj)
+    }
+
     colnames(fs_row) <- re_names
 
     # colnames = indicator/lv names, rownames = fs names (augment_fs convention)
@@ -438,10 +512,10 @@ get_fs_blocks.merMod <- function(object, legacy_names = FALSE, ...) {
 
     rownames(fsT_j) <- colnames(fsT_j) <- fs_names
 
-    # Scoring matrix: S_j %*% (y_j - X_j %*% beta) reproduces the EB scores
-    # (ranef), where y_j/X_j are the cluster's rows of the model frame and
-    # fixed-effects design. See vignettes/scoring-matrices.Rmd.
-    scoring_matrix_j <- inv_W %*% D %*% t(zj)
+    # Scoring matrix: S_j %*% (y_j - X_j %*% beta) reproduces the scores
+    # (EB / ranef for method "EB", per-cluster OLS for "ML"), where y_j/X_j
+    # are the cluster's rows of the model frame and fixed-effects design.
+    # See vignettes/scoring-matrices.Rmd.
     rownames(scoring_matrix_j) <- fs_names
     colnames(scoring_matrix_j) <- as.character(seq_len(nrow(zj)))
 
@@ -485,7 +559,7 @@ get_D <- function(theta) {
 #' @export
 get_fs.merMod <- function(
   object,
-  method = c("EB"),
+  method = c("EB", "ML"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
   fsm = FALSE,
@@ -493,6 +567,7 @@ get_fs.merMod <- function(
   legacy_names = FALSE,
   ...
 ) {
+  method <- match.arg(method)
   if (!inherits(object, "merMod")) {
     stop("`object` must be an `lmerMod` model object.", call. = FALSE)
   }
@@ -504,7 +579,11 @@ get_fs.merMod <- function(
     )
   }
 
-  blocks <- get_fs_blocks.merMod(object, legacy_names = legacy_names)
+  blocks <- get_fs_blocks.merMod(
+    object,
+    method = method,
+    legacy_names = legacy_names
+  )
 
   # NOTE: merMod does NOT route through assemble_fs_blocks(). The shared
   # assembler assumes one data row per individual case (nrow = n_cases),

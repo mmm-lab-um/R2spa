@@ -88,7 +88,10 @@ get_fs_mat_names <- function(lv_names, int = TRUE) {
 #'
 #' @param lavobj A fitted [`lavaan::lavaan-class`] object
 #' @param method A character string indicating the scoring method to use.
-#'               Must be either `"regression"` or `"Bartlett"`.
+#'               Must be either `"regression"` or `"Bartlett"`. This
+#'               function wraps \code{\link[lavaan]{lavPredict}}() and
+#'               intentionally does not support the `"mean"` (sum-score)
+#'               method of [get_fs()].
 #' @param drop_list_single logical. Should the results be unlisted
 #'                         for single-group models?
 #' @param ... Additional arguments passed to [lavaan::lavPredict()]
@@ -200,10 +203,13 @@ augment_lav_predict <- function(
 #' @param psi A q x q matrix of latent factor variance-covariances.
 #' @param nu A vector of length p of measurement intercepts.
 #' @param alpha A vector of length q of latent means.
-#' @param method A character string indicating the method for computing factor
-#'               scores. Currently, only "regression" is supported.
-#' @param center_y Logical indicating whether \code{y} should be mean-centered.
-#'                 Default to \code{TRUE}.
+#' @param method A character string indicating the method for computing
+#'               factor scores: `"regression"` (default), `"Bartlett"`, or
+#'               `"mean"` (sum scores, i.e. the plain uncentered item means;
+#'               see [get_fs()] for the full description).
+#' @param center_y Logical indicating whether \code{y} should be
+#'                 mean-centered. Default to \code{TRUE}. Ignored for
+#'                 \code{method = "mean"}, whose scores are raw item means.
 #' @param fs_matrices Logical indicating whether covariances of the error
 #'                    portion of factor scores (\code{fsT}), factor score
 #'                    loading matrix (\eqn{L}; \code{fsL}) and intercept vector
@@ -215,6 +221,10 @@ augment_lav_predict <- function(
 #'                    attributes.
 #' @param acov Logical indicating whether the asymptotic covariance matrix
 #'             of factor scores should be returned as an attribute.
+#' @param sum_items For `method = "mean"` only: a named list mapping factor
+#'                  names to the items included in each factor's sum score.
+#'                  `NULL` (default) auto-derives the assignment from the
+#'                  loadings. See [get_fs()] for the full description.
 #'
 #' @return An N x p matrix of factor scores.
 #' @export
@@ -240,12 +250,16 @@ compute_fscore <- function(
   psi = NULL,
   nu = NULL,
   alpha = NULL,
-  method = c("regression", "Bartlett"),
+  method = c("regression", "Bartlett", "mean"),
   center_y = TRUE,
   acov = FALSE,
-  fs_matrices = FALSE
+  fs_matrices = FALSE,
+  sum_items = NULL
 ) {
   method <- match.arg(method)
+  # "mean" scores are raw (uncentered) item means by definition; center_y is
+  # ignored for that method.
+  center_y <- if (method == "mean") FALSE else center_y
   if (is.null(nu)) {
     nu <- colMeans(y)
   }
@@ -257,14 +271,24 @@ compute_fscore <- function(
     meany <- lambda %*% alpha + nu
     y1c <- y1c - as.vector(meany)
   }
-  a_mat <- compute_a_from_mat(method, lambda = lambda, psi = psi, theta = theta)
-  fs <- t(a_mat %*% y1c + as.vector(alpha))
+  a_mat <- compute_a_from_mat(
+    method,
+    lambda = lambda,
+    psi = psi,
+    theta = theta,
+    sum_items = sum_items
+  )
+  fs <- if (method == "mean") {
+    t(a_mat %*% y1c)
+  } else {
+    t(a_mat %*% y1c + as.vector(alpha))
+  }
   if (acov) {
     if (method == "regression") {
       covy <- lambda %*% psi %*% t(lambda) + theta
       attr(fs, "acov") <-
         unclass(psi - a_mat %*% covy %*% t(a_mat))
-    } else if (method == "Bartlett") {
+    } else if (method %in% c("Bartlett", "mean")) {
       attr(fs, "acov") <-
         unclass(a_mat %*% theta %*% t(a_mat))
     }
@@ -275,7 +299,15 @@ compute_fscore <- function(
     fs_names <- paste0("fs_", colnames(fsL))
     rownames(fsL) <- fs_names
     attr(fs, "fsL") <- fsL
-    fsb <- as.numeric(alpha - fsL %*% alpha)
+    # Intercept of the score regressed on the uncentered latent:
+    # fsb = E[fs] - fsL %*% alpha, consistent with all other methods.
+    # For raw mean scores this is M * nu (the mean of the factor's item
+    # intercepts); it equals E[fs] when there is no mean structure (alpha = 0).
+    fsb <- if (method == "mean") {
+      as.numeric(a_mat %*% nu)
+    } else {
+      as.numeric(alpha - fsL %*% alpha)
+    }
     names(fsb) <- fs_names
     attr(fs, "fsb") <- fsb
     fsT <- a_mat %*% theta %*% t(a_mat)
@@ -324,6 +356,8 @@ compute_fspars <- function(
     out[[g]] <- vector("list", num_mp)
     for (m in seq_len(num_mp)) {
       idx <- which(pat[m, ])
+      # do.call() routes method positionally and lambda/psi/theta/idx by
+      # their element names below -- do not drop the names from the list.
       a <- do.call(
         compute_a_from_mat,
         args = c(method, mat[c("lambda", "psi", "theta")], idx = list(idx))
@@ -359,11 +393,12 @@ compute_a <- function(
 }
 
 compute_a_from_mat <- function(
-  method = c("regression", "Bartlett"),
+  method = c("regression", "Bartlett", "mean"),
   lambda,
   theta,
   psi = NULL,
-  idx = NULL
+  idx = NULL,
+  sum_items = NULL
 ) {
   if (!is.null(idx)) {
     lambda <- lambda[idx, , drop = FALSE]
@@ -377,6 +412,8 @@ compute_a_from_mat <- function(
     compute_a_reg(lambda, theta = theta, psi = psi)
   } else if (method == "Bartlett") {
     compute_a_bartlett(lambda, theta = theta, psi = psi)
+  } else if (method == "mean") {
+    compute_a_mean(lambda, sum_items = sum_items)
   }
 }
 
@@ -391,6 +428,114 @@ compute_a_bartlett <- function(lambda, theta, psi = NULL) {
   ginvth <- MASS::ginv(theta)
   tlam_invth <- crossprod(lambda, ginvth)
   solve(tlam_invth %*% lambda, tlam_invth)
+}
+
+# Mean (sum-score) scoring matrix: q x p (factor x item); row k holds
+# 1/|I_k| on the items assigned to factor k, so the scores are the raw
+# (uncentered) item means, fs = M y. When sum_items is NULL the
+# item -> sum assignment is auto-derived from the estimated loadings (an
+# indicator must load on exactly one factor).
+compute_a_mean <- function(lambda, sum_items = NULL) {
+  lambda <- as.matrix(lambda)
+  p <- nrow(lambda)
+  q <- ncol(lambda)
+  lv_names <- colnames(lambda)
+  ind_names <- rownames(lambda)
+
+  if (is.null(sum_items)) {
+    nload <- rowSums(lambda != 0)
+    if (any(nload > 1)) {
+      stop(
+        "The following indicator(s) load on more than one factor: ",
+        paste(deparse(ind_names[nload > 1]), collapse = ", "),
+        ". Specify which sum each belongs to via 'sum_items'.",
+        call. = FALSE
+      )
+    }
+    sum_items <- vector("list", q)
+    names(sum_items) <- lv_names
+    for (k in seq_len(q)) {
+      items <- ind_names[lambda[, k] != 0]
+      if (length(items) == 0) {
+        stop(
+          "Factor '", lv_names[k], "' has no items. ",
+          "Specify the item-to-sum assignment via 'sum_items'.",
+          call. = FALSE
+        )
+      }
+      sum_items[[k]] <- items
+    }
+  } else {
+    if (!is.list(sum_items) || is.null(names(sum_items))) {
+      stop(
+        "'sum_items' must be a named list mapping factor names to ",
+        "item names.",
+        call. = FALSE
+      )
+    }
+    unknown_lv <- setdiff(names(sum_items), lv_names)
+    if (length(unknown_lv) > 0) {
+      stop(
+        "Unknown factor name(s) in 'sum_items': ",
+        paste(deparse(unknown_lv), collapse = ", "),
+        ". Model factors are: ",
+        paste(deparse(lv_names), collapse = ", "), ".",
+        call. = FALSE
+      )
+    }
+    missing_lv <- setdiff(lv_names, names(sum_items))
+    if (length(missing_lv) > 0) {
+      stop(
+        "'sum_items' must cover all model factors; no items given for: ",
+        paste(deparse(missing_lv), collapse = ", "), ".",
+        call. = FALSE
+      )
+    }
+    all_items <- unname(unlist(sum_items))
+    unknown_item <- setdiff(all_items, ind_names)
+    if (length(unknown_item) > 0) {
+      stop(
+        "Unknown item name(s) in 'sum_items': ",
+        paste(deparse(unknown_item), collapse = ", "),
+        ". Model indicators are: ",
+        paste(deparse(ind_names), collapse = ", "), ".",
+        call. = FALSE
+      )
+    }
+    dup_items <- all_items[duplicated(all_items)]
+    if (length(dup_items) > 0) {
+      stop(
+        "The following item(s) are assigned to more than one sum: ",
+        paste(deparse(dup_items), collapse = ", "),
+        ".",
+        call. = FALSE
+      )
+    }
+    # The user's list order is arbitrary; reorder it to the model's factor
+    # order so the positional indexing below (zero-item check and M build)
+    # always refers to model factor k. (The auto-derive branch is already
+    # built in model order.)
+    sum_items <- sum_items[match(lv_names, names(sum_items))]
+    for (k in seq_len(q)) {
+      if (length(sum_items[[k]]) == 0) {
+        stop(
+          "Factor '", lv_names[k], "' has no items in 'sum_items'.",
+          call. = FALSE
+        )
+      }
+    }
+  }
+
+  M <- matrix(
+    0,
+    nrow = q,
+    ncol = p,
+    dimnames = list(lv_names, ind_names)
+  )
+  for (k in seq_len(q)) {
+    M[k, match(sum_items[[k]], ind_names)] <- 1 / length(sum_items[[k]])
+  }
+  M
 }
 
 correct_evfs <- function(

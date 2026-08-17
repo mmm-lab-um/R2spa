@@ -12,13 +12,14 @@
   object,
   model = NULL,
   group = NULL,
-  method = c("regression", "Bartlett", "ML", "EB"),
+  method = c("regression", "Bartlett", "ML", "EB", "mean"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
   reliability = FALSE,
   format = c("unified", "list"),
   prior_mean = NULL,
   prior_cov = NULL,
+  sum_items = NULL,
   ...
 )
 
@@ -26,19 +27,20 @@
 
 \method{get_fs}{lavaan}(
   object,
-  method = c("regression", "Bartlett", "ML", "EB"),
+  method = c("regression", "Bartlett", "ML", "EB", "mean"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
   reliability = FALSE,
   format = c("unified", "list"),
   prior_mean = NULL,
   prior_cov = NULL,
+  sum_items = NULL,
   ...
 )
 
 \method{get_fs}{merMod}(
   object,
-  method = c("EB"),
+  method = c("EB", "ML"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
   fsm = FALSE,
@@ -61,13 +63,28 @@ See \code{\link[lavaan]{model.syntax}} for more information.}
 analysis, which is passed to \code{\link[lavaan]{cfa}}.
 Only used when \code{object} is a data frame.}
 
-\item{method}{Character. Method for computing factor scores (options are
-"regression" or "Bartlett"; "ML" is an alias for "Bartlett"
-and "EB" is an alias for "regression"). Currently, the
-default is "regression" to be consistent with
-\code{\link[lavaan]{lavPredict}}, but the Bartlett scores
-have more desirable properties and may be preferred for
-2S-PA.}
+\item{method}{Character. Method for computing factor scores. For
+\code{lavaan} and data frame objects: \code{"regression"} (default,
+consistent with \code{\link[lavaan]{lavPredict}}),
+\code{"Bartlett"}, or \code{"mean"} (a third, distinct method: sum
+scores, each score being the plain uncentered mean of the
+items assigned to its factor, using no latent
+distribution), with \code{"ML"} an alias for \code{"Bartlett"} and
+\code{"EB"} an alias for \code{"regression"}. For \code{merMod} objects:
+\code{"EB"} (empirical Bayes, default; identical to
+\code{\link[lme4]{ranef}}()) or \code{"ML"} (a prior-free,
+per-cluster OLS estimate of the random effects, using no
+random-effects prior, analogous to Bartlett scores for
+\code{lavaan} objects). The \code{"ML"}/\code{"EB"} aliases apply to the
+lavaan path only; for \code{merMod} objects the two strings are
+distinct methods. Bartlett scores have more desirable
+properties than regression scores and may be preferred for
+2S-PA. \code{method = "mean"} takes the item-to-factor
+assignment from \code{sum_items} (auto-derived from the
+estimated loadings when \code{NULL}); it errors when the model
+was fitted with missing data retained (e.g. FIML/digamma),
+and is not supported together with \code{corrected_fsT},
+\code{vfsLT}, \code{reliability}, \code{prior_mean}, or \code{prior_cov}.}
 
 \item{corrected_fsT}{Logical. Whether to correct for the sampling
 error in the factor score weights when computing
@@ -110,6 +127,15 @@ for lavaan objects with regression (EB) scoring;
 sampling uncertainty from the prior itself is propagated.
 Conceptually similar to the \code{cov} argument of \code{mirt::fscores()}.}
 
+\item{sum_items}{A named list mapping each factor name to the item names
+that make up its sum score, e.g.
+\code{list(ind60 = c("x1", "x2", "x3"), dem60 = c("y1", "y2", "y3", "y4"))}. \code{NULL} (default) auto-derives the assignment from the
+estimated loadings, which requires each indicator to load on
+exactly one factor and every factor to have at least one item. A
+supplied list must cover all model factors, and each item may
+belong to only one sum. Only used for \code{lavaan} and data frame
+objects with \code{method = "mean"}.}
+
 \item{...}{additional arguments passed to \code{\link[lavaan]{cfa}}
 (when \code{object} is a data frame). See \code{\link[lavaan]{lavOptions}}
 for a complete list.}
@@ -139,14 +165,22 @@ For multi-group lavaan models in \code{"unified"} format, a \code{group} column
 is included. The following attributes are attached:
 * \code{fsT}: error covariance of factor scores (matrix or named list by group)
 * \code{fsL}: loading matrix of factor scores (matrix or named list by group)
-* \code{fsb}: intercepts of factor scores (vector or named list by group)
+* \code{fsb}: intercepts of factor scores (vector or named list by
+group); with \code{method = "mean"} the intercept is the mean of the
+factor's item intercepts, the measurement intercept of the score
+regressed on the uncentered latent (same \code{E[fs] - fsL \%*\% alpha}
+convention as the other methods; equals the score's column mean
+for models without a mean structure)
 * \code{scoring_matrix}: weights for computing factor scores from the
 observed data, as a named list. For lavaan models: one
-score x item matrix per group. For \code{merMod} models: one
-\code{num_re} x \code{n_j} matrix per cluster, where the cluster's EB
-scores are \code{S_j \%*\% (y_j - X_j \%*\% beta)} with \code{y_j}/\code{X_j} the
-cluster's rows of the model response and the fixed-effects
-design.
+score x item matrix per group; with \code{method = "mean"} the
+weights are the item-mean weights, so \code{S \%*\% y} reproduces the
+raw scores exactly (no centering offset). For \code{merMod} models:
+one \code{num_re} x \code{n_j} matrix per cluster, where
+\code{S_j \%*\% (y_j - X_j \%*\% beta)} with \code{y_j}/\code{X_j} the cluster's
+rows of the model response and the fixed-effects design
+reproduces the cluster's EB scores for method \code{"EB"} and the
+per-cluster OLS (ML) scores for method \code{"ML"}.
 }
 \description{
 \code{get_fs()} is an S3 generic that extracts factor scores from fitted models.

@@ -16,7 +16,10 @@ augment_lav_predict(
 \item{lavobj}{A fitted \code{\link[lavaan:lavaan-class]{lavaan::lavaan}} object}
 
 \item{method}{A character string indicating the scoring method to use.
-Must be either \code{"regression"} or \code{"Bartlett"}.}
+Must be either \code{"regression"} or \code{"Bartlett"}. This
+function wraps \code{\link[lavaan]{lavPredict}}() and
+intentionally does not support the \code{"mean"} (sum-score)
+method of \code{\link[=get_fs]{get_fs()}}.}
 
 \item{drop_list_single}{logical. Should the results be unlisted
 for single-group models?}

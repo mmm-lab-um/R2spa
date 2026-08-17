@@ -18,7 +18,8 @@ get_fs_lmer(
 \arguments{
 \item{object}{A fitted model object of class \link[lme4:lmerMod-class]{lme4::lmerMod}.}
 
-\item{method}{Currently only \code{"EB"} for empirical Bayes.}
+\item{method}{\code{"EB"} (empirical Bayes, default) or \code{"ML"} (prior-free
+per-cluster OLS), forwarded to \code{\link[=get_fs.merMod]{get_fs.merMod()}}.}
 
 \item{corrected_fsT}{Currently not used.}
 

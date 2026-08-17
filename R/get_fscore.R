@@ -22,13 +22,28 @@
 #' @param group Character. Name of the grouping variable for multiple group
 #'              analysis, which is passed to \code{\link[lavaan]{cfa}}.
 #'              Only used when `object` is a data frame.
-#' @param method Character. Method for computing factor scores (options are
-#'               "regression" or "Bartlett"; "ML" is an alias for "Bartlett"
-#'               and "EB" is an alias for "regression"). Currently, the
-#'               default is "regression" to be consistent with
-#'               \code{\link[lavaan]{lavPredict}}, but the Bartlett scores
-#'               have more desirable properties and may be preferred for
-#'               2S-PA.
+#' @param method Character. Method for computing factor scores. For
+#'               `lavaan` and data frame objects: `"regression"` (default,
+#'               consistent with \code{\link[lavaan]{lavPredict}}),
+#'               `"Bartlett"`, or `"mean"` (a third, distinct method: sum
+#'               scores, each score being the plain uncentered mean of the
+#'               items assigned to its factor, using no latent
+#'               distribution), with `"ML"` an alias for `"Bartlett"` and
+#'               `"EB"` an alias for `"regression"`. For `merMod` objects:
+#'               `"EB"` (empirical Bayes, default; identical to
+#'               \code{\link[lme4]{ranef}}()) or `"ML"` (a prior-free,
+#'               per-cluster OLS estimate of the random effects, using no
+#'               random-effects prior, analogous to Bartlett scores for
+#'               `lavaan` objects). The `"ML"`/`"EB"` aliases apply to the
+#'               lavaan path only; for `merMod` objects the two strings are
+#'               distinct methods. Bartlett scores have more desirable
+#'               properties than regression scores and may be preferred for
+#'               2S-PA. `method = "mean"` takes the item-to-factor
+#'               assignment from `sum_items` (auto-derived from the
+#'               estimated loadings when `NULL`); it errors when the model
+#'               was fitted with missing data retained (e.g. FIML/digamma),
+#'               and is not supported together with `corrected_fsT`,
+#'               `vfsLT`, `reliability`, `prior_mean`, or `prior_cov`.
 #' @param corrected_fsT Logical. Whether to correct for the sampling
 #'                      error in the factor score weights when computing
 #'                      the error variance estimates of factor scores.
@@ -58,6 +73,15 @@
 #'        `vfsLT = TRUE` the supplied covariance is treated as fixed, i.e. no
 #'        sampling uncertainty from the prior itself is propagated.
 #'        Conceptually similar to the `cov` argument of `mirt::fscores()`.
+#' @param sum_items A named list mapping each factor name to the item names
+#'        that make up its sum score, e.g.
+#'        `list(ind60 = c("x1", "x2", "x3"), dem60 = c("y1", "y2", "y3",
+#'        "y4"))`. `NULL` (default) auto-derives the assignment from the
+#'        estimated loadings, which requires each indicator to load on
+#'        exactly one factor and every factor to have at least one item. A
+#'        supplied list must cover all model factors, and each item may
+#'        belong to only one sum. Only used for `lavaan` and data frame
+#'        objects with `method = "mean"`.
 #' @param format Output format when `object` is a lavaan or merMod object.
 #'        `"unified"` (default) returns a single data frame with a `group` column;
 #'        for multiple groups, attributes `fsT`, `fsL`, `fsb`, and `scoring_matrix`
@@ -75,14 +99,22 @@
 #'         is included. The following attributes are attached:
 #'         * `fsT`: error covariance of factor scores (matrix or named list by group)
 #'         * `fsL`: loading matrix of factor scores (matrix or named list by group)
-#'         * `fsb`: intercepts of factor scores (vector or named list by group)
+#'         * `fsb`: intercepts of factor scores (vector or named list by
+#'           group); with `method = "mean"` the intercept is the mean of the
+#'           factor's item intercepts, the measurement intercept of the score
+#'           regressed on the uncentered latent (same `E[fs] - fsL %*% alpha`
+#'           convention as the other methods; equals the score's column mean
+#'           for models without a mean structure)
 #'         * `scoring_matrix`: weights for computing factor scores from the
 #'           observed data, as a named list. For lavaan models: one
-#'           score x item matrix per group. For `merMod` models: one
-#'           `num_re` x `n_j` matrix per cluster, where the cluster's EB
-#'           scores are `S_j %*% (y_j - X_j %*% beta)` with `y_j`/`X_j` the
-#'           cluster's rows of the model response and the fixed-effects
-#'           design.
+#'           score x item matrix per group; with `method = "mean"` the
+#'           weights are the item-mean weights, so `S %*% y` reproduces the
+#'           raw scores exactly (no centering offset). For `merMod` models:
+#'           one `num_re` x `n_j` matrix per cluster, where
+#'           `S_j %*% (y_j - X_j %*% beta)` with `y_j`/`X_j` the cluster's
+#'           rows of the model response and the fixed-effects design
+#'           reproduces the cluster's EB scores for method `"EB"` and the
+#'           per-cluster OLS (ML) scores for method `"ML"`.
 #' @importFrom lavaan cfa sem
 #' @importFrom lavaan lavInspect lavTech coef
 #' @importFrom lavaan vcov
@@ -131,12 +163,13 @@ get_fs <- function(object, ...) {
 #' @export
 get_fs_lavaan <- function(
   lavobj,
-  method = c("regression", "Bartlett", "ML", "EB"),
+  method = c("regression", "Bartlett", "ML", "EB", "mean"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
   reliability = FALSE,
   prior_mean = NULL,
   prior_cov = NULL,
+  sum_items = NULL,
   ...
 ) {
   get_fs(
@@ -148,6 +181,7 @@ get_fs_lavaan <- function(
     format = "list",
     prior_mean = prior_mean,
     prior_cov = prior_cov,
+    sum_items = sum_items,
     ...
   )
 }
@@ -478,7 +512,8 @@ assemble_fs_blocks <- function(
 #' call [get_fs()] directly.
 #'
 #' @param object A fitted model object of class [lme4::lmerMod-class].
-#' @param method Currently only `"EB"` for empirical Bayes.
+#' @param method `"EB"` (empirical Bayes, default) or `"ML"` (prior-free
+#'        per-cluster OLS), forwarded to [get_fs.merMod()].
 #' @param corrected_fsT Currently not used.
 #' @param vfsLT Currently not used.
 #' @param fsm Currently not used.
@@ -506,6 +541,7 @@ get_fs_lmer <- function(
 ) {
   get_fs(
     object,
+    method = method,
     format = "list",
     legacy_names = legacy_names,
     ...

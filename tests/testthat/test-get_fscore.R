@@ -570,6 +570,326 @@ test_that("get_fs.merMod() is robust to non-monotonic numeric cluster ids", {
   expect_equal(as.numeric(fs[[score_col]]), as.numeric(rn[[1]]),
                tolerance = 1e-10)
 })
+
+########## merMod: method = "ML" (prior-free per-cluster OLS) ##########
+
+# Plain numeric vector for row i of the score columns of an fs data frame
+# (one row per cluster, in canonical factor-level order). unname() avoids
+# attribute mismatches in expect_equal().
+row_numeric <- function(df, cols, i) {
+  unname(as.numeric(as.matrix(df[cols][i, , drop = FALSE])))
+}
+
+test_that(
+  "get_fs.merMod(method = 'ML') scores equal per-cluster OLS of adjusted residuals",
+  {
+    lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+    fs_ml <- get_fs(lme1, method = "ML")
+    mf <- model.frame(lme1)
+    y <- model.response(mf)
+    Xfull <- as.matrix(lme4::getME(lme1, "X"))
+    beta <- fixef(lme1)
+    Zmat <- as.matrix(lme4::getME(lme1, "Z"))
+    flist <- lme1@flist[[1]]
+    case_idx <- split(seq_len(nrow(mf)), flist)
+    for (j in seq_along(case_idx)) {
+      idx <- case_idx[[j]]
+      zj <- Zmat[idx, (j - 1L) * 2L + 1:2, drop = FALSE]
+      colnames(zj) <- c("u0", "u1")
+      rj <- y[idx] - as.numeric(Xfull[idx, , drop = FALSE] %*% beta)
+      # two independent references: the hand ginv formula and lm()
+      ref_ginv <- unname(drop(MASS::ginv(crossprod(zj)) %*% crossprod(zj, rj)))
+      ref_lm <- unname(drop(coef(lm(
+        rj ~ . - 1,
+        data = data.frame(rj = rj, as.data.frame(zj))
+      ))))
+      expect_equal(ref_ginv, ref_lm, tolerance = 1e-10)
+      # rows of fs_ml are in canonical factor-level order
+      expect_equal(
+        row_numeric(fs_ml, c("fs_u0", "fs_u1"), j),
+        ref_ginv,
+        tolerance = 1e-10
+      )
+    }
+  }
+)
+
+test_that("get_fs.merMod(method = 'ML') scores differ from EB/ranef scores", {
+  lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+  fs_ml <- get_fs(lme1, method = "ML")
+  # lme4 2.x returns ranef() per term as a data frame, hence as.matrix()
+  ran <- as.matrix(ranef(lme1)[[1]])
+  expect_false(isTRUE(all.equal(
+    as.numeric(as.matrix(fs_ml[c("fs_u0", "fs_u1")])),
+    as.numeric(ran),
+    tolerance = 1e-6
+  )))
+})
+
+test_that(
+  "get_fs.merMod(method = 'ML') single-RE scores equal cluster means of adjusted residuals",
+  {
+    lme_s <- lmer(Reaction ~ Days + (1 | Subject), sleepstudy)
+    fs_ml <- get_fs(lme_s, method = "ML")
+    mf <- model.frame(lme_s)
+    y <- model.response(mf)
+    Xfull <- as.matrix(lme4::getME(lme_s, "X"))
+    beta <- fixef(lme_s)
+    flist <- lme_s@flist[[1]]
+    case_idx <- split(seq_len(nrow(mf)), flist)
+    for (j in seq_along(case_idx)) {
+      idx <- case_idx[[j]]
+      rj <- y[idx] - as.numeric(Xfull[idx, , drop = FALSE] %*% beta)
+      expect_equal(
+        as.numeric(fs_ml[["fs_u0"]][j]),
+        mean(rj),
+        tolerance = 1e-12
+      )
+    }
+  }
+)
+
+test_that(
+  "get_fs.merMod(method = 'ML') fsL is identity and fsT = sigma^2 * solve(Z'Z)",
+  {
+    lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+    fs_ml <- get_fs(lme1, method = "ML")
+    fsL_arr <- attr(fs_ml, "fsL")
+    fsT_arr <- attr(fs_ml, "fsT")
+    expect_equal(dim(fsL_arr), c(2L, 2L, 18L))
+    expect_equal(dim(fsT_arr), c(2L, 2L, 18L))
+    expect_equal(dimnames(fsL_arr)[[1]], c("fs_u0", "fs_u1"))
+    expect_equal(dimnames(fsL_arr)[[2]], c("u0", "u1"))
+    expect_equal(dimnames(fsT_arr)[[1]], c("fs_u0", "fs_u1"))
+    flist <- lme1@flist[[1]]
+    expect_equal(dimnames(fsL_arr)[[3]], levels(flist))
+    expect_equal(dimnames(fsT_arr)[[3]], levels(flist))
+    Zmat <- as.matrix(lme4::getME(lme1, "Z"))
+    s <- stats::sigma(lme1)
+    case_idx <- split(seq_len(nrow(model.frame(lme1))), flist)
+    for (j in seq_along(case_idx)) {
+      zj <- Zmat[case_idx[[j]], (j - 1L) * 2L + 1:2, drop = FALSE]
+      Kz <- crossprod(zj)
+      # sleepstudy clusters are all full-rank, so solve() is a valid reference
+      expect_equal(qr(Kz)$rank, 2)
+      expect_equal(
+        unname(fsL_arr[,,j]),
+        diag(2),
+        tolerance = 1e-12
+      )
+      expect_equal(
+        unname(fsT_arr[,,j]),
+        unname(s^2 * solve(Kz)),
+        tolerance = 1e-12
+      )
+    }
+  }
+)
+
+test_that("merMod scoring_matrix reproduces ML scores (score identity)", {
+  lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+  fs_ml <- get_fs(lme1, method = "ML")
+  sm <- attr(fs_ml, "scoring_matrix")
+  flist <- lme1@flist[[1]]
+  expect_named(sm, as.character(levels(flist)))
+  expect_length(sm, 18)
+  mf <- model.frame(lme1)
+  y <- model.response(mf)
+  Xfull <- as.matrix(lme4::getME(lme1, "X"))
+  beta <- fixef(lme1)
+  case_idx <- split(seq_len(nrow(mf)), flist)
+  for (j in seq_along(case_idx)) {
+    lv <- levels(flist)[j]
+    idx <- case_idx[[j]]
+    m <- sm[[lv]]
+    expect_equal(dim(m), c(2L, length(idx)))
+    expect_equal(rownames(m), c("fs_u0", "fs_u1"))
+    expect_equal(colnames(m), as.character(seq_len(length(idx))))
+    rec <- t(m %*% (y[idx] - as.numeric(Xfull[idx, , drop = FALSE] %*% beta)))
+    expect_equal(
+      as.numeric(rec),
+      row_numeric(fs_ml, c("fs_u0", "fs_u1"), j),
+      tolerance = 1e-10
+    )
+  }
+})
+
+test_that(
+  "get_fs.merMod(method = 'ML') _se columns are sqrt of per-cluster fsT diagonals",
+  {
+    lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+    fs_ml <- get_fs(lme1, method = "ML")
+    fsT_arr <- attr(fs_ml, "fsT")
+    for (i in seq_len(nrow(fs_ml))) {
+      expect_equal(
+        as.numeric(fs_ml[i, "fs_u0_se"]),
+        sqrt(fsT_arr[1, 1, i]),
+        tolerance = 1e-12
+      )
+      expect_equal(
+        as.numeric(fs_ml[i, "fs_u1_se"]),
+        sqrt(fsT_arr[2, 2, i]),
+        tolerance = 1e-12
+      )
+    }
+  }
+)
+
+test_that("get_fs.merMod(method = 'ML') keeps the exact EB column layout", {
+  lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+  fs_eb <- get_fs(lme1)
+  fs_eb_leg <- get_fs(lme1, legacy_names = TRUE)
+  fs_ml <- get_fs(lme1, method = "ML")
+  fs_ml_leg <- get_fs(lme1, method = "ML", legacy_names = TRUE)
+  expect_identical(colnames(fs_ml), colnames(fs_eb))
+  expect_identical(colnames(fs_ml_leg), colnames(fs_eb_leg))
+  # and explicitly, the same vectors asserted for the EB defaults above
+  expect_equal(
+    colnames(fs_ml),
+    c("fs_u0", "fs_u1",
+      "fs_u0_se", "fs_u1_se",
+      "u0_by_fs_u0", "u0_by_fs_u1", "u1_by_fs_u0", "u1_by_fs_u1",
+      "ev_fs_u0", "ecov_fs_u1_fs_u0", "ev_fs_u1")
+  )
+  expect_equal(
+    colnames(fs_ml_leg),
+    c("u0_eb", "u1_eb",
+      "u0_eb_se", "u1_eb_se",
+      "u0_by_u0_eb", "u0_by_u1_eb", "u1_by_u0_eb", "u1_by_u1_eb",
+      "ev_u0_eb", "ecov_u0_eb_u1_eb", "ev_u1_eb")
+  )
+})
+
+test_that("get_fs.merMod(method = 'ML') works on a single-RE model (p = 1 shapes)", {
+  lme_s <- lmer(Reaction ~ Days + (1 | Subject), sleepstudy)
+  fs_ml <- get_fs(lme_s, method = "ML")
+  expect_length(fs_ml, 4)
+  expect_identical(colnames(fs_ml), colnames(get_fs(lme_s)))
+  expect_equal(dim(attr(fs_ml, "fsL")), c(1L, 1L, 18L))
+  expect_equal(dim(attr(fs_ml, "fsT")), c(1L, 1L, 18L))
+  sm <- attr(fs_ml, "scoring_matrix")
+  expect_length(sm, 18)
+  for (m in sm) {
+    expect_equal(dim(m), c(1L, 10L))
+    expect_equal(rownames(m), "fs_u0")
+  }
+  # se = sigma / sqrt(n_j) per row
+  flist <- lme_s@flist[[1]]
+  case_idx <- split(seq_len(nrow(model.frame(lme_s))), flist)
+  n_j <- unname(vapply(case_idx, length, integer(1)))
+  expect_equal(
+    as.numeric(fs_ml[["fs_u0_se"]]),
+    stats::sigma(lme_s) / sqrt(n_j),
+    tolerance = 1e-12
+  )
+})
+
+test_that("get_fs.merMod(method = 'ML') works with unbalanced clusters", {
+  # drop one row from each of two different subjects: 9 vs 10 obs/cluster
+  ss <- sleepstudy[-c(1, 111), ]
+  lmu <- lmer(Reaction ~ Days + (Days | Subject), ss)
+  fs_ml <- get_fs(lmu, method = "ML")
+  mf <- model.frame(lmu)
+  y <- model.response(mf)
+  Xfull <- as.matrix(lme4::getME(lmu, "X"))
+  beta <- fixef(lmu)
+  Zmat <- as.matrix(lme4::getME(lmu, "Z"))
+  flist <- lmu@flist[[1]]
+  case_idx <- split(seq_len(nrow(mf)), flist)
+  sizes <- vapply(case_idx, length, integer(1))
+  expect_setequal(unique(sizes), c(9L, 10L))
+  for (j in seq_along(case_idx)) {
+    idx <- case_idx[[j]]
+    zj <- Zmat[idx, (j - 1L) * 2L + 1:2, drop = FALSE]
+    rj <- y[idx] - as.numeric(Xfull[idx, , drop = FALSE] %*% beta)
+    ref <- unname(drop(MASS::ginv(crossprod(zj)) %*% crossprod(zj, rj)))
+    expect_equal(
+      row_numeric(fs_ml, c("fs_u0", "fs_u1"), j),
+      ref,
+      tolerance = 1e-10
+    )
+  }
+})
+
+test_that("merMod rejects lavaan-style 'regression'/'Bartlett' method names", {
+  lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+  expect_error(get_fs(lme1, method = "regression"), "should be one of")
+  expect_error(get_fs(lme1, method = "Bartlett"), "should be one of")
+})
+
+test_that("get_fs_lmer() forwards method to get_fs()", {
+  lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+  fs_ml <- get_fs(lme1, method = "ML")
+  # regression test for the forwarding fix: previously method was silently dropped
+  fs_lmer_ml <- get_fs_lmer(lme1, method = "ML")
+  expect_equal(colnames(fs_lmer_ml)[1:2], c("u0_eb", "u1_eb"))
+  expect_equal(
+    as.numeric(as.matrix(fs_lmer_ml[, 1:2])),
+    as.numeric(as.matrix(fs_ml[, 1:2])),
+    tolerance = 0
+  )
+  # default is unchanged: still the ranef EB scores
+  expect_equal(
+    as.data.frame(get_fs_lmer(lme1)[, 1:2]),
+    ranef(lme1)[[1]],
+    ignore_attr = TRUE
+  )
+  # legacy names + ML: u0_eb-style columns carrying the ML values
+  fs_leg <- get_fs_lmer(lme1, legacy_names = TRUE, method = "ML")
+  expect_equal(
+    colnames(fs_leg),
+    c("u0_eb", "u1_eb",
+      "u0_eb_se", "u1_eb_se",
+      "u0_by_u0_eb", "u0_by_u1_eb", "u1_by_u0_eb", "u1_by_u1_eb",
+      "ev_u0_eb", "ecov_u0_eb_u1_eb", "ev_u1_eb")
+  )
+  expect_equal(
+    as.numeric(as.matrix(fs_leg[, 1:2])),
+    as.numeric(as.matrix(fs_ml[, 1:2])),
+    tolerance = 0
+  )
+})
+
+test_that(
+  "get_fs.merMod(method = 'ML') handles rank-deficient Z blocks (ginv, minimum norm)",
+  {
+    # random-slope predictor constant within each cluster, so every
+    # cluster's z block cbind(1, const_j) is rank 1 < 2 and (Z'Z)^+ is not
+    # an inverse
+    set.seed(1234)
+    d <- data.frame(cl = gl(4, 6, labels = paste0("cl", 1:4)))
+    d$x <- c(1, 2, 3, 5)[as.numeric(d$cl)]
+    d$y <- c(10, 20, 30, 40)[as.numeric(d$cl)] + rnorm(24, sd = 3)
+    # the random variance is estimated on the boundary for this design
+    # (4 between-cluster contrasts for 2 random coefficients), so the fit
+    # notes "boundary (singular) fit"
+    fit <- suppressMessages(lmer(y ~ 1 + (x | cl), d))
+    fs_ml <- get_fs(fit, method = "ML")
+    expect_true(all(is.finite(as.matrix(fs_ml[, 1:2]))))
+    Zmat <- as.matrix(lme4::getME(fit, "Z"))
+    mf <- model.frame(fit)
+    y <- model.response(mf)
+    Xfull <- as.matrix(lme4::getME(fit, "X"))
+    beta <- fixef(fit)
+    flist <- fit@flist[[1]]
+    case_idx <- split(seq_len(nrow(mf)), flist)
+    for (j in seq_along(case_idx)) {
+      idx <- case_idx[[j]]
+      zj <- Zmat[idx, (j - 1L) * 2L + 1:2, drop = FALSE]
+      # rank-deficient by construction
+      expect_equal(qr(crossprod(zj))$rank, 1)
+      rj <- y[idx] - as.numeric(Xfull[idx, , drop = FALSE] %*% beta)
+      # ginv reference (minimum-norm solution) -- deliberately not solve()
+      ref <- unname(drop(MASS::ginv(crossprod(zj)) %*% crossprod(zj, rj)))
+      expect_equal(
+        row_numeric(fs_ml, c("fs_u0", "fs_u1"), j),
+        ref,
+        tolerance = 1e-10
+      )
+    }
+  }
+)
+
 ########## Computing reliability ##########
 
 test_that("Reliability of regression factor scores", {

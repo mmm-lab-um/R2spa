@@ -175,6 +175,12 @@ max(abs(fs_hand1 - as.matrix(ranef(lme1)[[1]])))
 Both the `get_fs()` output and `lme4::ranef()` are recovered to
 machine precision.
 
+Under `method = "ML"` the same per-cluster identity holds with
+prior-free OLS weights `S_j = (Z_j' Z_j)^+ Z_j'` (no random-effects
+prior enters `S_j`), so the reconstructed scores are the per-cluster
+OLS (ML) estimates of the random effects rather than the EB estimates
+shown here.
+
 ### Notes
 
 - Only the **first random-effect term** is scored (`[[1]]` convention,
