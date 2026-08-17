@@ -98,7 +98,7 @@ get_fs_mat_names <- function(lv_names, int = TRUE) {
 #'         error variance-covariance matrix of the factor scores,
 #'         and the measurement intercepts.
 #'         In addition, three character matrices are added as attributes
-#'         that can be used as input to [tspa_mx_model()]:
+#'         that can be used as input to `tspa_mx_model()`:
 #' * `ld`: cross-loading matrix
 #' * `ev`: error variance-covariance matrix
 #' * `int`: measurement intercepts

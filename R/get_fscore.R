@@ -33,9 +33,9 @@
 #'                      error in the factor score weights when computing
 #'                      the error variance estimates of factor scores.
 #' @param vfsLT Logical. Whether to return the covariance matrix of `fsT`
-#'              and `fsL`, which can be used as input for [vcov_corrected()]
-#'              to obtain corrected covariances and standard errors for
-#'              [tspa()] results. This is currently ignored.
+#'              and `fsL`, returned as attribute `vfsLT`; used for
+#'              second-order SE correction of 2S-PA results. Currently
+#'              ignored for `merMod` objects.
 #' @param reliability Logical. Whether to return the reliability of factor
 #'                    scores. Available only for single-factor lavaan models.
 #' @param prior_mean An optional numeric vector of length `q` (the number of
@@ -85,6 +85,7 @@
 #'           design.
 #' @importFrom lavaan cfa sem
 #' @importFrom lavaan lavInspect lavTech coef
+#' @importFrom lavaan vcov
 #' @importFrom stats setNames
 #'
 #' @export

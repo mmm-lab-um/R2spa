@@ -19,3 +19,4 @@
 ^STATUS\.md$
 ^dependency_analysis\.md$
 ^_PLAN_.*\.md$
+^\.quarantine$

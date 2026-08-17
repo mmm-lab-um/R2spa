@@ -9,37 +9,15 @@ export(block_diag)
 export(compute_fscore)
 export(fs_to_group_list)
 export(get_fs)
-export(get_fs_int)
 export(get_fs_lavaan)
 export(get_fs_lmer)
-export(grandStandardizedSolution)
-export(grand_standardized_solution)
 export(tspa)
-export(tspa_mx_model)
-export(vcov_corrected)
-importFrom(OpenMx,
-  mxAlgebraFromString,
-  mxData,
-  mxExpectationNormal,
-  mxFitFunctionML,
-  mxMatrix,
-  mxModel
-)
 importFrom(lavaan,
   cfa,
   coef,
   lavInspect,
   lavTech,
-  lav_func_jacobian_complex,
   sem,
   vcov
 )
-importFrom(stats,
-  pnorm,
-  qnorm,
-  setNames
-)
-importFrom(utils,
-  combn,
-  tail
-)
+importFrom(stats,setNames)

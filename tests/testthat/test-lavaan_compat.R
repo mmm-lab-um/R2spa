@@ -104,22 +104,6 @@ test_that("tsp_nobs / tsp_ngroups / tsp_norig match slots and lavInspect", {
   }
 })
 
-test_that("grand_standardized_solution output is unchanged by the wrapper", {
-  # Single-group: must match lavaan::standardizedSolution() as before.
-  got <- suppressMessages(grandStandardizedSolution(canon_fit))
-  lav <- subset(standardizedSolution(canon_fit), op == "~")
-  expect_equal(got$est.std, lav$est.std)
-  expect_equal(got$se, lav$se, tolerance = 1e-7)
-  # The returned frame keeps its historical columns (incl. `exo`).
-  expect_true(all(c("lhs", "op", "rhs", "exo", "group", "block", "label",
-                    "est.std", "se") %in% names(got)))
-  # Multigroup path runs through the wrappers and stays finite; the MG
-  # hand-calculation A/B lives in test-grandStandardizedSolution.R.
-  mg <- grandStandardizedSolution(mg_fit)
-  expect_true(all(is.finite(mg$est.std)))
-  expect_true(all(is.finite(mg$se)))
-})
-
 ## Layout probing ------------------------------------------------------------
 
 test_that("tsp_resolve_layout errors loudly on an unknown layout", {

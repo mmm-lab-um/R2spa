@@ -319,90 +319,7 @@ test_that("tspa() attributes are intact and complete", {
   )
 })
 
-test_that("tspa_call stays re-callable and vcov_corrected() runs on an MG fit", {
-  fs_v <- get_fs(HolzingerSwineford1939, model = mod2g, std.lv = TRUE,
-                 group = "school", vfsLT = TRUE, format = "list")
-  # vcov_corrected() re-evaluates the recorded tspa() call, so the referenced
-  # objects must live in globalenv during the test (mirroring vignette-style
-  # top-level usage).
-  gobjs <- list(fs_dat_v = do.call(rbind, fs_v),
-                fsL_v = attr(fs_v, "fsL"),
-                fsT_v = attr(fs_v, "fsT"))
-  for (nm in names(gobjs)) {
-    assign(nm, gobjs[[nm]], envir = globalenv())
-  }
-  on.exit(for (nm in names(gobjs)) rm(list = nm, envir = globalenv()),
-          add = TRUE)
-  fit <- tspa("visual ~ speed", data = fs_dat_v, fsT = fsT_v, fsL = fsL_v,
-              group = "school")
-  vc <- vcov_corrected(fit, vfsLT = attr(fs_v, "vfsLT"))
-  expect_s3_class(vc, "matrix")
-  expect_equal(dim(vc), dim(vcov(fit)))
-  expect_true(all(is.finite(vc)))
-  expect_equal(vc, t(vc), tolerance = 1e-10)
-  expect_true(all(diag(vc) > 0))
-})
-
 ## Interaction (product-score) auto-alias ---------------------------------------
-
-int_setup <- function(n = 500) {
-  set.seed(2116)
-  cov_xmz_ey <- matrix(c(1, 0.1, 0.15, 0,
-                         0.1, 1, 0.12, 0,
-                         0.15, 0.12, 1, 0,
-                         0, 0, 0, 0.481351), nrow = 4)
-  eta <- as.data.frame(MASS::mvrnorm(n, mu = rep(0, 4),
-                                     Sigma = cov_xmz_ey))
-  names(eta) <- c("x", "m", "z", "ey")
-  eta <- transform(eta, xm = x * m, xz = x * z, mz = m * z)
-  etay <- 0.3 * eta$x + 0.4 * eta$m + 0.2 * eta$z +
-    0.1 * eta$xm + 0.15 * eta$xz + 0.12 * eta$mz + eta$ey
-  lk <- list(x = c(0.9, 0.8, 0.7), m = c(0.85, 0.75, 0.65),
-             z = c(0.8, 0.7, 0.6), y = c(0.75, 0.7, 0.65))
-  obs <- setNames(lapply(c("x", "m", "z"), function(v0) {
-    eta[[v0]] %*% t(lk[[v0]]) + rnorm(n * 3)
-  }), c("x", "m", "z"))
-  obs$y <- etay %*% t(lk$y) + rnorm(n * 3)
-  df <- as.data.frame(do.call(cbind, obs[c("x", "m", "z", "y")]))
-  names(df) <- c(paste0("x", 1:3), paste0("m", 1:3), paste0("z", 1:3),
-                 paste0("y", 1:3))
-  fs_dat <- get_fs(df, model = "x =~ x1 + x2 + x3
-                                 m =~ m1 + m2 + m3
-                                 z =~ z1 + z2 + z3
-                                 y =~ y1 + y2 + y3",
-                   std.lv = TRUE, method = "Bartlett")
-  ind <- get_fs_int(dat = fs_dat,
-                    fs_name = c("fs_x", "fs_m", "fs_z"),
-                    se_fs = c("fs_x_se", "fs_m_se", "fs_z_se"),
-                    loading_fs = c("x_by_fs_x", "m_by_fs_m", "z_by_fs_z"))
-  list(ind = ind,
-       se = c(y = ind[1, "fs_y_se"], x = ind[1, "fs_x_se"],
-              m = ind[1, "fs_m_se"], z = ind[1, "fs_z_se"],
-              xm = ind[1, "fs_x:fs_m_se"], xz = ind[1, "fs_x:fs_z_se"],
-              mz = ind[1, "fs_m:fs_z_se"]))
-}
-
-test_that("Product-score columns are auto-aliased (no manual rename needed)", {
-  setup <- int_setup()
-  m <- "y ~ x + m + z + xm + xz + mz"
-  fit_new <- tspa(m, data = setup$ind, se_fs = setup$se)
-  # the manual-rename workaround must give a bit-identical result
-  ind_old <- setup$ind
-  ind_old$fs_xm <- ind_old[["fs_x:fs_m"]]
-  ind_old$fs_xz <- ind_old[["fs_x:fs_z"]]
-  ind_old$fs_mz <- ind_old[["fs_m:fs_z"]]
-  fit_old <- tspa(m, data = ind_old, se_fs = setup$se)
-  expect_identical(attr(fit_new, "tspaModel"), attr(fit_old, "tspaModel"))
-  expect_identical(coef(fit_new), coef(fit_old))
-  expect_identical(vcov(fit_new), vcov(fit_old))
-  # the generated model names (not the `:`-separated data columns) are used
-  # in the rendered model
-  m0 <- attr(fit_new, "tspaModel")
-  expect_match(m0, "fs_xm~~", fixed = TRUE)
-  expect_match(m0, "fs_xz~~", fixed = TRUE)
-  expect_match(m0, "fs_mz~~", fixed = TRUE)
-  expect_no_match(m0, "fs_x:fs_m", fixed = TRUE)
-})
 
 test_that("Ambiguous product-score candidates are a clear error", {
   amb <- data.frame(fs_a = rnorm(50), fs_b = rnorm(50), fs_c = rnorm(50),
@@ -414,14 +331,4 @@ test_that("Ambiguous product-score candidates are a clear error", {
     tspa("y ~ abc", data = amb, se_fs = se_amb),
     "Cannot determine which product-score column"
   )
-})
-
-test_that("tspa_sf_alias is a no-op when the score column already exists", {
-  setup <- int_setup()
-  ind_renamed <- setup$ind
-  ind_renamed$fs_xm <- ind_renamed[["fs_x:fs_m"]]
-  out <- tspa_sf_alias(ind_renamed,
-                       data.frame(xm = 0.1, x = 0.2, m = 0.3))
-  expect_identical(out$data, ind_renamed)
-  expect_length(out$aliases, 0)
 })

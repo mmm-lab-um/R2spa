@@ -30,7 +30,7 @@ scores as indicators of the latent variables, the
 error variance-covariance matrix of the factor scores,
 and the measurement intercepts.
 In addition, three character matrices are added as attributes
-that can be used as input to \code{\link[=tspa_mx_model]{tspa_mx_model()}}:
+that can be used as input to \code{tspa_mx_model()}:
 \itemize{
 \item \code{ld}: cross-loading matrix
 \item \code{ev}: error variance-covariance matrix

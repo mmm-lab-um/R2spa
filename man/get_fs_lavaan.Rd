@@ -31,9 +31,9 @@ error in the factor score weights when computing
 the error variance estimates of factor scores.}
 
 \item{vfsLT}{Logical. Whether to return the covariance matrix of \code{fsT}
-and \code{fsL}, which can be used as input for \code{\link[=vcov_corrected]{vcov_corrected()}}
-to obtain corrected covariances and standard errors for
-\code{\link[=tspa]{tspa()}} results. This is currently ignored.}
+and \code{fsL}, returned as attribute \code{vfsLT}; used for
+second-order SE correction of 2S-PA results. Currently
+ignored for \code{merMod} objects.}
 
 \item{reliability}{Logical. Whether to return the reliability of factor
 scores. Available only for single-factor lavaan models.}

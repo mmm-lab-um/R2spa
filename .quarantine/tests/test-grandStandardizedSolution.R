@@ -196,3 +196,35 @@ test_that("Standardized beta in a model with multiple groups, three factors", {
 test_that("SE of standardized beta in a model with multiple groups, three factors", {
   expect_equal(m3_std_se_h, m3_std_beta$se, ignore_attr = TRUE)
 })
+
+# Quarantined with R/grandStandardizedSolution.R (see _PLAN_QUARANTINE.md).
+# Extracted from tests/testthat/test-lavaan_compat.R: the wrapper A/B test for
+# grandStandardizedSolution (lines 107-121 as of 2026-08-17) plus its setup
+# (lines 9-18: canon_mod/canon_fit, mg_mod/mg_fit).
+
+canon_mod <- "ind60 =~ x1 + x2 + x3
+              dem60 =~ y1 + y2 + y3 + y4
+              dem60 ~ ind60"
+canon_fit <- sem(canon_mod, data = PoliticalDemocracy, std.lv = TRUE)
+
+mg_mod <- "visual =~ x1 + x2 + x3
+           speed =~ x7 + x8 + x9
+           visual ~ speed"
+mg_fit <- sem(mg_mod, data = HolzingerSwineford1939, group = "school",
+              std.lv = TRUE)
+
+test_that("grand_standardized_solution output is unchanged by the wrapper", {
+  # Single-group: must match lavaan::standardizedSolution() as before.
+  got <- suppressMessages(grandStandardizedSolution(canon_fit))
+  lav <- subset(standardizedSolution(canon_fit), op == "~")
+  expect_equal(got$est.std, lav$est.std)
+  expect_equal(got$se, lav$se, tolerance = 1e-7)
+  # The returned frame keeps its historical columns (incl. `exo`).
+  expect_true(all(c("lhs", "op", "rhs", "exo", "group", "block", "label",
+                    "est.std", "se") %in% names(got)))
+  # Multigroup path runs through the wrappers and stays finite; the MG
+  # hand-calculation A/B lives in test-grandStandardizedSolution.R.
+  mg <- grandStandardizedSolution(mg_fit)
+  expect_true(all(is.finite(mg$est.std)))
+  expect_true(all(is.finite(mg$se)))
+})

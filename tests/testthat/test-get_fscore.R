@@ -671,30 +671,3 @@ test_that("augment_lav_predict() works for missing data",
                  ignore_attr = TRUE)
   }
 )
-
-if (requireNamespace("umx", quietly = TRUE)) {
-  lcov_umx <- umxLav2RAM(
-  "
-    visual ~~ textual + speed
-    textual ~~ speed
-    visual + textual + speed ~ 1
-  ",
-  printTab = FALSE
-)
-tspab_mx <- tspa_mx_model(lcov_umx,
-  data = a2,
-  mat_ld = attr(a2, which = "ld"),
-  mat_ev = attr(a2, which = "ev")
-)
-# Run OpenMx
-tspab_mx_fit <- mxRun(tspab_mx)
-
-test_that("tspa_mx() gives similar results as lavaan with missing data",
-  code = {
-    expect_equal(tspab_mx_fit$m1$S$values,
-                 expected = lavInspect(cfa_fiml, what = "est")$psi,
-                 tolerance = 1e-5,
-                 ignore_attr = TRUE)
-  }
-)
-}

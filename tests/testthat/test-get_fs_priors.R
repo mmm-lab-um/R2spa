@@ -172,38 +172,6 @@ test_that("vfsLT = TRUE uses prior_cov", {
                ignore_attr = TRUE)
 })
 
-test_that("vcov_corrected() works with prior-adjusted factor scores", {
-  fs_dat <- get_fs(prior_fit, prior_mean = pm, prior_cov = pc,
-                   corrected_fsT = TRUE, vfsLT = TRUE,
-                   format = "list")
-  # vcov_corrected() re-evaluates the recorded tspa() call from the package
-  # namespace, so the referenced objects must live in globalenv during the
-  # test (mirroring vignette-style top-level usage).
-  gobjs <- list(
-    fs_dat_p = fs_dat,
-    fsL_p = attr(fs_dat, "fsL"),
-    fsT_p = attr(fs_dat, "fsT"),
-    fsb_p = attr(fs_dat, "fsb")
-  )
-  for (nm in names(gobjs)) {
-    assign(nm, gobjs[[nm]], envir = globalenv())
-  }
-  on.exit(
-    for (nm in names(gobjs)) rm(list = nm, envir = globalenv()),
-    add = TRUE
-  )
-  tspa_fit <- tspa("dem60 ~ ind60",
-                   data = fs_dat_p,
-                   fsT = fsT_p,
-                   fsL = fsL_p,
-                   fsb = fsb_p)
-  vc <- vcov_corrected(tspa_fit,
-                       vfsLT = attr(fs_dat, "vfsLT"))
-  expect_s3_class(vc, "matrix")
-  expect_equal(dim(vc), c(3, 3))
-  expect_true(all(diag(vc) > 0))
-})
-
 test_that("data.frame entry point matches lavaan method entry point", {
   fs_df <- get_fs(PoliticalDemocracy, prior_model,
                   prior_mean = pm, prior_cov = pc,
