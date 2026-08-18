@@ -71,8 +71,9 @@ scores, each score being the plain uncentered mean of the
 items assigned to its factor, using no latent
 distribution), with \code{"ML"} an alias for \code{"Bartlett"} and
 \code{"EB"} an alias for \code{"regression"}. For \code{merMod} objects:
-\code{"EB"} (empirical Bayes, default; identical to
-\code{\link[lme4]{ranef}}()) or \code{"ML"} (a prior-free,
+\code{"EB"} (empirical Bayes, default; identical to the
+first random-effect term's \code{\link[lme4]{ranef}}()
+estimates) or \code{"ML"} (a prior-free,
 per-cluster OLS estimate of the random effects, using no
 random-effects prior, analogous to Bartlett scores for
 \code{lavaan} objects). The \code{"ML"}/\code{"EB"} aliases apply to the
@@ -88,7 +89,8 @@ and is not supported together with \code{corrected_fsT},
 
 \item{corrected_fsT}{Logical. Whether to correct for the sampling
 error in the factor score weights when computing
-the error variance estimates of factor scores.}
+the error variance estimates of factor scores.
+Currently ignored for \code{merMod} objects.}
 
 \item{vfsLT}{Logical. Whether to return the covariance matrix of \code{fsT}
 and \code{fsL}, returned as attribute \code{vfsLT}; used for
@@ -101,11 +103,12 @@ for multi-factor models a warning is issued and no
 \code{reliability} attribute is returned.}
 
 \item{format}{Output format when \code{object} is a lavaan or merMod object.
-\code{"unified"} (default) returns a single data frame with a \code{group} column;
-for multiple groups, attributes \code{fsT}, \code{fsL}, \code{fsb}, and \code{scoring_matrix}
-are named lists keyed by group label. \code{"list"} returns the legacy
-shape: a named list of data frames (one per group) with per-group
-matrix attributes. Use \code{\link[=fs_to_group_list]{fs_to_group_list()}} to convert between the two.}
+\code{"unified"} (default) returns a single data frame; for multiple
+groups it carries a \code{group} column and attributes \code{fsT}, \code{fsL},
+\code{fsb}, and \code{scoring_matrix} are named lists keyed by group
+label. \code{"list"} returns the legacy shape: a named list of data
+frames (one per group) with per-group matrix attributes. Use
+\code{\link[=fs_to_group_list]{fs_to_group_list()}} to convert between the two.}
 
 \item{prior_mean}{An optional numeric vector of length \code{q} (the number of
 latent variables) giving fixed external prior means for the latent

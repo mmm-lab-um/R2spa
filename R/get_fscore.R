@@ -30,8 +30,9 @@
 #'               items assigned to its factor, using no latent
 #'               distribution), with `"ML"` an alias for `"Bartlett"` and
 #'               `"EB"` an alias for `"regression"`. For `merMod` objects:
-#'               `"EB"` (empirical Bayes, default; identical to
-#'               \code{\link[lme4]{ranef}}()) or `"ML"` (a prior-free,
+#'               `"EB"` (empirical Bayes, default; identical to the
+#'               first random-effect term's \code{\link[lme4]{ranef}}()
+#'               estimates) or `"ML"` (a prior-free,
 #'               per-cluster OLS estimate of the random effects, using no
 #'               random-effects prior, analogous to Bartlett scores for
 #'               `lavaan` objects). The `"ML"`/`"EB"` aliases apply to the
@@ -47,6 +48,7 @@
 #' @param corrected_fsT Logical. Whether to correct for the sampling
 #'                      error in the factor score weights when computing
 #'                      the error variance estimates of factor scores.
+#'                      Currently ignored for `merMod` objects.
 #' @param vfsLT Logical. Whether to return the covariance matrix of `fsT`
 #'              and `fsL`, returned as attribute `vfsLT`; used for
 #'              second-order SE correction of 2S-PA results. Currently
@@ -85,11 +87,12 @@
 #'        belong to only one sum. Only used for `lavaan` and data frame
 #'        objects with `method = "mean"`.
 #' @param format Output format when `object` is a lavaan or merMod object.
-#'        `"unified"` (default) returns a single data frame with a `group` column;
-#'        for multiple groups, attributes `fsT`, `fsL`, `fsb`, and `scoring_matrix`
-#'        are named lists keyed by group label. `"list"` returns the legacy
-#'        shape: a named list of data frames (one per group) with per-group
-#'        matrix attributes. Use [fs_to_group_list()] to convert between the two.
+#'        `"unified"` (default) returns a single data frame; for multiple
+#'        groups it carries a `group` column and attributes `fsT`, `fsL`,
+#'        `fsb`, and `scoring_matrix` are named lists keyed by group
+#'        label. `"list"` returns the legacy shape: a named list of data
+#'        frames (one per group) with per-group matrix attributes. Use
+#'        [fs_to_group_list()] to convert between the two.
 #' @param ... additional arguments passed to \code{\link[lavaan]{cfa}}
 #'            (when `object` is a data frame). See \code{\link[lavaan]{lavOptions}}
 #'            for a complete list.

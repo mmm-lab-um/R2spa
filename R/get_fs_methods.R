@@ -514,16 +514,10 @@ get_fs_blocks.merMod <- function(
   s <- stats::sigma(object)
 
   if (method == "EB") {
-    # lme4 >= 2.x no longer attaches "clen" to @theta for multi-term fits;
-    # vec2mlist() then mis-parses the mixed theta (a replacement-length
-    # warning for 2+1, a mixed 3x3 block -- hence non-conformable errors --
-    # for 2+2). Restore the per-term block lengths from the model's own
-    # @cnms (the same idiom VarCorr.merMod uses) on a copy. For the
-    # first-term block get_fs consumes this is bit-identical to the legacy
-    # parse, including on single-term fits.
-    theta <- object@theta
-    attr(theta, "clen") <- lengths(object@cnms, use.names = FALSE)
-    D <- get_D(theta)
+    # Scaled random-effects covariance of the first RE term; the lme4-2.x
+    # theta convention and the first-term-only contract are documented at
+    # the definition of get_D().
+    D <- get_D(object)
     # EB scores for the first term: getME("b") = crossprod(Lambdat, u),
     # bit-identical to ranef(object)[[1]] values but computed level-major
     # without ranef()'s per-term work (cheaper for multi-term models).
@@ -604,17 +598,51 @@ get_fs_blocks.merMod <- function(
   # Names in canonical level order (matches ranef() row names / @cnms).
   setNames(blocks, levels(f1))
 }
-get_D <- function(theta) {
-  L_D <- lme4::vec2mlist(theta, symm = FALSE)[[1]]
+# Reconstruct the SCALED random-effects covariance of the FIRST random-
+# effects term of a merMod fit from its @theta parameters.
+#
+# lme4 >= 2.0 convention (read from the lme4 2.0.6 source; same scale as
+# 1.x, which also stored the Cholesky of the scaled covariance):
+#   - x@theta packs one block per RE term, in cnms() (formula) order; the
+#     block for a term with p coefficients holds p * (p + 1) / 2 entries
+#     and is the packed lower-triangular (column-major filled) Cholesky
+#     factor L of the SCALED covariance D / sigma^2, where D =
+#     VarCorr(x)[[term]] is the unscaled term covariance;
+#   - equivalently VarCorr(x)[[term]] == sigma(x)^2 * tcrossprod(L). That
+#     is exactly what lme4 2.x implements: mkVarCorr() splits @theta into
+#     per-term blocks of length p * (p + 1) / 2 (the same idiom used
+#     below), builds one "Covariance.us" object per block (whose
+#     getLambda() fills the packed entries into lower.tri(column-major)),
+#     and returns sc^2 * tcrossprod(L) for non-GLMM fits.
+#   - lme4 2.x no longer attaches the "clen" (block lengths) attribute to
+#     @theta -- it is missing even on single-term fits. A fallback parser
+#     such as lme4::vec2mlist() therefore re-parses the whole mixed theta
+#     as a SINGLE block of (sqrt(8L + 1) - 1) / 2 rows: exact only while
+#     L is a triangular number (single term), a replacement-length warning
+#     for a 2+1 term split, a mixed 3x3 block for 2+2. The split is thus
+#     done explicitly from @cnms here, independent of that attribute.
+#
+# Returns the first term's p x p scaled covariance (p = the first term's
+# number of coefficients), which equals VarCorr(x)[[1]] / sigma(x)^2 for
+# LMMs. It must be the first term's, not a block-diagonal combination of
+# all terms: get_fs_blocks.merMod() scores only the first term -- its
+# clusters (flist[[1]]), Kz block (first-term Z fold) and scores
+# (getME(x, "b"), term-major) all follow the flist[[1]] / cnms[[1]]
+# convention, and the EB formulas consuming this D carry the explicit
+# sigma^2 scale themselves (fsT_j = s^2 * (D Kz + I)^-1 D Kz D ...).
+get_D <- function(object) {
+  n1 <- length(object@cnms[[1L]])
+  blk <- object@theta[seq_len(n1 * (n1 + 1L) / 2L)]
+  L_D <- diag(nrow = n1)
+  L_D[lower.tri(L_D, diag = TRUE)] <- blk
   tcrossprod(L_D)
 }
 
 #' @rdname get_fs
 #' @param fsm Currently not used.
-#' @param format Output format: `"unified"` returns a single data frame with
-#'        a `group` column; `"list"` returns a list of data frames per group.
-#'        For `merMod` objects there is always a single implicit group, so
-#'        `"list"` returns a bare data frame.
+#' @param format Currently not used for `merMod` objects: the output is
+#'        always a single data frame with one row per cluster (no `group`
+#'        column).
 #' @param legacy_names Logical. Random-effect score naming convention for
 #'        `merMod` objects. `FALSE` (default) uses `fs_u0`-style names
 #'        (`fs_u0`/`fs_u1`/..., with loadings `u0_by_fs_u0` and error terms

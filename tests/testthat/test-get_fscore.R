@@ -937,15 +937,13 @@ test_that(
 )
 
 test_that(
-  "get_fs.merMod(method = 'EB') survives two 2-coefficient terms (multi-term clen restore)",
+  "get_fs.merMod(method = 'EB') survives two 2-coefficient RE terms (multi-term theta parse)",
   {
-    # lme4 >= 2.x drops the "clen" attribute from @theta for multi-term
-    # fits; with no clen, vec2mlist's fallback parse of the mixed theta
-    # (3 + 3 parameters) lands exactly on a triangular size (3 * 4 / 2 = 6)
-    # and returns ONE mixed 3 x 3 block, so get_D produced a 3 x 3 D for
-    # num_re = 2 (non-conformable, hard error). Pins the @cnms clen restore
-    # in get_fs_blocks.merMod(); the first-term scores must still match
-    # ranef() and the call must be warning-free.
+    # get_D(object) parses @theta directly from the @cnms block lengths
+    # (p(p+1)/2 packed lower-triangular Cholesky of the scaled D/sigma^2
+    # per term) -- no "clen" attribute, no vec2mlist() (dropped in lme4
+    # 2.x; a single-block fallback parse lands on a mixed 3 x 3 here).
+    # Convention pinned in test-lme4_compat.R; scores match ranef(), warning-free.
     set.seed(43)
     d22 <- data.frame(
       g1 = gl(40, 10),
@@ -978,6 +976,109 @@ test_that(
       tolerance = 1e-12
     )
     expect_true(all(is.finite(attr(fs_eb, "fsT"))))
+  }
+)
+
+## Multi-term EB attributes: the term-1-only contract -----------------------
+##
+## With 2+ RE terms, ranef() is the JOINT posterior of all terms, but
+## get_fs() scores only the first term, so its EB attributes (fsT/fsL/
+## scoring_matrix) are first-term conditional quantities, built from
+## D1 = VarCorr(m)[[1]] / sigma(m)^2 -- see get_D()'s doc comment in
+## R/get_fs_methods.R. Deliberately no `scoring_matrix %*% (y - X beta)
+## == ranef()` pin here: that identity is single-term-only (it deviates
+## measurably for multi-term fits); the score-vs-ranef pins stay in the
+## tests above.
+
+# Pin the per-cluster EB attributes of a (multi-term) merMod fit to the
+# term-1-only reference values, expressed purely in lme4-derived symbols:
+# D1 = VarCorr(m)[[1]] / sigma(m)^2 (lme4's own @theta parse via
+# mkVarCorr(), so no R2spa code is involved), Kz_j / zj = the first term's
+# dense Z block for cluster j (not get_fs's internal sparse fold),
+# s = sigma(m). Per cluster j, with DKz = D1 %*% crossprod(zj) and
+# W = solve(DKz + I):
+#   fsT_j = s^2 * W %*% DKz %*% D1 %*% t(W)
+#   fsL_j = DKz - DKz %*% W %*% DKz
+#   scoring_matrix_j = W %*% D1 %*% t(zj)
+check_eb_term1_attrs <- function(m) {
+  p1 <- length(m@cnms[[1L]])
+  s <- stats::sigma(m)
+  D1 <- as.matrix(VarCorr(m)[[1L]]) / s^2
+  Zref <- as.matrix(lme4::getME(m, "Z"))
+  flist <- as.factor(m@flist[[1L]])
+  case_idx <- split(seq_len(nrow(model.frame(m))), flist)
+  fs_eb <- get_fs(m, method = "EB")
+  fsL_arr <- attr(fs_eb, "fsL")
+  fsT_arr <- attr(fs_eb, "fsT")
+  sm <- attr(fs_eb, "scoring_matrix")
+  expect_equal(dim(fsL_arr), c(p1, p1, nlevels(flist)))
+  expect_equal(dim(fsT_arr), c(p1, p1, nlevels(flist)))
+  expect_named(sm, as.character(levels(flist)))
+  for (j in seq_along(case_idx)) {
+    idx <- case_idx[[j]]
+    zj <- Zref[idx, (j - 1L) * p1 + seq_len(p1), drop = FALSE]
+    Kz <- crossprod(zj)
+    DKz <- D1 %*% Kz
+    W <- solve(DKz + diag(p1))
+    expect_equal(
+      unname(fsT_arr[,, j]),
+      unname(s^2 * W %*% DKz %*% D1 %*% t(W)),
+      tolerance = 1e-12
+    )
+    expect_equal(
+      unname(fsL_arr[,, j]),
+      unname(DKz - DKz %*% W %*% DKz),
+      tolerance = 1e-12
+    )
+    expect_equal(
+      unname(sm[[as.character(levels(flist)[j])]]),
+      unname(W %*% D1 %*% t(zj)),
+      tolerance = 1e-12
+    )
+  }
+}
+
+test_that(
+  "get_fs.merMod(method = 'EB') on a 2+1 fit: attributes are the term-1-only quantities",
+  {
+    # Term-1-only contract: first-term conditional EB quantities, not the joint ranef() posterior (see get_D()'s doc comment).
+    # Same fixture as the first-term fold test above (set.seed 42); re-fitted so this test stands alone.
+    set.seed(42)
+    d5 <- data.frame(
+      cl = gl(200, 10),
+      site = factor(rep_len(1:8, 2000)),
+      x = rnorm(2000)
+    )
+    d5$y <- d5$x + rnorm(2000) + rep(rnorm(200), each = 10)
+    fit5 <- suppressMessages(
+      lme4::lmer(y ~ 1 + (x | cl) + (1 | site), d5)
+    )
+    check_eb_term1_attrs(fit5)
+  }
+)
+
+test_that(
+  "get_fs.merMod(method = 'EB') on a 2+2 fit: attributes are the term-1-only quantities",
+  {
+    # Term-1-only contract: first-term conditional EB quantities, not the joint ranef() posterior (see get_D()'s doc comment).
+    # Same fixture as the multi-term test above (set.seed 43); re-fitted so this test stands alone.
+    set.seed(43)
+    d22 <- data.frame(
+      g1 = gl(40, 10),
+      g2 = factor(rep_len(1:6, 400)),
+      x1 = rnorm(400),
+      x2 = rnorm(400)
+    )
+    d22$y <- d22$x1 + d22$x2 +
+      rep(rnorm(40), each = 10) +
+      rep(rnorm(40, sd = 0.5), each = 10) * d22$x1 +
+      rnorm(6)[as.integer(d22$g2)] +
+      rnorm(6, sd = 0.5)[as.integer(d22$g2)] * d22$x2 +
+      rnorm(400)
+    fit22 <- suppressMessages(
+      lme4::lmer(y ~ x1 + x2 + (x1 | g1) + (x2 | g2), d22)
+    )
+    check_eb_term1_attrs(fit22)
   }
 )
 

@@ -27,8 +27,9 @@ scores, each score being the plain uncentered mean of the
 items assigned to its factor, using no latent
 distribution), with \code{"ML"} an alias for \code{"Bartlett"} and
 \code{"EB"} an alias for \code{"regression"}. For \code{merMod} objects:
-\code{"EB"} (empirical Bayes, default; identical to
-\code{\link[lme4]{ranef}}()) or \code{"ML"} (a prior-free,
+\code{"EB"} (empirical Bayes, default; identical to the
+first random-effect term's \code{\link[lme4]{ranef}}()
+estimates) or \code{"ML"} (a prior-free,
 per-cluster OLS estimate of the random effects, using no
 random-effects prior, analogous to Bartlett scores for
 \code{lavaan} objects). The \code{"ML"}/\code{"EB"} aliases apply to the
@@ -44,7 +45,8 @@ and is not supported together with \code{corrected_fsT},
 
 \item{corrected_fsT}{Logical. Whether to correct for the sampling
 error in the factor score weights when computing
-the error variance estimates of factor scores.}
+the error variance estimates of factor scores.
+Currently ignored for \code{merMod} objects.}
 
 \item{vfsLT}{Logical. Whether to return the covariance matrix of \code{fsT}
 and \code{fsL}, returned as attribute \code{vfsLT}; used for
