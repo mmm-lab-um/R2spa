@@ -1,6 +1,7 @@
 # PLAN 03 — `scoring_matrix` for `get_fs.merMod()` + documentation vignette
 
-Status: **planning complete, ready to execute** (2026-08-16). Approved decisions at bottom.
+Status: **DONE** (2026-08-16; landed as `00bf670` + the PLAN 03 follow-up —
+see STATUS.md Closed #8 and #9). Approved decisions at bottom.
 
 ## Context (for a fresh session)
 
