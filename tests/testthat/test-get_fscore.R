@@ -998,6 +998,55 @@ test_that("Reliability of Bartlett factor scores", {
                tolerance = 1e-7)
 })
 
+# Regression guard for the multi-factor check in get_fs.lavaan():
+# dimensionality must be taken from the model (rows of psi), so
+# multi-factor fits warn instead of hard-erroring in compute_fsrel()
+# ("reliability is only supported for unidimensional models.") -- that
+# error used to fire for single-group fits because the old
+# fsb-attribute-shape guard never fired for format = "unified".
+hs_2f_model <- "visual =~ x1 + x2 + x3; speed =~ x4 + x5 + x6"
+cfa_2f <- suppressMessages(
+  cfa(model = hs_2f_model, data = HolzingerSwineford1939, std.lv = TRUE))
+cfa_2f_mg <- suppressMessages(
+  cfa(model = hs_2f_model, data = HolzingerSwineford1939,
+      group = "school", std.lv = TRUE))
+cfa_1f_mg <- suppressMessages(
+  cfa(model = "visual =~ x1 + x2 + x3", data = HolzingerSwineford1939,
+      group = "school"))
+
+test_that("reliability warns (not errors) for single-group multi-factor model", {
+  fs <- expect_warning(get_fs(cfa_2f, reliability = TRUE),
+                       regexp = "multi-factor")
+  expect_false("reliability" %in% names(attributes(fs)))
+})
+
+test_that("reliability warns (not errors) for single-group multi-factor model, format = 'list'", {
+  fs <- expect_warning(get_fs(cfa_2f, reliability = TRUE, format = "list"),
+                       regexp = "multi-factor")
+  expect_false("reliability" %in% names(attributes(fs)))
+})
+
+test_that("reliability warns (not errors) for multi-group multi-factor model", {
+  fs <- expect_warning(get_fs(cfa_2f_mg, reliability = TRUE),
+                       regexp = "multi-factor")
+  expect_false("reliability" %in% names(attributes(fs)))
+  fs_list <- expect_warning(get_fs(cfa_2f_mg, reliability = TRUE,
+                                   format = "list"),
+                            regexp = "multi-factor")
+  expect_false("reliability" %in% names(attributes(fs_list)))
+})
+
+test_that("Reliability of multi-group single-factor model", {
+  # Unstandardized fit, so the values match the verified reference; the
+  # resulting "may not be accurate" warning is unrelated to the guard.
+  fs <- suppressWarnings(get_fs(cfa_1f_mg, reliability = TRUE))
+  # Per-group list convention: one length-1 numeric per group + "overall".
+  rel <- attr(fs, "reliability")
+  expect_named(rel, c("Pasteur", "Grant-White", "overall"))
+  expect_equal(unname(unlist(rel)), c(.6478432, .6793541, .6630229),
+               tolerance = 1e-7)
+})
+
 test_that("Reliability with non-diagonal theta", {
   mod1 <- "visual =~ x1 + x2 + x3 + x9"
   fit1 <- cfa(model = mod1, data = HolzingerSwineford1939)

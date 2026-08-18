@@ -52,7 +52,9 @@
 #'              second-order SE correction of 2S-PA results. Currently
 #'              ignored for `merMod` objects.
 #' @param reliability Logical. Whether to return the reliability of factor
-#'                    scores. Available only for single-factor lavaan models.
+#'                    scores. Available only for single-factor lavaan models;
+#'                    for multi-factor models a warning is issued and no
+#'                    `reliability` attribute is returned.
 #' @param prior_mean An optional numeric vector of length `q` (the number of
 #'        latent variables) giving fixed external prior means for the latent
 #'        variables. `NULL` (default) uses the lavaan-estimated (group-specific)

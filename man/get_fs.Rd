@@ -96,7 +96,9 @@ second-order SE correction of 2S-PA results. Currently
 ignored for \code{merMod} objects.}
 
 \item{reliability}{Logical. Whether to return the reliability of factor
-scores. Available only for single-factor lavaan models.}
+scores. Available only for single-factor lavaan models;
+for multi-factor models a warning is issued and no
+\code{reliability} attribute is returned.}
 
 \item{format}{Output format when \code{object} is a lavaan or merMod object.
 \code{"unified"} (default) returns a single data frame with a \code{group} column;

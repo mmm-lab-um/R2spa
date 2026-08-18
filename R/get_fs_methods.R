@@ -399,11 +399,14 @@ get_fs.lavaan <- function(
     est <- lavInspect(object, what = "est")
     group_labels <- object@Data@group.label
     ngroups <- object@Data@ngroups
-    multifactor <- if (ngroups > 1) {
-      length(attr(out, "fsb")[[1]]) > 1
-    } else {
-      length(attr(out, "fsb")) > 1
-    }
+    # Dimensionality from the model estimates, not from the output
+    # attributes: format = "list" carries the SG fsb attribute as a bare
+    # vector while "unified" wraps it in a per-group list, so the attr
+    # shape cannot be tested uniformly. psi is q x q for the q latent
+    # variables (SG: top-level est element; MG: per-group list, and all
+    # groups share the latent structure, so group 1 suffices).
+    n_latent <- if (ngroups > 1) nrow(est[[1]]$psi) else nrow(est$psi)
+    multifactor <- n_latent > 1
     if (multifactor) {
       warning(
         "Computation of reliability for a multi-factor model is not ",
