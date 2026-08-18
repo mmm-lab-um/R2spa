@@ -4,7 +4,7 @@ Tracks remaining work from completed plans (see `archive/`). Update status as
 items are resolved; move finished items to the **Closed** section with the
 date and commit/PR reference.
 
-**Last updated:** 2026-08-17 (QUARANTINE — quarantined all in-package consumers of `get_fs()`/`tspa()` into `.quarantine/`; PLAN 04 (tspa partable) + check cleanup committed in `7c173ab`/`0d782b4`)
+**Last updated:** 2026-08-18 (PLAN 06 — per-pattern `fsT`/`fsL`/`fsb`/`scoring_matrix` + `fs_pattern` for lavaan missing-data fits, merged into `refactor/core` in `7c51d23` and archived; in-flight `method="ML"`/`"mean"` + merMod speedup commits `aa5be3e`/`b730b53` landed on `refactor/core` in the meantime)
 
 ## Open
 
@@ -19,11 +19,14 @@ date and commit/PR reference.
 |---|------|--------|--------|
 | F1 | Wire `tspa()` to accept unified/list factor-score shapes natively (via `fs_to_group_list()` or dual support) — currently relies on attributes; the `format` default change shifts multigroup output to list-valued attributes that `tspa()` must keep parsing. | PLAN 01, remaining issue 7 | deferred |
 | F2 | `mirt` S3 method (`get_fs.SingleGroupClass`) — architecture (blocks + assembler) is backend-agnostic and ready. | PLAN 01, remaining issue 8 | deferred |
+| F3 | `tspa()` per-pattern stage 2 for groups with k≥2 missing-data patterns: fit stage 2 with lavaan sub-groups `(group × pattern)` via a synthesized pattern column from `fs_pattern`, fixing each sub-group's loadings/error (co)variances/intercepts to its own pattern's matrices (extend `tspa_schema_mf()` group indices to (group, pattern) pairs; user `group.equal` still applies). Known hazard to verify first: lavaan's exact level ordering for `group = c(a, b)` must be derived empirically and pinned canary-style (cf. `R/lavaan_compat.R`); tiny pattern sub-groups (n ≲ 5) may fail to converge — no automatic merging. Design: PLAN 06 §7a. | PLAN 06, §7a | deferred |
+| F4 | Per-row column API (user-requested): user-level function appending individual-specific `fsL`/`fsT`/`fsb` values as columns to the factor-score data frame, keyed by `fs_pattern`'s per-row labels (e.g. `ld_fs_visual_x1`, `ev_fs_visual`) so each case carries the matrices matching its own pattern. | PLAN 06, §7b | deferred |
 
 ## Closed
 
 | # | Issue | Closed | Reference |
 |---|-------|--------|-----------|
+| 12 | **Per-pattern factor-score attributes for lavaan missing-data fits** — `assemble_fs_blocks()` now keeps one `fsT`/`fsL`/`fsb`/`scoring_matrix` value per observed-indicator pattern: a k=1 group keeps a plain matrix/vector (complete-data values/shapes unchanged, regression-tested), and a group with k≥2 patterns gets a named list keyed by pattern label (observed indicators joined with `"+"` in indicator order). New per-group `fs_pattern` attribute = `list(label, pat)` (per-case pattern label — `NA` for cases with all indicators missing — plus a named logical p×k indicator-by-pattern matrix) so a future API (follow-up F4) can index per-row columns. `prepare_fs()` carries `pat_label`/`pat` through the blocks; the "blocks have differing fsT/fsL/fsb attributes" message and `check_blocks_identical()` deleted (nothing is dropped anymore). `fs_to_group_list()` round-trips the nested shapes and `fs_pattern` in both directions. SE paths (`corrected_fsT`/`reliability`/`vfsLT`) now `stop()` explicitly on multi-pattern data (previously a cryptic dimension error deep in `compute_fspars()`/`correct_evfs()`); `tspa()` rejects nested per-pattern `fsT`/`fsL`/`fsb` attributes with an explicit error (both the single-group k>1 "misread as k groups" trap and multigroup covered; per-pattern stage 2 is follow-up F3). Tests: per-pattern contract + `fs_pattern` content in `test-assemble_fs_blocks.R`; new `test-get_fs_missing.R` (SG/MG, pattern matrices matched against `lavPredict(acov=TRUE)` **by pattern label**, `fs_pattern` vs raw NA positions, `format="list"`, complete-data regression guard); SE-path errors in `test-get_fscore.R`; guard tests in `test-tspa.R` (incl. real `get_fs()` missing-data output); `fs_pattern` round-trips in `test-fs_converters.R`. Implementation note: a pattern's `fsT`/`fsL` equal lavaan's raw `acov` entry only via the package's canonical mapping `compute_lav_fs_matrices()` (`fsT = (I − AΨ⁻¹)A`, pinned in `test-lavPredict_equivalence.R`) — the tests assert that reference, not raw acov equality. Quarantined consumers (`vcov_corrected`, `tspa_mx_model`, `grandStandardizedSolution`) read `fsT`/`fsL` as single matrices and need adapting at re-integration. Also: `^\.git$` added to `.Rbuildignore` (worktree `.git` *file* leaked into built packages, adding a hidden-file NOTE). | 2026-08-18 | `archive/PLAN_06_per_pattern_fs_attrs.md` (implementation `bb64d2e`, merged into `refactor/core` in `7c51d23`) |
 | 11 | **Quarantine of `get_fs()`/`tspa()`-consuming code** — while those two contracts are being revised, every in-package consumer moved to `.quarantine/{R,tests,vignettes}/` (excluded from the build via `^\.quarantine$` in `.Rbuildignore`): `R/get_fs_int.R`, `R/tspa_mx.R`, `R/tspa_corrected_se.R`, `R/grandStandardizedSolution.R`; full test files `test-get_fs_int.R`, `test-grandStandardizedSolution.R`; 8 vignettes + 3 RDS fixtures. Embedded blocks extracted into 2 new self-contained quarantined test files (`test-tspa_mx.R`: the Mx comparison block + umx/OpenMx missing-data block with copied setups; `test-vcov_corrected.R`: the MG `vcov_corrected()` + prior-adjusted `vcov_corrected()` tests with copied setups) and appended to the 2 quarantined files (product-score auto-alias section → `test-get_fs_int.R`; grandSS wrapper A/B → `test-grandStandardizedSolution.R`). Kept in-package by decision: `R/lavaan_compat.R` (now consumed only by its own canary tests — its only package consumers were the two quarantined files) and the 6 core vignettes. `NAMESPACE` shrinks to 8 exports + 4 `get_fs` S3 methods (no `OpenMx`/`utils`; `stats` = `setNames`; `lavaan::vcov` re-declared on `get_fs()` for the bare `vcov()` calls in `get_fscore_math.R`). Roxygen links to quarantined topics reworded. `tspa()` product-score auto-alias (`tspa_sf_alias`) retained (no `get_fs_int` dependency) with the ambiguous-candidates core test kept in `test-tspa_render.R`. Quarantined tests are self-contained (setups copied) with provenance headers for re-integration (`git mv` back → `document()` → `test()` → `check()`). `OpenMx` kept in `DESCRIPTION: Imports` until re-integration. | 2026-08-17 | `archive/PLAN_QUARANTINE.md` |
 | 1 | **merMod column-name regression** — restored pre-refactor `u0_eb`-style *column names* in the merMod path via `legacy_names` switch; `get_fs_lmer()` defaults `legacy_names = TRUE` so `vignettes/multilevel.rmd` (`tspa_mx_model`) works unchanged; default `get_fs()`/`get_fs.merMod()` now use `fs_u0`-style names. Legacy output is name-compatible (not byte-identical) with the pre-refactor result — extra `_se` columns, `fsL`/`fsT` attributes, NULL row names (delta documented on `get_fs_lmer()`/`get_fs.merMod()`). Fixed the related overwritten-`fsT`-rownames + duplicate-`re_names` bugs (item 7 sub-bullets). | 2026-08-15 | PLAN 02, Step 2 |
 | 2 | **Vignette breakage on `format = "unified"`** (verified failure set 3/13: `corrected-se.Rmd`, `multilevel.rmd`, `tspa-vignette-mx.Rmd`) — `multilevel.rmd` fixed by item 1; `R/tspa.R` now validates `fsT`/`fsL` group-count consistency (plain matrix = 1 group, so single-group length-1 list attributes may be mixed with plain matrices, e.g. Bartlett identity `fsL`) with a clear mismatch error, and `tspa_mf()` accepts all single-group shape combinations; `tspa-vignette-mx.Rmd` uses `format = "list"` for its direct attribute arithmetic. 6 new regression tests. **13/13 vignettes build** (verified 2026-08-16). | 2026-08-16 | PLAN 02, Step 3 |
@@ -160,8 +163,20 @@ date and commit/PR reference.
   reworded `vfsLT` param / de-linked `tspa_mx_model()`). Full
   `devtools::check()`: **0 errors, 0 warnings, 1 NOTE** — the sole NOTE is
   "'OpenMx' in DESCRIPTION Imports but not imported from anywhere", the
-  expected direct consequence of keeping `OpenMx` in `Imports` until the
-  OpenMx path is re-integrated. No new findings beyond that expected NOTE.
+   expected direct consequence of keeping `OpenMx` in `Imports` until the
+   OpenMx path is re-integrated. No new findings beyond that expected NOTE.
+ - PLAN 06 (per-pattern missing-data attributes) verification (2026-08-18):
+   implemented in worktree `plan06` (no shared-library install;
+   `load_all()` only), then merged into `refactor/core`. Worktree
+   `devtools::test()`: **886 pass, 0 fail, 0 warn, 0 skip**. Merged-tree
+   `devtools::test()` (with the in-flight `method="ML"`/`"mean"` + merMod
+   speedup commits `aa5be3e`/`b730b53` present): **1594 pass, 0 fail,
+   0 warn, 0 skip**. The only merge conflict was a docs block in the
+   `get_fs()` roxygen `@return` (both sides' attribute docs in the same
+   block); resolved as the union and both Rd files regenerated via
+   `devtools::document()` (`NAMESPACE` untouched). Full
+   `devtools::check()` in the merged tree: **0 errors, 0 warnings,
+   1 NOTE** — the sole NOTE is the expected OpenMx baseline item.
 - Vignette build history: exactly **3 of 13 failed** on the pre-PLAN 02
   Step-1 tree (`corrected-se.Rmd`, `multilevel.rmd`, `tspa-vignette-mx.Rmd`
   — the "7/8 of 13" reports were wrong); **13/13 build on 2026-08-16**
@@ -183,18 +198,12 @@ date and commit/PR reference.
   axis) and `0d782b4` (S3 `get_fs()` arg rename, Rd `fsm`/`...` docs,
   `Matrix` → `Suggests`, top-level `.Rbuildignore` exclusions); plan
   archived as `archive/PLAN_04_tspa_partable.md`.
-- Working-tree changes for the **QUARANTINE** are **uncommitted** as of
-  2026-08-17 (commit scope decision pending, as usual): 17 staged renames
-  into `.quarantine/{R,tests,vignettes}/` (4 R files, 2 test files,
-  8 vignettes + 3 RDS fixtures) + 8 untracked quarantined `.html` builds,
-  unstaged edits (embedded-block deletions in
-  `test-tspa.R`, `test-get_fscore.R`, `test-tspa_render.R`,
-  `test-get_fs_priors.R`, `test-lavaan_compat.R`; appends in the 2
-  quarantined test files), 2 new untracked quarantined test files
-  (`test-tspa_mx.R`, `test-vcov_corrected.R`), plus the hygiene changes
-  (`.Rbuildignore`, `NAMESPACE`, `man/`, `vfsLT` reword + `@importFrom
-  lavaan vcov` in `R/get_fscore.R`, de-linked roxygen in
-  `R/get_fscore_math.R`). The plan file is untracked and archived as
-  `archive/PLAN_QUARANTINE.md`.
+- **QUARANTINE is committed** in `6dddf5f` (renames into
+  `.quarantine/{R,tests,vignettes}/`, embedded-block deletions, the 2 new
+  self-contained quarantined test files, hygiene changes: `.Rbuildignore`,
+  `NAMESPACE`, `man/`, `vfsLT` reword + `@importFrom lavaan vcov`); docs
+  refreshed in `4e4a805`. Plan archived as `archive/PLAN_QUARANTINE.md`.
+  `OpenMx` stays in `DESCRIPTION: Imports` until the OpenMx path is
+  re-integrated (the sole expected check NOTE).
 - Suggested order (all plans complete): 4 (user-facing bug) →
   5 (perf) → F1 (future).
