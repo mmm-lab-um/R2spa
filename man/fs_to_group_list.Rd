@@ -13,8 +13,8 @@ list of data frames (one per group) with per-group attributes.}
 }
 \value{
 If \code{fs} is a unified data frame, returns a named list of data
-frames, one per group, with \code{fsT}, \code{fsL}, \code{fsb}, and
-\code{scoring_matrix} attached as per-group attributes on each element
+frames, one per group, with \code{fsT}, \code{fsL}, \code{fsb}, \code{scoring_matrix},
+and \code{fs_pattern} attached as per-group attributes on each element
 and as list-valued attributes on the outer list. If \code{fs} is a
 group list, returns a single data frame with a \code{group} column and
 list-valued attributes. A single-group input returns a single

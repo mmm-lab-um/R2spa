@@ -1082,3 +1082,14 @@ test_that("augment_lav_predict() works for missing data",
                  ignore_attr = TRUE)
   }
 )
+
+test_that("SE paths error explicitly on multi-pattern missing data", {
+  # cfa_fiml (defined above) contains missing values on x1:x3, so lavaan
+  # scores cases on multiple observed-indicator patterns.
+  expect_error(get_fs(cfa_fiml, corrected_fsT = TRUE),
+               "not supported when the data contain missing values")
+  expect_error(get_fs(cfa_fiml, reliability = TRUE),
+               "not supported when the data contain missing values")
+  expect_error(get_fs(cfa_fiml, vfsLT = TRUE),
+               "not supported when the data contain missing values")
+})

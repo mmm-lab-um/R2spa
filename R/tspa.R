@@ -16,16 +16,22 @@
 #'              factor for multigroup 2S-PA.
 #' @param fsT An error variance-covariance matrix of the factor scores, which
 #'            can be obtained from the output of \code{get_fs()} using
-#'            \code{attr()} with the argument \code{which = "fsT"}.
+#'            \code{attr()} with the argument \code{which = "fsT"}. Must not
+#'            contain per-pattern lists (groups fitted with missing data):
+#'            \code{tspa()} does not yet support that.
 #' @param fsL A matrix of loadings and cross-loadings from the
 #'            latent variables to the factor scores \code{fs}, which
 #'            can be obtained from the output of \code{get_fs()} using
 #'            \code{attr()} with the argument \code{which = "fsL"}.
 #'            For details see the multiple-factors vignette:
 #'            \code{vignette("multiple-factors", package = "R2spa")}.
+#'            Must not contain per-pattern lists (groups fitted with missing
+#'            data): \code{tspa()} does not yet support that.
 #' @param fsb A vector of intercepts for the factor scores \code{fs}, which can
 #'            be obtained from the output of \code{get_fs()} using \code{attr()}
-#'            with the argument \code{which = "fsb"}.
+#'            with the argument \code{which = "fsb"}. Must not contain
+#'            per-pattern lists (groups fitted with missing data):
+#'            \code{tspa()} does not yet support that.
 #' @param ... Additional arguments passed to \code{\link[lavaan]{sem}}. See
 #'            \code{\link[lavaan]{lavOptions}} for a complete list.
 #' @return An object of class \code{lavaan}, with an attribute \code{tspaModel}
@@ -155,6 +161,40 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
         } else {
           "'fsT' must be a list of the same length as 'fsL' for a multigroup model."
         }
+      )
+    }
+    # A per-group attribute value that is itself a list of matrices (or, for
+    # fsb, plain vectors) marks a lavaan group with k >= 2 observed-indicator
+    # patterns (missing data); stage 2 cannot fit that yet, and an unwrapped
+    # single-group value would otherwise be misread as k groups.
+    if (
+      any(vapply(
+        if (is.list(fsT)) fsT else list(fsT),
+        function(e) is.list(e) && length(e) > 0L &&
+          all(vapply(e, is.matrix, logical(1))),
+        logical(1)
+      )) ||
+      any(vapply(
+        if (is.list(fsL)) fsL else list(fsL),
+        function(e) is.list(e) && length(e) > 0L &&
+          all(vapply(e, is.matrix, logical(1))),
+        logical(1)
+      )) ||
+      (!is.null(fsb) && any(vapply(
+        if (is.list(fsb)) fsb else list(fsb),
+        function(e) is.list(e) && length(e) > 0L &&
+          all(
+            vapply(e, function(v) is.vector(v) && !is.matrix(v), logical(1))
+          ),
+        logical(1)
+      )))
+    ) {
+      stop(
+        "tspa() does not yet support groups with multiple missing-data ",
+        "patterns: one of the 'fsT', 'fsL', or 'fsb' attributes contains a ",
+        "per-pattern list of matrices/vectors for a group. Fit the stage-1 ",
+        "model on complete data; per-pattern stage-2 support is planned.",
+        call. = FALSE
       )
     }
   }

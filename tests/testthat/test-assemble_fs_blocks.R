@@ -16,7 +16,7 @@ make_test_fs <- function(n, q, lv_names, scores = NULL) {
 }
 
 make_test_block <- function(case_idx, n, q, lv_names, diff_attrs = FALSE,
-                            offset = 0) {
+                            offset = 0, pat_label = NULL, pat = NULL) {
   fs <- make_test_fs(length(case_idx), q, lv_names)
   mult <- if (diff_attrs) (1 + offset) else 1
   fsT <- diag(mult * 0.1, nrow = q)
@@ -24,7 +24,9 @@ make_test_block <- function(case_idx, n, q, lv_names, diff_attrs = FALSE,
   list(
     case_idx = case_idx,
     fs = fs,
-    fsT = fsT
+    fsT = fsT,
+    pat_label = pat_label,
+    pat = pat
   )
 }
 
@@ -37,8 +39,16 @@ make_blocks_simple <- function() {
 make_blocks_two_patterns <- function() {
   lv <- "visual"
   setNames(list(list(
-    make_test_block(c(1L, 2L, 3L, 4L, 5L), 5, 1, lv, diff_attrs = FALSE),
-    make_test_block(c(6L, 7L, 8L), 3, 1, lv, diff_attrs = FALSE)
+    make_test_block(
+      c(1L, 2L, 3L, 4L, 5L), 5, 1, lv, diff_attrs = FALSE,
+      pat_label = "x1+x2",
+      pat = c(x1 = TRUE, x2 = TRUE, x3 = FALSE)
+    ),
+    make_test_block(
+      c(6L, 7L, 8L), 3, 1, lv, diff_attrs = FALSE,
+      pat_label = "x3",
+      pat = c(x1 = FALSE, x2 = FALSE, x3 = TRUE)
+    )
   )), "")
 }
 
@@ -100,12 +110,43 @@ test_that("two blocks same group ordered correctly (list)", {
   expect_false(any(is.na(res$fs_visual)))
 })
 
-test_that("representative fsT from first block when attributes differ", {
+test_that("differing block attributes become a per-pattern named list", {
   blks <- make_blocks_diff_attrs()
-  res <- assemble_fs_blocks(blks, format = "unified")
+  expect_no_message({
+    res <- assemble_fs_blocks(blks, format = "unified")
+  })
   fst <- attr(res, "fsT")
-  expect_equal(fst[[1]][1, 1], 0.1, tolerance = 1e-10)
+  pats <- fst[[1]]
+  expect_type(pats, "list")
+  # hand-built blocks lack pat_label, so labels fall back to pattern_<i>
+  expect_equal(names(pats), c("pattern_1", "pattern_2"))
+  # each block's fsT is preserved under its own pattern's entry
+  expect_equal(pats[["pattern_1"]][1, 1], 0.1, tolerance = 1e-10)
+  expect_equal(pats[["pattern_2"]][1, 1], 0.2, tolerance = 1e-10)
   expect_equal(nrow(res), 5L)
+})
+
+test_that("single block keeps plain-matrix attributes and one-label fs_pattern", {
+  blks <- make_blocks_simple()
+  res <- assemble_fs_blocks(blks, format = "unified")
+  expect_true(is.matrix(attr(res, "fsT")[[1]]))
+  expect_true(is.matrix(attr(res, "fsL")[[1]]))
+  fp <- attr(res, "fs_pattern")[[1]]
+  expect_equal(fp$label, rep("pattern_1", 5))
+  expect_null(fp$pat)
+})
+
+test_that("fs_pattern records per-row pattern membership and pat matrix", {
+  blks <- make_blocks_two_patterns()
+  res <- assemble_fs_blocks(blks, format = "unified")
+  fp <- attr(res, "fs_pattern")[[1]]
+  expect_equal(fp$label, c(rep("x1+x2", 5L), rep("x3", 3L)))
+  expect_equal(fp$pat, cbind(
+    `x1+x2` = c(x1 = TRUE, x2 = TRUE, x3 = FALSE),
+    `x3` = c(x1 = FALSE, x2 = FALSE, x3 = TRUE)
+  ))
+  expect_equal(rownames(fp$pat), c("x1", "x2", "x3"))
+  expect_equal(colnames(fp$pat), c("x1+x2", "x3"))
 })
 
 test_that("two groups unified shape", {
@@ -146,7 +187,7 @@ test_that("two groups list shape", {
 test_that("list format carries group-level attributes on outer list", {
   blks <- make_blocks_two_group()
   res <- assemble_fs_blocks(blks, format = "list", group_col = "school")
-  for (ak in c("fsT", "fsL", "fsb", "scoring_matrix")) {
+  for (ak in c("fsT", "fsL", "fsb", "scoring_matrix", "fs_pattern")) {
     outer_attr <- attr(res, ak)
     expect_type(outer_attr, "list")
     expect_equal(names(outer_attr), c("VHS", "GW"))

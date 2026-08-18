@@ -271,3 +271,165 @@ test_that("integration: get_fs() multigroup output uses original variable name",
   expect_type(fs_list, "list")
   expect_equal(names(fs_list), c("Pasteur", "Grant-White"))
 })
+
+# --- Missing data: nested per-pattern attributes + fs_pattern ---
+#
+# VHS has two observed-indicator patterns, GW is complete (k = 1).
+
+fs1 <- matrix(0.01, 1, 1, dimnames = list("fs_visual", "fs_visual"))
+fs2 <- matrix(0.03, 1, 1, dimnames = list("fs_visual", "fs_visual"))
+fs3 <- matrix(0.02, 1, 1, dimnames = list("fs_visual", "fs_visual"))
+ld <- matrix(1, 1, 1, dimnames = list("fs_visual", "visual"))
+sm <- matrix(1, 1, 1)
+missing_pat_vhs <- cbind(
+  `x1+x2` = c(x1 = TRUE, x2 = TRUE, x3 = FALSE),
+  `x3` = c(x1 = FALSE, x2 = FALSE, x3 = TRUE)
+)
+missing_pat_gw <- matrix(
+  TRUE, nrow = 3L, ncol = 1L,
+  dimnames = list(c("x1", "x2", "x3"), "x1+x2+x3")
+)
+
+make_unified_missing_fixture <- function() {
+  df <- data.frame(
+    fs_visual = c(0.1, -0.2, 0.3, 0.4, -0.1, 0.2),
+    fs_visual_se = c(0.15, 0.15, 0.15, 0.15, 0.15, 0.15),
+    visual_by_fs_visual = c(1, 1, 1, 1, 1, 1),
+    ev_fs_visual = c(0.01, 0.01, 0.01, 0.02, 0.02, 0.02),
+    group = c("VHS", "VHS", "VHS", "VHS", "GW", "GW")
+  )
+  attr(df, "fsT") <- list(VHS = list(`x1+x2` = fs1, `x3` = fs2), GW = fs3)
+  attr(df, "fsL") <- list(VHS = list(`x1+x2` = ld, `x3` = ld), GW = ld)
+  attr(df, "fsb") <- list(VHS = list(`x1+x2` = 0, `x3` = 0), GW = 0)
+  attr(df, "scoring_matrix") <- list(
+    VHS = list(`x1+x2` = sm, `x3` = sm),
+    GW = sm
+  )
+  attr(df, "fs_pattern") <- list(
+    VHS = list(
+      label = c("x1+x2", "x1+x2", "x3", "x3"),
+      pat = missing_pat_vhs
+    ),
+    GW = list(
+      label = c("x1+x2+x3", "x1+x2+x3"),
+      pat = missing_pat_gw
+    )
+  )
+  attr(df, "group_col") <- "group"
+  df
+}
+
+make_list_missing_fixture <- function() {
+  out <- list(
+    VHS = data.frame(
+      fs_visual = c(0.1, -0.2, 0.3, 0.4),
+      fs_visual_se = c(0.15, 0.15, 0.15, 0.15),
+      visual_by_fs_visual = c(1, 1, 1, 1),
+      ev_fs_visual = c(0.01, 0.01, 0.01, 0.01)
+    ),
+    GW = data.frame(
+      fs_visual = c(-0.1, 0.2),
+      fs_visual_se = c(0.15, 0.15),
+      visual_by_fs_visual = c(1, 1),
+      ev_fs_visual = c(0.02, 0.02)
+    )
+  )
+  attr(out$VHS, "fsT") <- list(`x1+x2` = fs1, `x3` = fs2)
+  attr(out$GW, "fsT") <- fs3
+  attr(out$VHS, "fsL") <- list(`x1+x2` = ld, `x3` = ld)
+  attr(out$GW, "fsL") <- ld
+  attr(out$VHS, "fsb") <- list(`x1+x2` = 0, `x3` = 0)
+  attr(out$GW, "fsb") <- 0
+  attr(out$VHS, "scoring_matrix") <- list(`x1+x2` = sm, `x3` = sm)
+  attr(out$GW, "scoring_matrix") <- sm
+  attr(out$VHS, "fs_pattern") <- list(
+    label = c("x1+x2", "x1+x2", "x3", "x3"),
+    pat = missing_pat_vhs
+  )
+  attr(out$GW, "fs_pattern") <- list(
+    label = c("x1+x2+x3", "x1+x2+x3"),
+    pat = missing_pat_gw
+  )
+  out
+}
+
+test_that("missing-data unified -> list preserves nested and fs_pattern", {
+  unified <- make_unified_missing_fixture()
+  result <- fs_to_group_list(unified)
+
+  expect_type(result, "list")
+  expect_equal(names(result), c("VHS", "GW"))
+  # VHS stays nested per pattern, GW stays a plain matrix
+  expect_equal(attr(result$VHS, "fsT"), attr(unified, "fsT")$VHS)
+  expect_true(is.matrix(attr(result$GW, "fsT")))
+  expect_equal(attr(result$VHS, "fsb"), attr(unified, "fsb")$VHS)
+  expect_equal(attr(result$VHS, "fs_pattern"), attr(unified, "fs_pattern")$VHS)
+  expect_equal(attr(result$GW, "fs_pattern"), attr(unified, "fs_pattern")$GW)
+  for (ak in c("fsT", "fsL", "fsb", "scoring_matrix", "fs_pattern")) {
+    expect_equal(names(attr(result, ak)), c("VHS", "GW"))
+  }
+})
+
+test_that("missing-data list -> unified preserves nested and fs_pattern", {
+  lst <- make_list_missing_fixture()
+  result <- fs_to_group_list(lst)
+
+  expect_s3_class(result, "data.frame")
+  expect_true("group" %in% names(result))
+  expect_equal(nrow(result), 6L)
+  expect_equal(attr(result, "fsT")$VHS, attr(lst$VHS, "fsT"))
+  expect_equal(attr(result, "fsT")$GW, fs3)
+  expect_equal(attr(result, "fsb")$VHS, attr(lst$VHS, "fsb"))
+  expect_equal(attr(result, "fsb")$GW, 0)
+  expect_equal(attr(result, "fs_pattern")$VHS, attr(lst$VHS, "fs_pattern"))
+  expect_equal(attr(result, "fs_pattern")$GW, attr(lst$GW, "fs_pattern"))
+})
+
+test_that("missing-data unified <-> list round-trips both directions", {
+  unified <- make_unified_missing_fixture()
+  lst <- make_list_missing_fixture()
+
+  back_u <- fs_to_group_list(fs_to_group_list(unified))
+  for (ak in c("fsT", "fsL", "fsb", "scoring_matrix", "fs_pattern")) {
+    expect_equal(attr(back_u, ak), attr(unified, ak))
+  }
+  expect_equal(as.data.frame(back_u), as.data.frame(unified),
+               ignore_attr = TRUE)
+
+  back_l <- fs_to_group_list(fs_to_group_list(lst))
+  expect_type(back_l, "list")
+  for (g in c("VHS", "GW")) {
+    for (ak in c("fsT", "fsL", "fsb", "scoring_matrix", "fs_pattern")) {
+      expect_equal(attr(back_l[[g]], ak), attr(lst[[g]], ak))
+    }
+    expect_equal(as.data.frame(back_l[[g]]), as.data.frame(lst[[g]]),
+                 ignore_attr = TRUE)
+  }
+  expect_equal(names(back_l), c("VHS", "GW"))
+})
+
+test_that("single-group missing-data unified unwraps to nested values", {
+  df <- data.frame(
+    fs_visual = c(0.1, 0.2),
+    fs_visual_se = c(0.15, 0.15),
+    visual_by_fs_visual = c(1, 1),
+    ev_fs_visual = c(0.01, 0.02)
+  )
+  attr(df, "fsT") <- list(list(`x1+x2` = fs1, `x3` = fs2))
+  attr(df, "fsL") <- list(list(`x1+x2` = ld, `x3` = ld))
+  attr(df, "fsb") <- list(list(`x1+x2` = 0, `x3` = 0))
+  attr(df, "scoring_matrix") <- list(list(`x1+x2` = sm, `x3` = sm))
+  attr(df, "fs_pattern") <- list(list(
+    label = c("x1+x2", "x3"),
+    pat = missing_pat_vhs
+  ))
+
+  result <- fs_to_group_list(df)
+  expect_s3_class(result, "data.frame")
+  expect_false("group" %in% names(result))
+  pats <- attr(result, "fsT")
+  expect_type(pats, "list")
+  expect_equal(names(pats), c("x1+x2", "x3"))
+  expect_equal(attr(result, "fs_pattern")$label, c("x1+x2", "x3"))
+  expect_equal(attr(result, "fs_pattern")$pat, missing_pat_vhs)
+})

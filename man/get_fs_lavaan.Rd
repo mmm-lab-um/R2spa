@@ -114,6 +114,22 @@ one \code{num_re} x \code{n_j} matrix per cluster, where
 rows of the model response and the fixed-effects design
 reproduces the cluster's EB scores for method \code{"EB"} and the
 per-cluster OLS (ML) scores for method \code{"ML"}.
+* \code{fs_pattern}: for lavaan models, a named list by group of
+\code{list(label, pat)} entries. \code{label} is a character vector with
+one entry per case in the group giving that case's
+observed-indicator pattern name (\code{NA} for cases whose indicators
+are all missing); \code{pat} is a logical matrix with rows =
+indicators and one column per pattern, the columns being named
+by pattern name.
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{    For a lavaan group without missing data, its `fsT`/`fsL`/`fsb`/
+    `scoring_matrix` elements are the plain matrix/vector for the whole
+    group. When a group's cases split into multiple observed-indicator
+    patterns (missing data), each such element is instead a named list
+    with one entry per pattern; the pattern name is the observed
+    indicator names joined with `"+"` in indicator order (e.g.
+    `"x1+x3"`).
+}\if{html}{\out{</div>}}
 }
 \description{
 \code{get_fs()} is an S3 generic that extracts factor scores from fitted models.

@@ -167,7 +167,9 @@ get_fs_blocks.lavaan <- function(
         fsT = attr(fscore, "fsT") + add,
         fsL = attr(fscore, "fsL"),
         fsb = attr(fscore, "fsb"),
-        scoring_matrix = attr(fscore, "scoring_matrix")
+        scoring_matrix = attr(fscore, "scoring_matrix"),
+        pat_label = paste0(colnames(y), collapse = "+"),
+        pat = setNames(rep_len(TRUE, ncol(y)), colnames(y))
       )
     } else {
       npat <- mp$npatterns
@@ -195,7 +197,9 @@ get_fs_blocks.lavaan <- function(
           fsT = attr(fs_m, "fsT") + add,
           fsL = attr(fs_m, "fsL"),
           fsb = attr(fs_m, "fsb"),
-          scoring_matrix = attr(fs_m, "scoring_matrix")
+          scoring_matrix = attr(fs_m, "scoring_matrix"),
+          pat_label = paste0(colnames(y)[pat_m], collapse = "+"),
+          pat = setNames(pat_m, colnames(y))
         )
       }
       blocks
@@ -304,6 +308,26 @@ get_fs.lavaan <- function(
     }
   }
   format <- match.arg(format)
+
+  # The sampling-error SE paths (corrected_fsT/reliability/vfsLT) require
+  # the full observed-indicator set, so they cannot be applied to lavaan's
+  # per-missing-data-pattern blocks; fail here instead of deep inside
+  # compute_fspars()/correct_evfs().
+  has_miss_patterns <- any(vapply(
+    object@Data@Mp,
+    function(m) !is.null(m),
+    logical(1)
+  ))
+  if (has_miss_patterns && (corrected_fsT || reliability || vfsLT)) {
+    stop(
+      "'corrected_fsT', 'reliability', and 'vfsLT' are not supported when ",
+      "the data contain missing values: lavaan scores the cases on their ",
+      "observed-indicator patterns, and these SE paths require the full ",
+      "indicator set. Fit on complete data or re-run with ",
+      "corrected_fsT = FALSE, reliability = FALSE, vfsLT = FALSE.",
+      call. = FALSE
+    )
+  }
 
   has_priors <- !is.null(prior_mean) || !is.null(prior_cov)
   if (has_priors) {

@@ -115,6 +115,21 @@
 #'           rows of the model response and the fixed-effects design
 #'           reproduces the cluster's EB scores for method `"EB"` and the
 #'           per-cluster OLS (ML) scores for method `"ML"`.
+#'         * `fs_pattern`: for lavaan models, a named list by group of
+#'           `list(label, pat)` entries. `label` is a character vector with
+#'           one entry per case in the group giving that case's
+#'           observed-indicator pattern name (`NA` for cases whose indicators
+#'           are all missing); `pat` is a logical matrix with rows =
+#'           indicators and one column per pattern, the columns being named
+#'           by pattern name.
+#'
+#'         For a lavaan group without missing data, its `fsT`/`fsL`/`fsb`/
+#'         `scoring_matrix` elements are the plain matrix/vector for the whole
+#'         group. When a group's cases split into multiple observed-indicator
+#'         patterns (missing data), each such element is instead a named list
+#'         with one entry per pattern; the pattern name is the observed
+#'         indicator names joined with `"+"` in indicator order (e.g.
+#'         `"x1+x3"`).
 #' @importFrom lavaan cfa sem
 #' @importFrom lavaan lavInspect lavTech coef
 #' @importFrom lavaan vcov
@@ -200,8 +215,8 @@ get_fs_lavaan <- function(
 #'           list of data frames (one per group) with per-group attributes.
 #'
 #' @return If `fs` is a unified data frame, returns a named list of data
-#'         frames, one per group, with `fsT`, `fsL`, `fsb`, and
-#'         `scoring_matrix` attached as per-group attributes on each element
+#'         frames, one per group, with `fsT`, `fsL`, `fsb`, `scoring_matrix`,
+#'         and `fs_pattern` attached as per-group attributes on each element
 #'         and as list-valued attributes on the outer list. If `fs` is a
 #'         group list, returns a single data frame with a `group` column and
 #'         list-valued attributes. A single-group input returns a single
@@ -218,7 +233,7 @@ get_fs_lavaan <- function(
 #' fs_back <- fs_to_group_list(fs_list)          # back to unified
 #' all.equal(fs_unified, fs_back, check.attributes = FALSE)
 fs_to_group_list <- function(fs) {
-  attr_keys <- c("fsT", "fsL", "fsb", "scoring_matrix")
+  attr_keys <- c("fsT", "fsL", "fsb", "scoring_matrix", "fs_pattern")
 
   if (is.data.frame(fs)) {
     grp_col <- attr(fs, "group_col")
@@ -369,16 +384,6 @@ augment_fs <- function(fs, fs_ev) {
   fs_dat
 }
 
-check_blocks_identical <- function(a, b, keys) {
-  all(vapply(
-    keys,
-    function(k) {
-      identical(a[[k]], b[[k]])
-    },
-    logical(1)
-  ))
-}
-
 assemble_fs_blocks <- function(
   blocks_by_group,
   format = c("unified", "list"),
@@ -389,13 +394,12 @@ assemble_fs_blocks <- function(
   if (is.null(group_labels) || !all(nzchar(group_labels))) {
     group_labels <- rep("", length(blocks_by_group))
   }
-  attr_keys <- c("fsT", "fsL", "fsb", "scoring_matrix")
+  attr_keys <- c("fsT", "fsL", "fsb", "scoring_matrix", "fs_pattern")
 
   group_dfs <- vector("list", length(group_labels))
   names(group_dfs) <- group_labels
 
   for (g in seq_along(group_labels)) {
-    grp <- group_labels[g]
     blocks <- blocks_by_group[[g]]
     n_cases <- max(unlist(lapply(blocks, function(b) max(b$case_idx))))
 
@@ -426,28 +430,55 @@ assemble_fs_blocks <- function(
       )
     })
 
-    if (length(blocks) > 1) {
-      all_same <- vapply(
-        seq_len(length(blocks))[-1],
-        function(i) {
-          check_blocks_identical(block_attrs[[i]], block_attrs[[1]], attr_keys)
-        },
-        logical(1)
-      )
-      if (!all(all_same)) {
-        message(
-          "Group '",
-          grp,
-          "': blocks have differing fsT/fsL/fsb attributes ",
-          "(e.g. due to missing-data patterns). Using first block as ",
-          "representative for group-level attributes."
-        )
+    # Pattern bookkeeping (mirrors lavaan's @Data@Mp in public form): each
+    # block carries the observed-indicator pattern of its cases (pat_label =
+    # observed indicator names joined with "+", pat = one named logical
+    # column per indicator). Blocks without pat_label/pat (hand-built
+    # fixtures) get a positional "pattern_<i>" label and a NULL pat matrix.
+    pat_labels <- vapply(seq_along(blocks), function(m) {
+      if (!is.null(blocks[[m]]$pat_label)) {
+        blocks[[m]]$pat_label
+      } else {
+        paste0("pattern_", m)
       }
-    }
-    repr <- block_attrs[[1]]
+    }, character(1))
 
-    for (ak in attr_keys) {
-      attr(grp_df, ak) <- repr[[ak]]
+    label_vec <- rep(NA_character_, n_cases)
+    for (m in seq_along(blocks)) {
+      label_vec[blocks[[m]]$case_idx] <- pat_labels[m]
+    }
+
+    if (length(blocks) > 1) {
+      # One attribute value per observed-indicator pattern, keyed by the
+      # pattern label.
+      for (ak in attr_keys) {
+        attr(grp_df, ak) <- setNames(lapply(block_attrs, `[[`, ak), pat_labels)
+      }
+      if (all(vapply(blocks, function(b) !is.null(b$pat), logical(1)))) {
+        attr(grp_df, "fs_pattern") <- list(
+          label = label_vec,
+          pat = do.call(cbind, setNames(lapply(blocks, `[[`, "pat"), pat_labels))
+        )
+      } else {
+        attr(grp_df, "fs_pattern") <- list(label = label_vec, pat = NULL)
+      }
+    } else {
+      for (ak in attr_keys) {
+        attr(grp_df, ak) <- block_attrs[[1]][[ak]]
+      }
+      pat1 <- blocks[[1]]$pat
+      if (!is.null(pat1)) {
+        attr(grp_df, "fs_pattern") <- list(
+          label = label_vec,
+          pat = matrix(
+            pat1,
+            ncol = 1L,
+            dimnames = list(names(pat1), pat_labels)
+          )
+        )
+      } else {
+        attr(grp_df, "fs_pattern") <- list(label = label_vec, pat = NULL)
+      }
     }
 
     group_dfs[[g]] <- grp_df
