@@ -36,18 +36,24 @@ factor for multigroup 2S-PA.}
 
 \item{fsT}{An error variance-covariance matrix of the factor scores, which
 can be obtained from the output of \code{get_fs()} using
-\code{attr()} with the argument \code{which = "fsT"}.}
+\code{attr()} with the argument \code{which = "fsT"}. Must not
+contain per-pattern lists (groups fitted with missing data):
+\code{tspa()} does not yet support that.}
 
 \item{fsL}{A matrix of loadings and cross-loadings from the
 latent variables to the factor scores \code{fs}, which
 can be obtained from the output of \code{get_fs()} using
 \code{attr()} with the argument \code{which = "fsL"}.
 For details see the multiple-factors vignette:
-\code{vignette("multiple-factors", package = "R2spa")}.}
+\code{vignette("multiple-factors", package = "R2spa")}.
+Must not contain per-pattern lists (groups fitted with missing
+data): \code{tspa()} does not yet support that.}
 
 \item{fsb}{A vector of intercepts for the factor scores \code{fs}, which can
 be obtained from the output of \code{get_fs()} using \code{attr()}
-with the argument \code{which = "fsb"}.}
+with the argument \code{which = "fsb"}. Must not contain
+per-pattern lists (groups fitted with missing data):
+\code{tspa()} does not yet support that.}
 
 \item{...}{Additional arguments passed to \code{\link[lavaan]{sem}}. See
 \code{\link[lavaan]{lavOptions}} for a complete list.}
