@@ -890,6 +890,97 @@ test_that(
   }
 )
 
+test_that(
+  "get_fs.merMod multi-term: first-term fold matches dense-Z reference (ML and EB)",
+  {
+    # A crossed second RE term makes Z wider than the first term's block
+    # (n x (2 * 200 + 8)); the dense-Z reference below slices exactly like
+    # the single-term tests, pinning the column-layout assumption of
+    # get_fs_blocks.merMod(): term-major, level j of the first term at
+    # columns (j - 1) * num_re + seq_len(num_re).
+    set.seed(42)
+    d5 <- data.frame(
+      cl = gl(200, 10),
+      site = factor(rep_len(1:8, 2000)),
+      x = rnorm(2000)
+    )
+    d5$y <- d5$x + rnorm(2000) + rep(rnorm(200), each = 10)
+    fit5 <- suppressMessages(
+      lme4::lmer(y ~ 1 + (x | cl) + (1 | site), d5)
+    )
+    Zref <- as.matrix(lme4::getME(fit5, "Z"))
+    y <- model.response(model.frame(fit5))
+    Xfull <- as.matrix(lme4::getME(fit5, "X"))
+    beta <- lme4::fixef(fit5)
+    flist <- as.factor(fit5@flist[[1]])
+    case_idx <- split(seq_len(nrow(model.frame(fit5))), flist)
+    fs_ml <- get_fs(fit5, method = "ML")
+    for (j in seq_len(nlevels(flist))) {
+      idx <- case_idx[[j]]
+      zj <- Zref[idx, (j - 1L) * 2L + 1:2, drop = FALSE]
+      rj <- y[idx] - as.numeric(Xfull[idx, , drop = FALSE] %*% beta)
+      ref_ml <- unname(drop(MASS::ginv(crossprod(zj)) %*% crossprod(zj, rj)))
+      expect_equal(
+        row_numeric(fs_ml, c("fs_u0", "fs_u1"), j),
+        ref_ml,
+        tolerance = 1e-10
+      )
+    }
+    fs_eb <- get_fs(fit5, method = "EB")
+    ran <- as.matrix(ranef(fit5)[[1]])
+    expect_equal(
+      as.numeric(as.matrix(fs_eb[c("fs_u0", "fs_u1")])),
+      as.numeric(ran),
+      tolerance = 1e-12
+    )
+  }
+)
+
+test_that(
+  "get_fs.merMod(method = 'EB') survives two 2-coefficient terms (multi-term clen restore)",
+  {
+    # lme4 >= 2.x drops the "clen" attribute from @theta for multi-term
+    # fits; with no clen, vec2mlist's fallback parse of the mixed theta
+    # (3 + 3 parameters) lands exactly on a triangular size (3 * 4 / 2 = 6)
+    # and returns ONE mixed 3 x 3 block, so get_D produced a 3 x 3 D for
+    # num_re = 2 (non-conformable, hard error). Pins the @cnms clen restore
+    # in get_fs_blocks.merMod(); the first-term scores must still match
+    # ranef() and the call must be warning-free.
+    set.seed(43)
+    d22 <- data.frame(
+      g1 = gl(40, 10),
+      g2 = factor(rep_len(1:6, 400)),
+      x1 = rnorm(400),
+      x2 = rnorm(400)
+    )
+    d22$y <- d22$x1 + d22$x2 +
+      rep(rnorm(40), each = 10) +
+      rep(rnorm(40, sd = 0.5), each = 10) * d22$x1 +
+      rnorm(6)[as.integer(d22$g2)] +
+      rnorm(6, sd = 0.5)[as.integer(d22$g2)] * d22$x2 +
+      rnorm(400)
+    fit22 <- suppressMessages(
+      lme4::lmer(y ~ x1 + x2 + (x1 | g1) + (x2 | g2), d22)
+    )
+    nw <- 0L
+    fs_eb <- withCallingHandlers(
+      get_fs(fit22, method = "EB"),
+      warning = function(wn) {
+        nw <<- nw + 1L
+        invokeRestart("muffleWarning")
+      }
+    )
+    expect_identical(nw, 0L)
+    ran <- as.matrix(ranef(fit22)[[1]])
+    expect_equal(
+      as.numeric(as.matrix(fs_eb[c("fs_u0", "fs_u1")])),
+      as.numeric(ran),
+      tolerance = 1e-12
+    )
+    expect_true(all(is.finite(attr(fs_eb, "fsT"))))
+  }
+)
+
 ########## Computing reliability ##########
 
 test_that("Reliability of regression factor scores", {

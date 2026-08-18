@@ -437,21 +437,66 @@ get_fs_blocks.merMod <- function(
   # levels, so block j corresponds to level j regardless of row order).
   case_idx <- split(seq_len(length(f1)), f1)
 
-  # Random-effects design Z (full n x sum_p matrix from lme4). Its columns
-  # are ordered by RE term, then by level index of the first term's
-  # grouping factor, so the first term's block for level (i.e. block) j
-  # occupies columns (j - 1) * num_re + seq_len(num_re). Multi-term models
-  # make Z wider; we slice the first bar only, matching the `[[1]]`
-  # convention used for b/cnms/flist below. The random design -- not the
-  # fixed design -- determines Kz: with Z != X the fixed-design code
-  # produces non-conformable products.
-  Zmat <- as.matrix(lme4::getME(object, "Z"))
+  # Random-effects design Z (sparse n x sum_p matrix from lme4, column-
+  # major). First-term fold invariant -- Zden folds the first RE term's
+  # columns onto the num_re coefficient columns of each row's own cluster:
+  # (a) term-major layout: the first term's columns are the FIRST
+  #     num_re * n_clus columns of getME("Z"); level j of its grouping
+  #     factor occupies columns (j - 1) * num_re + seq_len(num_re) --
+  #     the same layout the per-cluster slicing below relies on;
+  # (b) first-term nonzeros have disjoint support per level (every
+  #     nonzero lies in a row of its own level's cluster), so row i of
+  #     Zden holds the first term's coefficients for i's own cluster;
+  # (c) multi-term models make Z wider; only the first term's block is
+  #     folded, matching the `[[1]]` convention used for b/cnms/flist
+  #     below. The random design -- not the fixed design -- determines
+  #     Kz: with Z != X the fixed-design code produces non-conformable
+  #     products. Zden is n x num_re (tiny) instead of the
+  #     n x (num_re * n_clus) dense matrix as.matrix() used to
+  #     allocate (multi-GB on large fits).
+  Zsp <- lme4::getME(object, "Z")
+  if (!inherits(Zsp, "CsparseMatrix")) {
+    stop("`lme4::getME(object, 'Z')` must return a column-compressed ",
+         "sparse matrix (got: ", class(Zsp)[1], ").", call. = FALSE)
+  }
+  stopifnot(ncol(Zsp) >= num_re * n_clus)
+  n1 <- Zsp@p[(num_re * n_clus) + 1L]   # nnz in the first p * G columns
+  cc0 <- rep(seq_len(num_re * n_clus),
+            diff(Zsp@p[seq_len(num_re * n_clus + 1L)]))
+  # Fold safety net: the scatter below (m[cbind(i, j)] <- v) silently
+  # keeps the LAST value for duplicate (i, j) pairs, so a future change
+  # to lme4's Z column layout would mis-score silently instead of
+  # erroring. Under the invariants above, a row has at most one nonzero
+  # per folded column (its own level's block is the only block with
+  # nnz in that row, and each folded column maps from exactly one raw
+  # column within the level), so this fires only if the invariant
+  # breaks; all-zero rows/levels simply yield no nnz and cannot trip
+  # it. Cost: one vectorized O(nnz) pass -- negligible.
+  if (any(duplicated(cbind(Zsp@i[seq_len(n1)], (cc0 - 1L) %% num_re)))) {
+    stop(
+      "internal error: first-term Z fold produced duplicate (row, ",
+      "coefficient) scatter pairs; the lme4 Z column layout assumed by ",
+      "get_fs_blocks.merMod() (first term's ", num_re * n_clus,
+      " columns, level-major) no longer holds.",
+      call. = FALSE
+    )
+  }
+  Zden <- matrix(0, nrow = nrow(Zsp), ncol = num_re)
+  Zden[cbind(Zsp@i[seq_len(n1)] + 1L, (cc0 - 1L) %% num_re + 1L)] <-
+    Zsp@x[seq_len(n1)]
   s <- stats::sigma(object)
 
-  stopifnot(ncol(Zmat) >= num_re * n_clus)
-
   if (method == "EB") {
-    D <- get_D(object@theta)
+    # lme4 >= 2.x no longer attaches "clen" to @theta for multi-term fits;
+    # vec2mlist() then mis-parses the mixed theta (a replacement-length
+    # warning for 2+1, a mixed 3x3 block -- hence non-conformable errors --
+    # for 2+2). Restore the per-term block lengths from the model's own
+    # @cnms (the same idiom VarCorr.merMod uses) on a copy. For the
+    # first-term block get_fs consumes this is bit-identical to the legacy
+    # parse, including on single-term fits.
+    theta <- object@theta
+    attr(theta, "clen") <- lengths(object@cnms, use.names = FALSE)
+    D <- get_D(theta)
     # EB scores for the first term: getME("b") = crossprod(Lambdat, u),
     # bit-identical to ranef(object)[[1]] values but computed level-major
     # without ranef()'s per-term work (cheaper for multi-term models).
@@ -479,7 +524,7 @@ get_fs_blocks.merMod <- function(
 
   for (j in seq_len(n_clus)) {
     idx <- case_idx[[j]]
-    zj <- Zmat[idx, (j - 1L) * num_re + seq_len(num_re), drop = FALSE]
+    zj <- Zden[idx, seq_len(num_re), drop = FALSE]
     Kz <- crossprod(zj)
 
     if (method == "ML") {
