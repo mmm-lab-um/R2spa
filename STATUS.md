@@ -261,3 +261,18 @@ standardization — see `archive/PLAN_QUARANTINE.md`).*
   `get_D()`, now #13 / `966ff9b`), `get_fs-lavaan-mean.md` (`method = "mean"`,
   lavaan), `get_fs-mermod-ml.md` (`method = "ML"`, merMod; the two landed
   together in `aa5be3e`, with the merMod speedup in `b730b53`).
+- **Vignette doc hygiene (2026-08-20)** — doc-only cleanup of shipped
+  vignettes; no `R/`/roxygen/test/check impact (no `document()` needed).
+  (a) `correction-error.Rmd` unwraps the `eval=FALSE` sim blocks'
+  `scoring_matrix` attribute with `[[1]]` — under the default
+  `format = "unified"` a single-group `scoring_matrix` attribute is a
+  length-1 list, so the bare value no longer assigns into the numeric
+  `a_sim` array for a reader running the block (verified: `[[1]]` yields the
+  plain 1×3 / 2×6 matrix). (b) `multiple-factors.Rmd` normalizes
+  `standardizedSolution` → canonical `standardizedsolution` (×3; lavaan 0.7.2
+  exports both casings). (c) `R2spa.Rmd` drops the unused `a/b/c` loading
+  labels from the example-1 model string so it matches the CFA the code
+  actually fits. The 3 edited vignettes re-knit clean (R 4.6.1, lavaan 0.7.2,
+  R2spa 0.0.4). Deferred (tracked for the multilevel re-integration, see
+  `archive/PLAN_QUARANTINE.md`): the dead `(multilevel.html)` cross-ref in
+  `vignettes/scoring-matrices.Rmd:35-37`.

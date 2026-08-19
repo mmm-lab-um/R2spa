@@ -62,7 +62,7 @@ for (i in seq_len(nsim)) {
     )
     fsy <- R2spa::get_fs(y, std.lv = TRUE)
     fsy_sim[, i] <- fsy[, 1]
-    a_sim[, i] <- attr(fsy, which = "scoring_matrix")
+    a_sim[, i] <- attr(fsy, which = "scoring_matrix")[[1]]
 }
 ```
 
@@ -175,7 +175,7 @@ for (i in seq_len(nsim)) {
         model = "f1 =~ y1 + y2 + y3 + y4\nf2 =~ y5 + y6 + y7",
         std.lv = TRUE)
     fsy_sim[, , i] <- as.matrix(fsy[, 1:2])
-    a_sim[, , i] <- attr(fsy, which = "scoring_matrix")
+    a_sim[, , i] <- attr(fsy, which = "scoring_matrix")[[1]]
 }
 ```
 

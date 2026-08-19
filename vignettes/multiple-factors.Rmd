@@ -100,7 +100,7 @@ my2spa <- "
     dem60 ~ ind60
 "
 tspa_fit <- sem(model = my2spa, data  = fs_dat)
-standardizedSolution(tspa_fit)
+standardizedsolution(tspa_fit)
 ```
 
 which is more consistent with the SEM results.
@@ -175,7 +175,7 @@ mod_2spa_3fac <- "
     dem65 ~ ind60 + dem60
 "
 tspa_fit_3fac <- sem(model = mod_2spa_3fac, data = fs_3fac_dat)
-standardizedSolution(tspa_fit_3fac)
+standardizedsolution(tspa_fit_3fac)
 ```
 
 Compare to SEM:
@@ -192,5 +192,5 @@ sem_3fac <- sem("
   ",
   data = PoliticalDemocracy
 )
-standardizedSolution(sem_3fac)
+standardizedsolution(sem_3fac)
 ```
