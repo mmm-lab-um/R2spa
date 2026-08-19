@@ -355,14 +355,24 @@ compute_fspars <- function(
   lavobj,
   method = c("regression", "Bartlett"),
   what = c("a", "evfs", "ldfs"),
-  psi_override = NULL
+  psi_override = NULL,
+  frees = NULL,
+  mats = NULL
 ) {
   method <- match.arg(method)
   what <- match.arg(what)
   # Direct slot access; avoids lavInspect()'s per-call version check.
   ngrp <- lavobj@Data@ngroups
-  frees <- lavInspect(lavobj, what = "free")
-  mats <- lavInspect(lavobj, what = "est")
+  # frees/mats may be pre-fetched by a caller that evaluates this repeatedly
+  # over a perturbed `par` (correct_evfs()): the free mask and the base est
+  # matrices are identical on every evaluation -- only `par`'s free values
+  # move -- so the two lavInspect() file-reads are hoisted out of that loop.
+  if (is.null(frees)) {
+    frees <- lavInspect(lavobj, what = "free")
+  }
+  if (is.null(mats)) {
+    mats <- lavInspect(lavobj, what = "est")
+  }
   if (ngrp == 1) {
     frees <- list(frees)
     mats <- list(mats)
@@ -414,14 +424,18 @@ compute_a <- function(
   par,
   lavobj,
   method = c("regression", "Bartlett"),
-  psi_override = NULL
+  psi_override = NULL,
+  frees = NULL,
+  mats = NULL
 ) {
   compute_fspars(
     par,
     lavobj = lavobj,
     method = method,
     what = "a",
-    psi_override = psi_override
+    psi_override = psi_override,
+    frees = frees,
+    mats = mats
   )
 }
 
@@ -595,33 +609,46 @@ correct_evfs <- function(
   method <- match.arg(method)
   # Direct slot access; avoids lavInspect()'s per-call version check.
   ngrp <- fit@Data@ngroups
-  est_fits <- lavInspect(fit, what = "est")
+  est_raw <- lavInspect(fit, what = "est")
+  frees_raw <- lavInspect(fit, what = "free")
+  est_fits <- est_raw
   if (ngrp == 1) {
     est_fits <- list(est_fits)
   }
   outs <- vector("list", ngrp)
+  # vcov(fit) is group-independent; hoist it out of the per-group loop.
+  vc_fit <- vcov(fit)
   for (g in seq_len(ngrp)) {
     est_fit <- est_fits[[g]]
     p <- nrow(est_fit$psi)
-    jac_a <- vector("list", length = p)
-    for (i in seq_len(p)) {
-      jac_a[[i]] <- lavaan::lav_func_jacobian_complex(
-        function(x, fit, method, psi_override) {
-          compute_a(x, lavobj = fit, method = method,
-                    psi_override = psi_override)[[g]][i, ]
-        },
-        coef(fit),
-        fit = fit,
-        method = method,
-        psi_override = psi_override
-      )
-    }
-    out <- matrix(nrow = p, ncol = p)
     th <- est_fit$theta
-    vc_fit <- vcov(fit)
+    # One complex-step Jacobian over the FULL a matrix (p x c_col) instead of
+    # one call per row: at p x fewer a-matrix evaluations and no lavInspect()
+    # inside the per-evaluation compute_a() (est/free pre-fetched above).
+    # lavaan flattens f's matrix output column-major (`dx[, p] <- Im(...)`), so
+    # row i's Jacobian is the slice J[i + p*(0:(c_col-1)), ] -- entry-identical
+    # to a per-row lav_func_jacobian_complex() (complex steps depend only on the
+    # perturbed parameter and are linear in the output entries, so slicing the
+    # stacked result reproduces each row Jacobian exactly).
+    J <- lavaan::lav_func_jacobian_complex(
+      function(x, fit, method, psi_override, frees, mats) {
+        compute_a(x, lavobj = fit, method = method, psi_override = psi_override,
+                  frees = frees, mats = mats)[[g]]
+      },
+      coef(fit),
+      fit = fit,
+      method = method,
+      psi_override = psi_override,
+      frees = frees_raw,
+      mats = est_raw
+    )
+    c_col <- nrow(J) %/% p
+    out <- matrix(nrow = p, ncol = p)
     for (j in seq_len(p)) {
       for (i in j:p) {
-        out[i, j] <- sum(diag(th %*% jac_a[[i]] %*% vc_fit %*% t(jac_a[[j]])))
+        Ji <- J[i + p * (0:(c_col - 1)), , drop = FALSE]
+        Jj <- J[j + p * (0:(c_col - 1)), , drop = FALSE]
+        out[i, j] <- sum(diag(th %*% Ji %*% vc_fit %*% t(Jj)))
         if (i > j) {
           out[j, i] <- out[i, j]
         }
