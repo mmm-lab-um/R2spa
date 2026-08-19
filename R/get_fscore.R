@@ -120,6 +120,25 @@
 #'           rows of the model response and the fixed-effects design
 #'           reproduces the cluster's EB scores for method `"EB"` and the
 #'           per-cluster OLS (ML) scores for method `"ML"`.
+#'         * `psi`: effective (prior-adjusted) covariance matrix of the
+#'           latent variables (`q x q`), group-level (not per-pattern), and
+#'           a point estimate only (no sampling SEs of the latents are
+#'           attached). Mirrors the `fsT` shape: a named list keyed by group
+#'           label for `"unified"` output; a direct attribute on each group
+#'           data frame (plus a list-valued attribute on the outer list) for
+#'           `"list"` output; for `merMod` objects a single `q x q` matrix.
+#'           With `prior_cov` supplied it equals the prior (shared across
+#'           groups), otherwise the per-group lavaan estimate. For `merMod`
+#'           objects the matrix is the first random-effects term's
+#'           `VarCorr`, with dimnames renamed to match the `fsL` column
+#'           names (`u0`/`u1`/..., or the legacy `u0_eb`/`u1_eb` names).
+#'         * `alpha`: effective (prior-adjusted) means of the latent
+#'           variables (a named vector of length `q`), with the same group
+#'           nesting and point-estimate semantics as `psi`. With
+#'           `prior_mean` supplied it equals the prior, otherwise the
+#'           per-group lavaan estimate; a named zero vector (`0` per latent)
+#'           when the model has no (estimated) mean structure. For `merMod`
+#'           objects a named zero vector (random effects are mean zero).
 #'         * `fs_pattern`: for lavaan models, a named list by group of
 #'           `list(label, pat)` entries. `label` is a character vector with
 #'           one entry per case in the group giving that case's
@@ -135,6 +154,14 @@
 #'         with one entry per pattern; the pattern name is the observed
 #'         indicator names joined with `"+"` in indicator order (e.g.
 #'         `"x1+x3"`).
+#'
+#'         Note: for a single-group lavaan fit in `"unified"` format, the
+#'         per-group attribute wrappers (`fsT`, `fsL`, `fsb`,
+#'         `scoring_matrix`, `psi`, and `alpha`) are each a one-element list
+#'         named with the empty string `""`; `x[[""]]` does not match in R
+#'         list subsetting, so read these attributes positionally (e.g.
+#'         `attr(fs, "fsT")[[1]]`, `attr(fs, "psi")[[1]]`) rather than by
+#'         name.
 #' @importFrom lavaan cfa sem
 #' @importFrom lavaan lavInspect lavTech coef
 #' @importFrom lavaan vcov
@@ -238,7 +265,10 @@ get_fs_lavaan <- function(
 #' fs_back <- fs_to_group_list(fs_list)          # back to unified
 #' all.equal(fs_unified, fs_back, check.attributes = FALSE)
 fs_to_group_list <- function(fs) {
-  attr_keys <- c("fsT", "fsL", "fsb", "scoring_matrix", "fs_pattern")
+  # psi/alpha are the group-level latent moments (see get_fs() @return);
+  # they are carried through the unified <-> list conversion like fsT.
+  attr_keys <- c("fsT", "fsL", "fsb", "scoring_matrix", "fs_pattern",
+                 "psi", "alpha")
 
   if (is.data.frame(fs)) {
     grp_col <- attr(fs, "group_col")
@@ -348,19 +378,28 @@ fs_to_group_list <- function(fs) {
 }
 
 augment_fs <- function(fs, fs_ev) {
-  fs_se <- t(as.matrix(sqrt(diag(fs_ev))))
-  colnames(fs) <- paste0("fs_", colnames(fs))
-  colnames(fs_se) <- paste0(colnames(fs_se), "_se")
+  fsL <- attr(fs, "fsL")
+  # Column values (se / loadings / lower-tri error terms) come from the
+  # shared value-only engine fs_row_cols() (R/fs_indiv.R); this function
+  # supplies the r2spa column naming.
+  vals <- fs_row_cols(fs, fsL, fs_ev)
   num_lvs <- ncol(fs_ev)
-  fs_evs <- rep(NA, num_lvs * (num_lvs + 1) / 2)
+  colnames(fs) <- paste0("fs_", colnames(fs))
+  fs_se_names <- paste0(rownames(fs_ev), "_se")
+  fs_names <- paste0("fs_", colnames(fsL))
+  # Bare name vector (i-outer over the latents), matching the value order
+  # of the ld block in fs_row_cols() -- c(as.matrix(fsL)), column-major.
+  fs_ld_names <- unlist(lapply(seq_len(ncol(fsL)), function(i) {
+    paste(colnames(fsL)[i], fs_names, sep = "_by_")
+  }), use.names = FALSE)
+  fs_ev_names <- character(num_lvs * (num_lvs + 1) / 2)
   count <- 1
   for (i in seq_len(num_lvs)) {
     for (j in seq_len(i)) {
-      fs_evs[count] <- fs_ev[i, j]
       if (i == j) {
-        names(fs_evs)[count] <- paste0("ev_", rownames(fs_ev)[i])
+        fs_ev_names[count] <- paste0("ev_", rownames(fs_ev)[i])
       } else {
-        names(fs_evs)[count] <- paste0(
+        fs_ev_names[count] <- paste0(
           "ecov_",
           rownames(fs_ev)[i],
           "_",
@@ -370,17 +409,10 @@ augment_fs <- function(fs, fs_ev) {
       count <- count + 1
     }
   }
-  fsL <- attr(fs, "fsL")
-  fs_names <- paste0("fs_", colnames(fsL))
-  fs_lds <- lapply(seq_len(ncol(fsL)), function(i) {
-    setNames(fsL[, i], paste(colnames(fsL)[i], fs_names, sep = "_by_"))
-  })
-  fs_lds <- unlist(fs_lds)
+  colnames(vals) <- c(fs_se_names, fs_ld_names, fs_ev_names)
   fs_dat <- cbind(
     as.data.frame(fs),
-    fs_se,
-    t(as.matrix(fs_lds)),
-    t(as.matrix(fs_evs))
+    vals
   )
   attr(fs_dat, "fsT") <- fs_ev
   attr(fs_dat, "fsL") <- fsL

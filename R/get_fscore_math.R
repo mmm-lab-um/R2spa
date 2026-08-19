@@ -7,13 +7,24 @@ sqrt_or_na <- function(x) {
   sqrt(ifelse(x >= 0, x, NA))
 }
 
+# Legacy per-row layout (augment_lav_predict() contract): scores followed by
+# se, loadings and error terms, with the error terms in UPPER-triangular
+# order and a trailing intercept block. Values come from the shared
+# value-only engine fs_row_cols() (R/fs_indiv.R); relative to that engine
+# only the error-term layout differs (upper-triangular re-slice of the same
+# fsT, which for a symmetric matrix carries the same values).
 augment_fs2 <- function(fs, fsL, fsT, fsb = NULL) {
-  fs_se <- sqrt_or_na(diag(fsT))
-  fs_lds <- c(fsL)
-  fs_evs <- fsT[upper.tri(fsT, diag = TRUE)]
-  fs_vec <- c(fs_se, fs_lds, fs_evs)
+  vals <- fs_row_cols(fs, fsL, fsT, fsb)
+  q <- ncol(fsT)
+  k_ld_end <- q + q * q
+  k_ev_end <- k_ld_end + q * (q + 1L) / 2
+  fs_vec <- c(
+    vals[1L, seq_len(q)],
+    vals[1L, (q + 1L):k_ld_end],
+    fsT[upper.tri(fsT, diag = TRUE)]
+  )
   if (!is.null(fsb)) {
-    fs_vec <- c(fs_vec, fsb)
+    fs_vec <- c(fs_vec, vals[1L, (k_ev_end + 1L):ncol(vals)])
   }
   cbind(as.data.frame(fs), matrix(fs_vec, nrow = 1))
 }
@@ -82,14 +93,20 @@ get_fs_mat_names <- function(lv_names, int = TRUE) {
 #' Obtain factor scores and related definition variables from
 #' a `lavaan` object for 2S-PA analyses.
 #'
-#' This function obtained the factor scores, standard errors,
-#' loading matrix, and variance covariance matrix by calling
-#' the [lavaan::lavPredict()] function.
+#' The score columns are obtained by calling the
+#' [lavaan::lavPredict()] function; the per-row definitions of those
+#' scores (standard errors, loading/cross-loading matrix, error
+#' variance-covariance matrix, intercepts) come from the canonical
+#' `get_fs()` pattern blocks (the same `compute_fscore()` engine
+#' [get_fs()] itself uses), so there is one source of truth for
+#' `fsL`/`fsT`/SE shared with [get_fs()] and [fs_indiv()].
 #'
 #' @param lavobj A fitted [`lavaan::lavaan-class`] object
 #' @param method A character string indicating the scoring method to use.
-#'               Must be either `"regression"` or `"Bartlett"`. This
-#'               function wraps \code{\link[lavaan]{lavPredict}}() and
+#'               Must be either `"regression"` or `"Bartlett"`. The score
+#'               columns are taken from \code{\link[lavaan]{lavPredict}}()
+#'               (which reproduces lavaan's `NA` convention for Bartlett
+#'               factors with no observed indicator); this function
 #'               intentionally does not support the `"mean"` (sum-score)
 #'               method of [get_fs()].
 #' @param drop_list_single logical. Should the results be unlisted
@@ -99,7 +116,16 @@ get_fs_mat_names <- function(lv_names, int = TRUE) {
 #'         standard errors, the loadings and cross-loadings of the factor
 #'         scores as indicators of the latent variables, the
 #'         error variance-covariance matrix of the factor scores,
-#'         and the measurement intercepts.
+#'         and the measurement intercepts (legacy column layout:
+#'         `fs_*`, `se_*`, `<indicator>_by_fs_*`, `ev_*`/`ecov_*` in
+#'         upper-triangular order, and `int_*`). The per-row values are
+#'         identical to those returned by `fs_indiv(get_fs(lavobj, method =
+#'         method))`; this function differs only in column naming (the
+#'         `se_*` standard-error columns here, versus the `*_se` columns of
+#'         `get_fs()`/`fs_indiv()`) and in the ordering of the `ev_*`/`ecov_*`
+#'         columns (upper-triangular here, lower-triangular in `get_fs()` and
+#'         `fs_indiv()`), together with the three character-matrix attributes
+#'         below.
 #'         In addition, three character matrices are added as attributes
 #'         that can be used as input to `tspa_mx_model()`:
 #' * `ld`: cross-loading matrix
@@ -120,72 +146,68 @@ augment_lav_predict <- function(
   ...
 ) {
   method <- match.arg(method)
-  mp_lst <- lavobj@Data@Mp
+  # Per-row fsL/fsT/fsb come from the canonical get_fs() pattern blocks
+  # (one source of truth with get_fs()/fs_indiv()); the score columns are
+  # lavaan::lavPredict() output, which preserves lavaan's NA convention for
+  # Bartlett factors with no observed indicator. `...` is forwarded to
+  # lavPredict() only.
+  ngroups <- lavaan::lavInspect(lavobj, what = "ngroups")
+  blocks_by_group <- get_fs_blocks.lavaan(
+    lavobj,
+    method = method,
+    add_to_evfs = rep(0, ngroups)
+  )
   fs_lst <- lavaan::lavPredict(
     lavobj,
     type = "lv",
     method = method,
-    acov = TRUE,
     ...
   )
-  if (lavInspect(lavobj, what = "ngroups") == 1) {
+  if (ngroups == 1) {
     fs_lst <- list(fs_lst)
-    attr(fs_lst, "acov") <- attr(fs_lst[[1]], "acov")
   }
-  pars <- lavInspect(lavobj, what = "est", drop.list.single.group = FALSE)
-  out <- vector("list", length = length(fs_lst))
-  names(out) <- names(fs_lst)
-  has_means <- lavInspect(lavobj, what = "meanstructure")
-  for (g in seq_along(fs_lst)) {
-    mp <- mp_lst[[g]]
-    fs <- fs_lst[[g]]
-    if (is.null(mp)) {
-      case_idx <- list(seq_len(nrow(fs)))
-      acov_g <- list(attr(fs_lst, "acov")[[g]])
-      acov_rank <- 1
-    } else {
-      case_idx <- mp$case.idx
-      # Somehow lavaan sort the `acov` output by the missing data pattern and
-      # does not match the order of the missing pattern
-      # So need to find the order first
-      acov_g <- attr(fs_lst, "acov")[[g]]
-      acov_rank <- rank(mp$id)
+  has_means <- lavaan::lavInspect(lavobj, what = "meanstructure")
+  out <- vector("list", ngroups)
+  if (ngroups > 1) names(out) <- names(fs_lst)
+  fs_matnames <- NULL
+  for (g in seq_len(ngroups)) {
+    fs_g <- as.matrix(fs_lst[[g]])
+    blocks <- blocks_by_group[[g]]
+    n_cases <- max(unlist(lapply(blocks, function(b) max(b$case_idx))))
+    if (is.null(fs_matnames)) {
+      fs_matnames <- get_fs_mat_names(colnames(fs_g), int = has_means)
     }
-    # Initialize empty data frame
-    fs_matnames <- get_fs_mat_names(colnames(fs), int = has_means)
     fs_matnames_flat <- fs_matnames
     fs_matnames_flat$ld <- c(fs_matnames_flat$ld)
     fs_matnames_flat$ev <- fs_matnames_flat$ev[upper.tri(fs_matnames_flat$ev,
-                                                         diag = TRUE)]
+                                                          diag = TRUE)]
     fs_colnames <- unlist(fs_matnames_flat)
     fs_dat <- data.frame(
       matrix(
         NA,
-        nrow = nrow(fs),
+        nrow = n_cases,
         ncol = length(fs_colnames),
         dimnames = list(NULL, fs_colnames)
       )
     )
-    psi <- pars[[g]]$psi
-    alpha <- pars[[g]]$alpha
-    for (i in seq_along(case_idx)) {
-      mat_idx <- acov_rank[i]
-      fs_matrices <- compute_lav_fs_matrices(
-        acov = acov_g[[mat_idx]],
-        psi = psi,
-        alpha = alpha,
-        method = method
-      )
-      fs_dat[case_idx[[i]], ] <- augment_fs2(
-        fs[case_idx[[i]], , drop = FALSE],
-        fsL = fs_matrices$fsL,
-        fsT = fs_matrices$fsT,
-        fsb = fs_matrices$fsb
+    for (b in seq_along(blocks)) {
+      blk <- blocks[[b]]
+      case_idx <- blk$case_idx
+      # Positional assignment: fs_dat keeps the legacy column names, while
+      # augment_fs2() fills the (name-free) values in the legacy layout.
+      # The int block exists in fs_dat only when the fit has a (estimated)
+      # mean structure; compute_fscore() always attaches an fsb (a zero
+      # vector without mean structure), so pass NULL to suppress it otherwise.
+      fs_dat[case_idx, ] <- augment_fs2(
+        fs_g[case_idx, , drop = FALSE],
+        fsL = blk$fsL,
+        fsT = blk$fsT,
+        fsb = if (has_means) blk$fsb else NULL
       )
     }
     out[[g]] <- fs_dat
   }
-  if (drop_list_single && length(out) == 1) {
+  if (drop_list_single && ngroups == 1) {
     out <- out[[1]]
   }
   attr(out, "ld") <- fs_matnames$ld
@@ -282,6 +304,17 @@ compute_fscore <- function(
     t(a_mat %*% y1c)
   } else {
     t(a_mat %*% y1c + as.vector(alpha))
+  }
+  # Bartlett scores are undefined for a factor with no observed indicator
+  # among `lambda`'s rows (its a-matrix row is the zero row); regression
+  # scores stay defined for such factors through the cross-factor
+  # covariances. NA mirrors lavaan::lavPredict()'s convention so
+  # missing-data output stays comparable to it.
+  if (method == "Bartlett" && ncol(fs) > 0) {
+    no_item <- which(colSums(abs(as.matrix(lambda))) == 0)
+    if (length(no_item) > 0) {
+      fs[, no_item] <- NA
+    }
   }
   if (acov) {
     if (method == "regression") {
@@ -427,7 +460,23 @@ compute_a_reg <- function(lambda, theta, psi) {
 compute_a_bartlett <- function(lambda, theta, psi = NULL) {
   ginvth <- MASS::ginv(theta)
   tlam_invth <- crossprod(lambda, ginvth)
-  solve(tlam_invth %*% lambda, tlam_invth)
+  A <- tlam_invth %*% lambda
+  if (qr(A)$rank < nrow(A)) {
+    # A is singular when some factor has no observed indicator among the
+    # rows of `lambda` (e.g. a missing-data pattern in which a factor's
+    # indicators are all NA). Fall back to the Moore-Penrose
+    # (minimum-norm) solution: it leaves the remaining factors' Bartlett
+    # weights unchanged and gives the unscoreable factor(s) identically
+    # zero weights. compute_fscore() turns those zero rows into NA scores,
+    # mirroring lavaan::lavPredict()'s NA convention.
+    a <- MASS::ginv(A) %*% tlam_invth
+  } else {
+    a <- solve(A, tlam_invth)
+  }
+  # ginv(A) %*% drops the dimnames that solve() preserves; restore the
+  # latent-variable names so the score columns downstream stay named.
+  rownames(a) <- rownames(tlam_invth)
+  a
 }
 
 # Mean (sum-score) scoring matrix: q x p (factor x item); row k holds

@@ -388,6 +388,65 @@ get_fs.lavaan <- function(
     group_col = group_col
   )
 
+  # Group-level latent moments (effective / prior-adjusted), attached
+  # post-assemble beside the vfsLT/reliability attachments below. The
+  # values are the same psi_use/alpha_use the scoring above used
+  # (see get_fs_blocks.lavaan(): prior_cov/prior_mean when supplied,
+  # otherwise the per-group estimates; a named zero vector when the model
+  # has no estimated mean structure). The shape mirrors fsT: unified ->
+  # named list by group label; list -> direct attribute on each group data
+  # frame plus a list-valued attribute on the outer list (multigroup).
+  est_all <- lavInspect(object, what = "est", drop.list.single.group = FALSE)
+  ngroups <- object@Data@ngroups
+  group_labels <- object@Data@group.label
+  if (length(group_labels) != ngroups) {
+    # Single-group fits carry @Data@group.label as character(0); use the
+    # same "" wrapper convention assemble_fs_blocks() applies to the
+    # fsT/fsL attributes (psi/alpha must mirror the fsT shape).
+    group_labels <- rep("", ngroups)
+  }
+  psi_g <- vector("list", ngroups)
+  alpha_g <- vector("list", ngroups)
+  names(psi_g) <- names(alpha_g) <- group_labels
+  for (g in seq_len(ngroups)) {
+    est_g <- est_all[[g]]
+    psi_g[[g]] <- if (is.null(priors$cov)) est_g$psi else priors$cov
+    if (!is.null(priors$mean)) {
+      alpha_g[[g]] <- priors$mean
+    } else if (is.null(est_g$alpha)) {
+      # No (estimated) mean structure: the compute_fscore() zero-alpha
+      # convention, named to match the score columns.
+      alpha_g[[g]] <- setNames(
+        rep(0, ncol(est_g$lambda)),
+        colnames(est_g$lambda)
+      )
+    } else {
+      a_est <- est_g$alpha
+      alpha_g[[g]] <- setNames(
+        as.numeric(a_est),
+        if (!is.null(rownames(a_est))) {
+          rownames(a_est)
+        } else {
+          colnames(est_g$lambda)
+        }
+      )
+    }
+  }
+  if (format == "unified") {
+    attr(out, "psi") <- psi_g
+    attr(out, "alpha") <- alpha_g
+  } else if (ngroups == 1) {
+    attr(out, "psi") <- psi_g[[1L]]
+    attr(out, "alpha") <- alpha_g[[1L]]
+  } else {
+    for (g in seq_len(ngroups)) {
+      attr(out[[g]], "psi") <- psi_g[[g]]
+      attr(out[[g]], "alpha") <- alpha_g[[g]]
+    }
+    attr(out, "psi") <- psi_g
+    attr(out, "alpha") <- alpha_g
+  }
+
   if (vfsLT) {
     attr(out, "vfsLT") <- vcov_ld_evfs(
       object,
@@ -729,6 +788,15 @@ get_fs.merMod <- function(
   }
   attr(out, "fsL") <- fsL_arr
   attr(out, "fsT") <- fsT_arr
+
+  # Group-level latent moments: the (shared) prior covariance of the first
+  # random-effects term, with dimnames renamed to the score names
+  # (re_names) so they align with the fsL column names; random effects are
+  # mean zero, so alpha is the named zero vector.
+  psi_re <- as.matrix(lme4::VarCorr(object)[[1L]])
+  rownames(psi_re) <- colnames(psi_re) <- re_names
+  attr(out, "psi") <- psi_re
+  attr(out, "alpha") <- setNames(rep(0, length(re_names)), re_names)
 
   # Per-cluster scoring matrices as a named list (one p x n_j matrix per
   # cluster; list, not array, because cluster sizes can differ).

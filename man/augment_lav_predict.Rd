@@ -16,8 +16,10 @@ augment_lav_predict(
 \item{lavobj}{A fitted \code{\link[lavaan:lavaan-class]{lavaan::lavaan}} object}
 
 \item{method}{A character string indicating the scoring method to use.
-Must be either \code{"regression"} or \code{"Bartlett"}. This
-function wraps \code{\link[lavaan]{lavPredict}}() and
+Must be either \code{"regression"} or \code{"Bartlett"}. The score
+columns are taken from \code{\link[lavaan]{lavPredict}}()
+(which reproduces lavaan's \code{NA} convention for Bartlett
+factors with no observed indicator); this function
 intentionally does not support the \code{"mean"} (sum-score)
 method of \code{\link[=get_fs]{get_fs()}}.}
 
@@ -31,7 +33,15 @@ A \code{data.frame} containing the factor scores, the corresponding
 standard errors, the loadings and cross-loadings of the factor
 scores as indicators of the latent variables, the
 error variance-covariance matrix of the factor scores,
-and the measurement intercepts.
+and the measurement intercepts (legacy column layout:
+\verb{fs_*}, \verb{se_*}, \verb{<indicator>_by_fs_*}, \verb{ev_*}/\verb{ecov_*} in
+upper-triangular order, and \verb{int_*}). The per-row values are
+identical to those returned by \code{fs_indiv(get_fs(lavobj, method = method))}; this function differs only in column naming (the
+\verb{se_*} standard-error columns here, versus the \verb{*_se} columns of
+\code{get_fs()}/\code{fs_indiv()}) and in the ordering of the \verb{ev_*}/\verb{ecov_*}
+columns (upper-triangular here, lower-triangular in \code{get_fs()} and
+\code{fs_indiv()}), together with the three character-matrix attributes
+below.
 In addition, three character matrices are added as attributes
 that can be used as input to \code{tspa_mx_model()}:
 \itemize{
@@ -41,9 +51,13 @@ that can be used as input to \code{tspa_mx_model()}:
 }
 }
 \description{
-This function obtained the factor scores, standard errors,
-loading matrix, and variance covariance matrix by calling
-the \code{\link[lavaan:lavPredict]{lavaan::lavPredict()}} function.
+The score columns are obtained by calling the
+\code{\link[lavaan:lavPredict]{lavaan::lavPredict()}} function; the per-row definitions of those
+scores (standard errors, loading/cross-loading matrix, error
+variance-covariance matrix, intercepts) come from the canonical
+\code{get_fs()} pattern blocks (the same \code{compute_fscore()} engine
+\code{\link[=get_fs]{get_fs()}} itself uses), so there is one source of truth for
+\code{fsL}/\code{fsT}/SE shared with \code{\link[=get_fs]{get_fs()}} and \code{\link[=fs_indiv]{fs_indiv()}}.
 }
 \examples{
 library(lavaan)

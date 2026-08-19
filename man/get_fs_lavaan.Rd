@@ -118,6 +118,25 @@ one \code{num_re} x \code{n_j} matrix per cluster, where
 rows of the model response and the fixed-effects design
 reproduces the cluster's EB scores for method \code{"EB"} and the
 per-cluster OLS (ML) scores for method \code{"ML"}.
+* \code{psi}: effective (prior-adjusted) covariance matrix of the
+latent variables (\verb{q x q}), group-level (not per-pattern), and
+a point estimate only (no sampling SEs of the latents are
+attached). Mirrors the \code{fsT} shape: a named list keyed by group
+label for \code{"unified"} output; a direct attribute on each group
+data frame (plus a list-valued attribute on the outer list) for
+\code{"list"} output; for \code{merMod} objects a single \verb{q x q} matrix.
+With \code{prior_cov} supplied it equals the prior (shared across
+groups), otherwise the per-group lavaan estimate. For \code{merMod}
+objects the matrix is the first random-effects term's
+\code{VarCorr}, with dimnames renamed to match the \code{fsL} column
+names (\code{u0}/\code{u1}/..., or the legacy \code{u0_eb}/\code{u1_eb} names).
+* \code{alpha}: effective (prior-adjusted) means of the latent
+variables (a named vector of length \code{q}), with the same group
+nesting and point-estimate semantics as \code{psi}. With
+\code{prior_mean} supplied it equals the prior, otherwise the
+per-group lavaan estimate; a named zero vector (\code{0} per latent)
+when the model has no (estimated) mean structure. For \code{merMod}
+objects a named zero vector (random effects are mean zero).
 * \code{fs_pattern}: for lavaan models, a named list by group of
 \code{list(label, pat)} entries. \code{label} is a character vector with
 one entry per case in the group giving that case's
@@ -133,6 +152,14 @@ by pattern name.
     with one entry per pattern; the pattern name is the observed
     indicator names joined with `"+"` in indicator order (e.g.
     `"x1+x3"`).
+
+    Note: for a single-group lavaan fit in `"unified"` format, the
+    per-group attribute wrappers (`fsT`, `fsL`, `fsb`,
+    `scoring_matrix`, `psi`, and `alpha`) are each a one-element list
+    named with the empty string `""`; `x[[""]]` does not match in R
+    list subsetting, so read these attributes positionally (e.g.
+    `attr(fs, "fsT")[[1]]`, `attr(fs, "psi")[[1]]`) rather than by
+    name.
 }\if{html}{\out{</div>}}
 }
 \description{
