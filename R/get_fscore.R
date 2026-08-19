@@ -3,7 +3,9 @@
 #' @description
 #' `get_fs()` is an S3 generic that extracts factor scores from fitted models.
 #' Methods are available for `data.frame` (fits a CFA internally), `lavaan`
-#' objects, and `lmerMod` objects. Support for `mirt` models is planned.
+#' objects, `lmerMod` objects, and fitted `mirt` single-group models
+#' (`SingleGroupClass`; `mirt` is a `Suggests` dependency). Multi-group mirt
+#' models (`MultipleGroupClass`) are not supported.
 #'
 #' @details
 #' When `object` is a data frame and `model` is supplied as a lavaan syntax string,

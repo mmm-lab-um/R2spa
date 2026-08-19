@@ -4,7 +4,7 @@ Tracks remaining work from completed plans (see `archive/`). Update status as
 items are resolved; move finished items to the **Closed** section with the
 date and commit/PR reference.
 
-**Last updated:** 2026-08-18 (WI-1/WI-2 landed on `refactor/core`: STATUS #4 reliability-guard fix in `10b5b0d`; lme4-2.x `get_D()` work item (was untracked here) closed in `966ff9b` — suite 2339 pass / 0 fail, check 0/0/1 OpenMx NOTE. Prior context: PLAN 06 per-pattern attrs merged in `7c51d23` and archived; `method="ML"`/`"mean"` + merMod speedup commits `aa5be3e`/`b730b53` landed before that)
+**Last updated:** 2026-08-19 (two features landed on `refactor/core`: **PLAN 07** `b9ca3c9` — new exported `fs_indiv()` per-row API + `psi`/`alpha` latent-moment attributes on `get_fs()` + `augment_lav_predict()` refactored onto the shared engine — resolves F4, closed #14; then the **`mirt` `SingleGroupClass` `get_fs()` method** (follow-up F2) + per-row `mirt` branch in `fs_indiv()` — closed #15. Suite **3176 pass** / 0 fail, check 0/0/1 OpenMx NOTE. Prior context: WI-1/WI-2 `10b5b0d`/`966ff9b` (2339), PLAN 06 `7c51d23`, `method="ML"`/`"mean"` + merMod speedup `aa5be3e`/`b730b53`)
 
 ## Open
 
@@ -17,14 +17,18 @@ date and commit/PR reference.
 | # | Item | Source | Status |
 |---|------|--------|--------|
 | F1 | Wire `tspa()` to accept unified/list factor-score shapes natively (via `fs_to_group_list()` or dual support) — currently relies on attributes; the `format` default change shifts multigroup output to list-valued attributes that `tspa()` must keep parsing. | PLAN 01, remaining issue 7 | deferred |
-| F2 | `mirt` S3 method (`get_fs.SingleGroupClass`) — architecture (blocks + assembler) is backend-agnostic and ready. | PLAN 01, remaining issue 8 | deferred |
+| F2 | `mirt` S3 method (`get_fs.SingleGroupClass`) — **resolved 2026-08-19**: per-row regression-form `fsL = I − Vpost·Ψ⁻¹` (univariate = `1 − SE²`); `mirt` stays a `Suggests` dependency; `get_fs.MultipleGroupClass` errors. See #15. | PLAN 01, remaining issue 8 | resolved 2026-08-19 (#15) |
 | F3 | `tspa()` per-pattern stage 2 for groups with k≥2 missing-data patterns: fit stage 2 with lavaan sub-groups `(group × pattern)` via a synthesized pattern column from `fs_pattern`, fixing each sub-group's loadings/error (co)variances/intercepts to its own pattern's matrices (extend `tspa_schema_mf()` group indices to (group, pattern) pairs; user `group.equal` still applies). Known hazard to verify first: lavaan's exact level ordering for `group = c(a, b)` must be derived empirically and pinned canary-style (cf. `R/lavaan_compat.R`); tiny pattern sub-groups (n ≲ 5) may fail to converge — no automatic merging. Design: PLAN 06 §7a. | PLAN 06, §7a | deferred |
-| F4 | Per-row column API (user-requested): user-level function appending individual-specific `fsL`/`fsT`/`fsb` values as columns to the factor-score data frame, keyed by `fs_pattern`'s per-row labels (e.g. `ld_fs_visual_x1`, `ev_fs_visual`) so each case carries the matrices matching its own pattern. | PLAN 06, §7b | deferred |
+| F4 | Per-row column API (user-requested): user-level function appending individual-specific `fsL`/`fsT`/`fsb` values as columns to the factor-score data frame, keyed by `fs_pattern`'s per-row labels (e.g. `ld_fs_visual_x1`, `ev_fs_visual`) so each case carries the matrices matching its own pattern. **Resolved 2026-08-19** by the exported `fs_indiv()` (see #14). | PLAN 06, §7b | resolved 2026-08-19 (#14) |
+| F5 | mirt-EAP per-row SE variant: the per-row `mirt` SE is currently mirt's `fscores(..., full.scores.SE = TRUE)`; also expose the alternative `sqrt(diag(Vpost_i))` (regression-SE convention) as an option/flag so both conventions are available. | plan `archive/PLAN_08_mirt_fs.md`, follow-up | deferred |
+| F6 | mirt 2-factor fits: the effective `psi` is the unit matrix under mirt's default (unit-variance, zero-mean) factor prior and is not an estimated parameter; if mirt ever exposes a non-unit multi-factor covariance, thread it through `get_fs.SingleGroupClass()` so `psi` reflects the true prior (mirrors `prior_cov` in the lavaan path). | plan `archive/PLAN_08_mirt_fs.md`, follow-up | deferred |
 
 ## Closed
 
 | # | Issue | Closed | Reference |
 |---|-------|--------|-----------|
+| 15 | **`mirt` Item-Response `get_fs()` support (`SingleGroupClass`)** — new `get_fs.SingleGroupClass()` (S4 mirt fit, univariate & multi-factor) + a `get_fs.MultipleGroupClass()` guard that errors with a "fit/extract the single group first" message. Scores are the EAP posterior means (`fs_<factor>`, named by the mirt factor names via `mirt::extract.mirt(m, "factorNames")`); per-observation `fsL`/`fsT` are **per-row lists** of `q × q` regression-form matrices from `compute_lav_fs_matrices(Vpost_i, diag(q), 0, "regression")` where `Vpost_i` is mirt's `fscores(..., return.acov = TRUE)` posterior covariance (`diag(Vpost_i) = SE²`). Unidimensional: `F1_by_fs_F1 = 1 − SE²`, `ev = (1 − SE²)·SE²` (machine precision); multi-factor off-diagonals give the shrinkage loadings / error covariances. `fs_pattern = list(label = seq_len(n), pat = NULL)`, marker `mirt_per_obs = TRUE`, `psi = diag(q)`, `alpha = 0` (mirt's default unit/zero prior; `prior_*` unsupported here). `fs_indiv()` gained a **first-dispatch** per-row branch (`resolve_per_obs()`) that mints one block per row — the `fs_indiv()` body is otherwise unchanged, so a mirt output round-trips through it like lavaan/merMod. Missing data: no-scorable-indicator rows → all-NA block (NA score/SE/ev/intercept), matching lavaan. `mirt` stays in `DESCRIPTION: Suggests` (namespaced `mirt::` calls, `require_mirt()` guard). New `tests/testthat/test-get_fs_mirt.R` (72 expectations). Resolves follow-up F2. | 2026-08-19 | this commit + `archive/PLAN_08_mirt_fs.md` |
+| 14 | **`fs_indiv()` per-row API + effective latent `psi`/`alpha` + `augment_lav_predict()` reconcile (PLAN 07)** — new exported `fs_indiv(fs)` re-derives, per row, the individual-specific values (`_se`, `<lvs>_by_<lv>_*`, `ev_*`/`ecov_*`, and the per-pattern `fsb` intercepts) from the pattern's `fsL`/`fsT`/`fsb` via a shared **value-only** engine `fs_row_cols()` that `augment_lav_predict()` now also uses (SEs are therefore always pattern-consistent); returns a data frame with exactly the factor-structure columns (score columns kept, the other `get_fs()` extras dropped) + `group_col`/`id_vals`/`block_label` attributes, under a one-block-per-group contract (lavaan: complete-data `fsT`; all-missing patterns → all-NA block). Adds effective latent-moment attributes to **every** get_fs() backend: `psi` = `prior_cov` if supplied else the lavaan/RE-term covariance, `alpha` = `prior_mean` if supplied else the lavaan mean (merMod: named zero vector) — point estimates only, carried through `fs_to_group_list()`. Refactors `augment_lav_predict()` onto `augment_fs2()` (drops the ~54-line duplicate `fsL`/`fsT`/`fsb` derivation). Resolves follow-up F4; documents F5 (mirt-EAP SE variant, out of scope). | 2026-08-19 | `b9ca3c9` + `archive/PLAN_07_fs_indiv_and_latent_moments.md` |
 | 13 | **`get_D()` lme4-2.x RE-covariance convention (merMod EB)** — `get_D(object)` is now self-contained: splits `@theta` by `@cnms` block lengths (the same idiom lme4's `mkVarCorr` uses; no dependence on the `"clen"` attribute, absent on `@theta` since lme4 2.x even for single-term fits) and returns the SCALED first RE-term covariance `VarCorr(x)[[1]]/sigma(x)^2`; the lme4 2.0.6 convention is documented in-source (R/get_fs_methods.R ~:601). Baseline (step 1) showed the `b730b53` clen restore had already made the value exact under 2.x — the plan's "missing `sigma^2` factor" premise was a misread (the motivating probe gap of 1378.179 vs 1.435 was exactly `sigma^2`; the EB formulas carry the explicit scale) — so the change is numerically **bit-identical** (RDS-verified, all 8 EB/ML outputs on 4 fixtures; no user-visible value change, no stage-2 SE shift, no vignette re-knit). New `tests/testthat/test-lme4_compat.R` canary (per-term `s^2 * tcrossprod(L) == VarCorr` at 1e-15, `get_D == VarCorr[[1]]/s^2`, warning-free multi-term parse) guards future lme4 theta drift — needed because scores are D-free via `getME("b")`, so ranef-identity tests alone would stay green through a convention change. Term-1-only EB `fsT`/`fsL`/`scoring_matrix` reference tests for the 2+1/2+2 fixtures at 1e-12 (joint-vs-term-1 posterior gap recorded in-test, no multi-term score-identity pin by design); roxygen accuracy fixes (EB scores documented as first-term `ranef()`; `corrected_fsT`/`format` declared-but-ignored notes for merMod). | 2026-08-18 | `966ff9b` + `.opencode/plans/get_d-mermod-lme4-2x.md` |
 | 4 | **`reliability = TRUE` + single-group multi-factor + default `unified` format → hard error** — the `get_fs.lavaan()` reliability guard now derives dimensionality from the model (`nrow(est$psi)` for SG, `nrow(est[[1]]$psi)` for MG — format-agnostic; the PLAN 06 missing-data stop for reliability still fires upstream, so per-pattern fits cannot misfire) instead of the `fsb` attribute-shape test that never fired for SG in the unified format. SG multi-factor now warns ("Computation of reliability for a multi-factor model is not currently supported.") and omits the attribute in BOTH formats; all other cases verified unchanged (SG unidimensional pin .9607411, MG unidimensional per-group + overall values/names, non-standardized warning, priors/mean rejections). 4 new tests in `test-get_fscore.R` (SG 2-factor unified + list — the unified case is the pre-fix-failing regression net — MG 2-factor both formats, MG 1-factor guard); `@param reliability` wording updated (roxygen only). | 2026-08-18 | `10b5b0d` (PLAN 01, remaining issue 4) |
 | 12 | **Per-pattern factor-score attributes for lavaan missing-data fits** — `assemble_fs_blocks()` now keeps one `fsT`/`fsL`/`fsb`/`scoring_matrix` value per observed-indicator pattern: a k=1 group keeps a plain matrix/vector (complete-data values/shapes unchanged, regression-tested), and a group with k≥2 patterns gets a named list keyed by pattern label (observed indicators joined with `"+"` in indicator order). New per-group `fs_pattern` attribute = `list(label, pat)` (per-case pattern label — `NA` for cases with all indicators missing — plus a named logical p×k indicator-by-pattern matrix) so a future API (follow-up F4) can index per-row columns. `prepare_fs()` carries `pat_label`/`pat` through the blocks; the "blocks have differing fsT/fsL/fsb attributes" message and `check_blocks_identical()` deleted (nothing is dropped anymore). `fs_to_group_list()` round-trips the nested shapes and `fs_pattern` in both directions. SE paths (`corrected_fsT`/`reliability`/`vfsLT`) now `stop()` explicitly on multi-pattern data (previously a cryptic dimension error deep in `compute_fspars()`/`correct_evfs()`); `tspa()` rejects nested per-pattern `fsT`/`fsL`/`fsb` attributes with an explicit error (both the single-group k>1 "misread as k groups" trap and multigroup covered; per-pattern stage 2 is follow-up F3). Tests: per-pattern contract + `fs_pattern` content in `test-assemble_fs_blocks.R`; new `test-get_fs_missing.R` (SG/MG, pattern matrices matched against `lavPredict(acov=TRUE)` **by pattern label**, `fs_pattern` vs raw NA positions, `format="list"`, complete-data regression guard); SE-path errors in `test-get_fscore.R`; guard tests in `test-tspa.R` (incl. real `get_fs()` missing-data output); `fs_pattern` round-trips in `test-fs_converters.R`. Implementation note: a pattern's `fsT`/`fsL` equal lavaan's raw `acov` entry only via the package's canonical mapping `compute_lav_fs_matrices()` (`fsT = (I − AΨ⁻¹)A`, pinned in `test-lavPredict_equivalence.R`) — the tests assert that reference, not raw acov equality. Quarantined consumers (`vcov_corrected`, `tspa_mx_model`, `grandStandardizedSolution`) read `fsT`/`fsL` as single matrices and need adapting at re-integration. Also: `^\.git$` added to `.Rbuildignore` (worktree `.git` *file* leaked into built packages, adding a hidden-file NOTE). | 2026-08-18 | `archive/PLAN_06_per_pattern_fs_attrs.md` (implementation `bb64d2e`, merged into `refactor/core` in `7c51d23`) |
@@ -189,8 +193,28 @@ date and commit/PR reference.
   accuracy wording). merMod `fsT`/`fsL`/`scoring_matrix` values: **no
   change** (bit-identical RDS-verified; no stage-2 SE shift,
   `vignettes/scoring-matrices.Rmd` needs no re-knit). Full
-  `devtools::check()` at each step: **0 errors, 0 warnings, 1 NOTE** (the
-  expected OpenMx item).
+   `devtools::check()` at each step: **0 errors, 0 warnings, 1 NOTE** (the
+   expected OpenMx item).
+- PLAN 07 + mirt `get_fs()` verification (2026-08-19): `devtools::test()`
+  **3104 pass / 0 fail / 0 warn / 0 skip** at the PLAN 07 (#14) close (2339 →
+  +765 from `test-fs_indiv.R` + `test-get_fs_latent_moments.R`), and **3176
+  pass / 0 fail / 0 warn / 0 skip** after the mirt `#15` method (+72 from
+  `test-get_fs_mirt.R`). Independently green at each commit (bisect-checked:
+  the PLAN 07 tree alone runs its full 3104 with the mirt test removed).
+  `augment_lav_predict()` A/B: 1–4-factor lavaan fits identical to the old
+  inline implementation after the `augment_fs2()` reconcile. Unidimensional
+  mirt: `F1_by_fs_F1 == 1 − SE²` and `ev == (1 − SE²)·SE²` to ≈1e-16,
+  off-diagonals match the regression-form algebra by hand; the mirt per-row
+  branch is dormant unless the `mirt_per_obs` marker is set (never on
+  lavaan/merMod). `devtools::document()` run with the pinned **roxygen2 8.1.0**
+  (the sandbox's global 7.3.1 would churn `RoxygenNote` + `importFrom`
+  splitting) — `NAMESPACE`/`man/` carry only the intended `fs_indiv` export /
+  mirt-method changes. Real bug fixed en route: `resolve_group_blocks()` no
+  longer `stop()`s on all-missing-pattern rows (returns an all-NA block,
+  preserving `nrow`). Full `devtools::check()` (`--no-manual`; the PDF-manual
+  build errors are the environmental missing `pdflatex`, not a package issue):
+  **0 errors, 0 warnings, 1 NOTE** — the sole NOTE is the expected OpenMx
+  `Imports` baseline item.
 - Vignette build history: exactly **3 of 13 failed** on the pre-PLAN 02
   Step-1 tree (`corrected-se.Rmd`, `multilevel.rmd`, `tspa-vignette-mx.Rmd`
   — the "7/8 of 13" reports were wrong); **13/13 build on 2026-08-16**
@@ -219,7 +243,16 @@ date and commit/PR reference.
   refreshed in `4e4a805`. Plan archived as `archive/PLAN_QUARANTINE.md`.
   `OpenMx` stays in `DESCRIPTION: Imports` until the OpenMx path is
   re-integrated (the sole expected check NOTE).
-- Suggested order (all plans complete): 5 (perf) → F1 (future).
+- **PLAN 07 (`fs_indiv()` + latent `psi`/`alpha`) is committed** in `b9ca3c9`;
+  plan archived as `archive/PLAN_07_fs_indiv_and_latent_moments.md` (resolves
+  F4, closed #14).
+- **The `mirt` `SingleGroupClass` `get_fs()` method is committed** (follow-up
+  F2, closed #15); recorded in `archive/PLAN_08_mirt_fs.md`. `mirt` remains a
+  `Suggests`-only dependency (no `DESCRIPTION` `Imports` change); per-obs
+  `fs_indiv()` support rides on the `mirt_per_obs` marker. Follow-ups F5
+  (mirt-EAP SE variant) + F6 (2-factor `psi` unit-by-convention) documented.
+- Suggested order (all plans complete): 5 (perf) → F1 / F3 / F5 / F6 (future;
+  F2 and F4 resolved 2026-08-19).
   (#4 closed 2026-08-18 in `10b5b0d`; the lme4-2.x `get_D()` work item —
   tracked in `.opencode/plans/get_d-mermod-lme4-2x.md`, not this table until
   now — closed the same day in `966ff9b`.)

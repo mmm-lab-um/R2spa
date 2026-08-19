@@ -165,7 +165,9 @@ by pattern name.
 \description{
 \code{get_fs()} is an S3 generic that extracts factor scores from fitted models.
 Methods are available for \code{data.frame} (fits a CFA internally), \code{lavaan}
-objects, and \code{lmerMod} objects. Support for \code{mirt} models is planned.
+objects, \code{lmerMod} objects, and fitted \code{mirt} single-group models
+(\code{SingleGroupClass}; \code{mirt} is a \code{Suggests} dependency). Multi-group mirt
+models (\code{MultipleGroupClass}) are not supported.
 }
 \details{
 \code{get_fs_lavaan()} is superseded by \code{\link[=get_fs]{get_fs()}}. It is retained for backward

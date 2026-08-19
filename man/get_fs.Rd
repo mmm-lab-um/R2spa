@@ -5,6 +5,8 @@
 \alias{get_fs.default}
 \alias{get_fs.lavaan}
 \alias{get_fs.merMod}
+\alias{get_fs.SingleGroupClass}
+\alias{get_fs.MultipleGroupClass}
 \alias{get_fs}
 \title{Get Factor Scores and the Corresponding Standard Error of Measurement}
 \usage{
@@ -48,6 +50,10 @@
   legacy_names = FALSE,
   ...
 )
+
+\method{get_fs}{SingleGroupClass}(object, format = c("unified", "list"), ...)
+
+\method{get_fs}{MultipleGroupClass}(object, ...)
 
 get_fs(object, ...)
 }
@@ -233,7 +239,9 @@ by pattern name.
 \description{
 \code{get_fs()} is an S3 generic that extracts factor scores from fitted models.
 Methods are available for \code{data.frame} (fits a CFA internally), \code{lavaan}
-objects, and \code{lmerMod} objects. Support for \code{mirt} models is planned.
+objects, \code{lmerMod} objects, and fitted \code{mirt} single-group models
+(\code{SingleGroupClass}; \code{mirt} is a \code{Suggests} dependency). Multi-group mirt
+models (\code{MultipleGroupClass}) are not supported.
 }
 \details{
 When \code{object} is a data frame and \code{model} is supplied as a lavaan syntax string,
