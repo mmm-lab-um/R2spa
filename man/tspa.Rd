@@ -13,6 +13,7 @@ tspa(
   fsT = NULL,
   fsL = NULL,
   fsb = NULL,
+  reduce = c("mean", "median"),
   ...
 )
 }
@@ -35,25 +36,48 @@ frame storing the standard errors of each group in each latent
 factor for multigroup 2S-PA.}
 
 \item{fsT}{An error variance-covariance matrix of the factor scores, which
-can be obtained from the output of \code{get_fs()} using
-\code{attr()} with the argument \code{which = "fsT"}. Must not
-contain per-pattern lists (groups fitted with missing data):
-\code{tspa()} does not yet support that.}
+can be obtained from the output of \code{\link[=get_fs]{get_fs()}} using \code{attr()}
+with the argument \code{which = "fsT"}. When a group was fitted with
+missing data (\code{missing = "fiml"}), the attribute carries
+per-pattern values (a per-group list of one matrix per
+observed-indicator pattern); for a \code{merMod} fit it is a 3-D
+per-cluster array. Values of these per-unit shapes are reduced
+to a single representative per-group matrix by \code{reduce}; the
+pooled (not the nested/per-cluster) matrix is attached to the
+returned fit as the \code{fsT} attribute.}
 
 \item{fsL}{A matrix of loadings and cross-loadings from the
 latent variables to the factor scores \code{fs}, which
-can be obtained from the output of \code{get_fs()} using
+can be obtained from the output of \code{\link[=get_fs]{get_fs()}} using
 \code{attr()} with the argument \code{which = "fsL"}.
 For details see the multiple-factors vignette:
 \code{vignette("multiple-factors", package = "R2spa")}.
-Must not contain per-pattern lists (groups fitted with missing
-data): \code{tspa()} does not yet support that.}
+As with \code{fsT}, per-pattern (FIML missing data) and per-cluster
+(merMod) values are supported and reduced per group by \code{reduce};
+the pooled (not the nested/per-cluster) matrix is attached to the
+returned fit as the \code{fsL} attribute.}
 
 \item{fsb}{A vector of intercepts for the factor scores \code{fs}, which can
-be obtained from the output of \code{get_fs()} using \code{attr()}
-with the argument \code{which = "fsb"}. Must not contain
-per-pattern lists (groups fitted with missing data):
-\code{tspa()} does not yet support that.}
+be obtained from the output of \code{\link[=get_fs]{get_fs()}} using \code{attr()}
+with the argument \code{which = "fsb"}. As with \code{fsT}, per-pattern
+(FIML missing data) and per-cluster (merMod) values are supported
+and reduced per group by \code{reduce}; the pooled (not the
+nested/per-cluster) vector is used for the stage-2 intercept
+constraints.}
+
+\item{reduce}{Controls how per-unit \code{fsL}/\code{fsT}/\code{fsb} from a group fitted
+with missing data (\code{missing = "fiml"}; per-pattern lists of
+matrices) or per-cluster values from a \code{merMod} fit (3-D arrays)
+are collapsed to a single representative value per group for
+stage 2. A no-op when the per-unit quantities are constant within
+the group (e.g. complete single-group data). One of \code{"mean"}
+(the default) or \code{"median"}. With \code{"mean"} the pooled \code{fsT} is a
+convex combination of the per-unit (positive semi-definite)
+matrices and so remains positive semi-definite; with \code{"median"}
+the reduction is element-wise and need not be, in which case a
+warning is emitted when the pooled \code{fsT} is not positive
+semi-definite. The pooled (not the nested/per-cluster) \code{fsT} and
+\code{fsL} are what get attached to the returned fit.}
 
 \item{...}{Additional arguments passed to \code{\link[lavaan]{sem}}. See
 \code{\link[lavaan]{lavOptions}} for a complete list.}
@@ -64,6 +88,25 @@ that contains the model syntax.
 }
 \description{
 Fit a two-stage path analysis (2S-PA) model.
+}
+\details{
+When the factor-score attributes are heterogeneous across the units of a
+group, \code{tspa()} first re-expresses them as long-form, individual-specific
+values and then reduces them to a single representative set per group;
+that pooled set is what feeds the stage-2 model and is attached to the
+returned fit. The heterogeneous cases are per-pattern values from a group
+fitted with missing data (\code{missing = "fiml"}), where \code{fsL}/\code{fsT}/\code{fsb} are
+per-group lists of one matrix/vector per observed-indicator pattern, and
+per-cluster values from a \code{merMod} fit, where \code{fsL}/\code{fsT} are 3-D arrays
+(one slice per cluster). Pooling, rather than fitting each pattern as its
+own tiny stage-2 sub-group, keeps small (possibly near-empty) patterns from
+making the measurement model under-identified or numerically fragile. The
+default \code{reduce} is \code{"mean"}, a convex combination of positive
+semi-definite matrices, so the pooled \code{fsT} stays positive semi-definite;
+the opt-in \code{"median"} trades that guarantee for robustness and emits a
+warning when the pooled \code{fsT} is not positive semi-definite. For
+homogeneous inputs the reduction is a no-op, so complete-data behavior is
+unchanged.
 }
 \examples{
 library(lavaan)
@@ -150,4 +193,31 @@ tspa(model = "visual ~ c(b1, b1) * speed",
      se_fs = list(visual = c(0.3391326, 0.311828),
                   speed = c(0.2786875, 0.2740507)),
      group = "school")
+
+# Missing data (FIML): per-pattern fsL/fsT are pooled within the group
+data("HolzingerSwineford1939", package = "lavaan")
+hs <- HolzingerSwineford1939
+set.seed(1334)
+hs$x2[!rbinom(nrow(hs), 1, 0.4)] <- NA
+hs$x8[!rbinom(nrow(hs), 1, 0.4)] <- NA
+mod_fin <- "
+  visual =~ x1 + x2 + x3
+  speed  =~ x7 + x8 + x9
+"
+fit_fin <- suppressWarnings(cfa(mod_fin, data = hs, missing = "fiml"))
+fs_fin <- get_fs(fit_fin)
+tspa("visual ~ speed", data = fs_fin,
+     fsT = attr(fs_fin, "fsT"), fsL = attr(fs_fin, "fsL"),
+     reduce = "mean")
+# opt-in element-wise reduction (may lose positive semi-definiteness)
+suppressWarnings(tspa("visual ~ speed", data = fs_fin,
+     fsT = attr(fs_fin, "fsT"), fsL = attr(fs_fin, "fsL"),
+     reduce = "median"))
+
+# merMod: per-cluster fsL/fsT are pooled (one value per cluster)
+library(lme4)
+lmod <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+fs_mer <- get_fs(lmod)
+tspa("u1 ~ u0", data = fs_mer,
+     fsT = attr(fs_mer, "fsT"), fsL = attr(fs_mer, "fsL"))
 }

@@ -585,9 +585,11 @@ test_that("Multigroup fsT/fsL shape mismatch is a clear error", {
   )
 })
 
-# Nested (per-pattern) fsT/fsL are what get_fs() now emits for a group with
-# k >= 2 observed-indicator patterns (missing data); tspa() must reject them
-# explicitly instead of misreading a single-group k-pattern list as k groups.
+# Nested (per-pattern) fsT/fsL are what get_fs() emits for a group with
+# k >= 2 observed-indicator patterns (missing data). tspa() pools them
+# (PLAN 09), but only when the data frame is a resolvable get_fs() result;
+# with a plain (non-get_fs) data frame the pooler must error informatively
+# instead of silently mis-pooling a single-group k-pattern list as k groups.
 nested_fs_matrices <- function(vT, vL, pats) {
   tlist <- lapply(pats, function(p) {
     matrix(vT, 2, 2, dimnames = list(c("fs_a", "fs_b"), c("fs_a", "fs_b")))
@@ -598,22 +600,22 @@ nested_fs_matrices <- function(vT, vL, pats) {
   list(fsT = setNames(tlist, pats), fsL = setNames(llist, pats))
 }
 
-test_that("tspa() rejects nested per-pattern fsT/fsL (single-group shape)", {
+test_that("tspa(): per-unit fsT/fsL with a non-get_fs data frame errors informatively (SG shape)", {
   pats <- c("a+b", "a")
   nm <- nested_fs_matrices(0.1, 1, pats)
   dat <- data.frame(fs_a = 0:3, fs_b = 0:3)
   # attr() shape emitted by a single-group k=2 missing-data get_fs(): a
   # length-1 list whose element is a named list of per-pattern matrices
-  # (left unchecked, this would be misread as one group's matrix, or when
-  # unwrapped as k groups)
+  # (a plain data frame carries no fs_pattern attribute, so the pooler
+  # cannot resolve the rows and stops instead of mis-pooling)
   expect_error(
     tspa("b ~ a", data = dat,
          fsT = list(nm$fsT), fsL = list(nm$fsL)),
-    "does not yet support groups with multiple missing-data patterns"
+    "get_fs\\(\\) result"
   )
 })
 
-test_that("tspa() rejects nested per-pattern fsT/fsL (multigroup and fsb)", {
+test_that("tspa(): per-unit fsT/fsL with a non-get_fs data frame errors informatively (MG shape); nested fsb alone keeps the backstop", {
   pats <- c("a+b", "a")
   nm <- nested_fs_matrices(0.1, 1, pats)
   dat <- data.frame(fs_a = c(0, 1, 2, 3), fs_b = c(0, 1, 2, 3),
@@ -623,7 +625,7 @@ test_that("tspa() rejects nested per-pattern fsT/fsL (multigroup and fsb)", {
          fsT = setNames(rep(list(nm$fsT), 2), c("V", "G")),
          fsL = setNames(rep(list(nm$fsL), 2), c("V", "G")),
          group = "school"),
-    "does not yet support groups with multiple missing-data patterns"
+    "get_fs\\(\\) result"
   )
   # nested fsb (per-pattern intercept vectors, the single-group attr()
   # shape) is rejected even with plain matrix fsT/fsL
@@ -660,7 +662,10 @@ test_that("tspa() accepts complete-data attributes unchanged", {
   )
 })
 
-test_that("tspa() rejects real get_fs() missing-data output", {
+# Per deep-value checks of the pooled per-group matrices (test-tspa_pooled.R),
+# this only asserts that the real FIML get_fs() output now FITS and that the
+# pooled (not the nested) values are what get attached to the fit.
+test_that("tspa() fits real get_fs() missing-data output", {
   hs <- HolzingerSwineford1939
   set.seed(1334)
   hs[!rbinom(301, size = 1, prob = 0.7), 7] <- NA
@@ -671,25 +676,34 @@ test_that("tspa() rejects real get_fs() missing-data output", {
     visual =~ x1 + x2 + x3
     speed  =~ x7 + x8 + x9
   "
-  # multigroup: both groups carry nested per-pattern matrices
+  # multigroup: both groups carry nested per-pattern matrices, pooled to one
+  # plain matrix per group
   fit_mg <- suppressWarnings(
     cfa(mod2, data = hs, group = "school", missing = "fiml")
   )
   fs_mg <- get_fs(fit_mg)
-  expect_error(
-    tspa("visual ~ speed", data = fs_mg, group = "school",
-         fsT = attr(fs_mg, "fsT"), fsL = attr(fs_mg, "fsL")),
-    "does not yet support groups with multiple missing-data patterns"
+  expect_no_error(
+    fit_mg2 <- suppressWarnings(
+      tspa("visual ~ speed", data = fs_mg, group = "school",
+           fsT = attr(fs_mg, "fsT"), fsL = attr(fs_mg, "fsL"))
+    )
   )
+  T_mg <- attr(fit_mg2, "fsT")
+  expect_true(is.list(T_mg) && !is.null(names(T_mg)))
+  expect_true(all(vapply(T_mg, is.matrix, logical(1))))   # no nesting left
+  expect_equal(attr(fit_mg2, "pooled_fs"), "mean")
   # single group: the length-1 attribute list wrapping a nested pattern
-  # list (the "misread as k groups" trap)
+  # list (the "misread as k groups" trap) pools to a plain matrix
   fit_sg <- suppressWarnings(cfa(mod2, data = hs, missing = "fiml"))
   fs_sg <- get_fs(fit_sg)
-  expect_error(
-    tspa("visual ~ speed", data = fs_sg,
-         fsT = attr(fs_sg, "fsT"), fsL = attr(fs_sg, "fsL")),
-    "does not yet support groups with multiple missing-data patterns"
+  expect_no_error(
+    fit_sg2 <- suppressWarnings(
+      tspa("visual ~ speed", data = fs_sg,
+           fsT = attr(fs_sg, "fsT"), fsL = attr(fs_sg, "fsL"))
+    )
   )
+  expect_true(is.matrix(attr(fit_sg2, "fsT")))
+  expect_equal(attr(fit_sg2, "pooled_fs"), "mean")
 })
 
 test_that("Test indicator names not starting with 'fs_'", {

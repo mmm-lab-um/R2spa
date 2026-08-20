@@ -2,6 +2,25 @@
 #'
 #' Fit a two-stage path analysis (2S-PA) model.
 #'
+#' @details
+#' When the factor-score attributes are heterogeneous across the units of a
+#' group, `tspa()` first re-expresses them as long-form, individual-specific
+#' values and then reduces them to a single representative set per group;
+#' that pooled set is what feeds the stage-2 model and is attached to the
+#' returned fit. The heterogeneous cases are per-pattern values from a group
+#' fitted with missing data (`missing = "fiml"`), where `fsL`/`fsT`/`fsb` are
+#' per-group lists of one matrix/vector per observed-indicator pattern, and
+#' per-cluster values from a `merMod` fit, where `fsL`/`fsT` are 3-D arrays
+#' (one slice per cluster). Pooling, rather than fitting each pattern as its
+#' own tiny stage-2 sub-group, keeps small (possibly near-empty) patterns from
+#' making the measurement model under-identified or numerically fragile. The
+#' default `reduce` is `"mean"`, a convex combination of positive
+#' semi-definite matrices, so the pooled `fsT` stays positive semi-definite;
+#' the opt-in `"median"` trades that guarantee for robustness and emits a
+#' warning when the pooled `fsT` is not positive semi-definite. For
+#' homogeneous inputs the reduction is a no-op, so complete-data behavior is
+#' unchanged.
+#'
 #' @param model A string variable describing the structural path model,
 #'              in \code{lavaan} syntax.
 #' @param data A data frame containing factor scores.
@@ -15,23 +34,45 @@
 #'              frame storing the standard errors of each group in each latent
 #'              factor for multigroup 2S-PA.
 #' @param fsT An error variance-covariance matrix of the factor scores, which
-#'            can be obtained from the output of \code{get_fs()} using
-#'            \code{attr()} with the argument \code{which = "fsT"}. Must not
-#'            contain per-pattern lists (groups fitted with missing data):
-#'            \code{tspa()} does not yet support that.
+#'            can be obtained from the output of [get_fs()] using `attr()`
+#'            with the argument `which = "fsT"`. When a group was fitted with
+#'            missing data (`missing = "fiml"`), the attribute carries
+#'            per-pattern values (a per-group list of one matrix per
+#'            observed-indicator pattern); for a `merMod` fit it is a 3-D
+#'            per-cluster array. Values of these per-unit shapes are reduced
+#'            to a single representative per-group matrix by `reduce`; the
+#'            pooled (not the nested/per-cluster) matrix is attached to the
+#'            returned fit as the `fsT` attribute.
 #' @param fsL A matrix of loadings and cross-loadings from the
-#'            latent variables to the factor scores \code{fs}, which
-#'            can be obtained from the output of \code{get_fs()} using
-#'            \code{attr()} with the argument \code{which = "fsL"}.
+#'            latent variables to the factor scores `fs`, which
+#'            can be obtained from the output of [get_fs()] using
+#'            `attr()` with the argument `which = "fsL"`.
 #'            For details see the multiple-factors vignette:
-#'            \code{vignette("multiple-factors", package = "R2spa")}.
-#'            Must not contain per-pattern lists (groups fitted with missing
-#'            data): \code{tspa()} does not yet support that.
-#' @param fsb A vector of intercepts for the factor scores \code{fs}, which can
-#'            be obtained from the output of \code{get_fs()} using \code{attr()}
-#'            with the argument \code{which = "fsb"}. Must not contain
-#'            per-pattern lists (groups fitted with missing data):
-#'            \code{tspa()} does not yet support that.
+#'            `vignette("multiple-factors", package = "R2spa")`.
+#'            As with `fsT`, per-pattern (FIML missing data) and per-cluster
+#'            (merMod) values are supported and reduced per group by `reduce`;
+#'            the pooled (not the nested/per-cluster) matrix is attached to the
+#'            returned fit as the `fsL` attribute.
+#' @param fsb A vector of intercepts for the factor scores `fs`, which can
+#'            be obtained from the output of [get_fs()] using `attr()`
+#'            with the argument `which = "fsb"`. As with `fsT`, per-pattern
+#'            (FIML missing data) and per-cluster (merMod) values are supported
+#'            and reduced per group by `reduce`; the pooled (not the
+#'            nested/per-cluster) vector is used for the stage-2 intercept
+#'            constraints.
+#' @param reduce Controls how per-unit `fsL`/`fsT`/`fsb` from a group fitted
+#'            with missing data (`missing = "fiml"`; per-pattern lists of
+#'            matrices) or per-cluster values from a `merMod` fit (3-D arrays)
+#'            are collapsed to a single representative value per group for
+#'            stage 2. A no-op when the per-unit quantities are constant within
+#'            the group (e.g. complete single-group data). One of `"mean"`
+#'            (the default) or `"median"`. With `"mean"` the pooled `fsT` is a
+#'            convex combination of the per-unit (positive semi-definite)
+#'            matrices and so remains positive semi-definite; with `"median"`
+#'            the reduction is element-wise and need not be, in which case a
+#'            warning is emitted when the pooled `fsT` is not positive
+#'            semi-definite. The pooled (not the nested/per-cluster) `fsT` and
+#'            `fsL` are what get attached to the returned fit.
 #' @param ... Additional arguments passed to \code{\link[lavaan]{sem}}. See
 #'            \code{\link[lavaan]{lavOptions}} for a complete list.
 #' @return An object of class \code{lavaan}, with an attribute \code{tspaModel}
@@ -124,10 +165,43 @@
 #'      se_fs = list(visual = c(0.3391326, 0.311828),
 #'                   speed = c(0.2786875, 0.2740507)),
 #'      group = "school")
+#'
+#' # Missing data (FIML): per-pattern fsL/fsT are pooled within the group
+#' data("HolzingerSwineford1939", package = "lavaan")
+#' hs <- HolzingerSwineford1939
+#' set.seed(1334)
+#' hs$x2[!rbinom(nrow(hs), 1, 0.4)] <- NA
+#' hs$x8[!rbinom(nrow(hs), 1, 0.4)] <- NA
+#' mod_fin <- "
+#'   visual =~ x1 + x2 + x3
+#'   speed  =~ x7 + x8 + x9
+#' "
+#' fit_fin <- suppressWarnings(cfa(mod_fin, data = hs, missing = "fiml"))
+#' fs_fin <- get_fs(fit_fin)
+#' tspa("visual ~ speed", data = fs_fin,
+#'      fsT = attr(fs_fin, "fsT"), fsL = attr(fs_fin, "fsL"),
+#'      reduce = "mean")
+#' # opt-in element-wise reduction (may lose positive semi-definiteness)
+#' suppressWarnings(tspa("visual ~ speed", data = fs_fin,
+#'      fsT = attr(fs_fin, "fsT"), fsL = attr(fs_fin, "fsL"),
+#'      reduce = "median"))
+#'
+#' # merMod: per-cluster fsL/fsT are pooled (one value per cluster)
+#' library(lme4)
+#' lmod <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
+#' fs_mer <- get_fs(lmod)
+#' tspa("u1 ~ u0", data = fs_mer,
+#'      fsT = attr(fs_mer, "fsT"), fsL = attr(fs_mer, "fsL"))
 
 
 tspa <- function(model, data, reliability = NULL, se = "standard",
-                 se_fs = NULL, fsT = NULL, fsL = NULL, fsb = NULL, ...) {
+                 se_fs = NULL, fsT = NULL, fsL = NULL, fsb = NULL,
+                 reduce = c("mean", "median"), ...) {
+  reduce <- match.arg(reduce)
+  # Set when the per-unit fsT/fsL/fsb attributes were collapsed to a single
+  # representative per-group set via `reduce` (PLAN 09); attached to the
+  # returned fit as the "pooled_fs" attribute.
+  pooled_fs <- NULL
 
   if (!inherits(model, "character")) {
     stop("The structural path model provided is not a string.")
@@ -163,37 +237,35 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
         }
       )
     }
-    # A per-group attribute value that is itself a list of matrices (or, for
-    # fsb, plain vectors) marks a lavaan group with k >= 2 observed-indicator
-    # patterns (missing data); stage 2 cannot fit that yet, and an unwrapped
-    # single-group value would otherwise be misread as k groups.
-    if (
-      any(vapply(
-        if (is.list(fsT)) fsT else list(fsT),
-        function(e) is.list(e) && length(e) > 0L &&
-          all(vapply(e, is.matrix, logical(1))),
-        logical(1)
-      )) ||
-      any(vapply(
-        if (is.list(fsL)) fsL else list(fsL),
-        function(e) is.list(e) && length(e) > 0L &&
-          all(vapply(e, is.matrix, logical(1))),
-        logical(1)
-      )) ||
-      (!is.null(fsb) && any(vapply(
-        if (is.list(fsb)) fsb else list(fsb),
-        function(e) is.list(e) && length(e) > 0L &&
-          all(
-            vapply(e, function(v) is.vector(v) && !is.matrix(v), logical(1))
-          ),
-        logical(1)
-      )))
-    ) {
+    # Per-unit values -- FIML per-pattern (per-group attribute lists of
+    # matrices) or merMod per-cluster (3-D arrays) -- are collapsed to a
+    # single representative per-group fsT/fsL/fsb via `reduce` (PLAN 09)
+    # BEFORE multigroup detection, name matching, and schema building, so
+    # those run on clean per-group (or single) matrices.
+    if (is_per_unit_fs(fsT, fsL)) {
+      pooled <- pool_per_unit(data, reduce, have_int = !is.null(fsb))
+      fsT <- pooled$fsT
+      fsL <- pooled$fsL
+      if (!is.null(fsb)) {
+        fsb <- pooled$fsb
+      }
+      pooled_fs <- reduce
+    } else if (!is.null(fsb) && any(vapply(
+      # Residual backstop: a per-pattern fsb (list of vectors) without
+      # matching per-unit fsT/fsL is still unsupported and, unwrapped, would
+      # be misread as a multigroup vector list.
+      if (is.list(fsb)) fsb else list(fsb),
+      function(e) is.list(e) && length(e) > 0L &&
+        all(
+          vapply(e, function(v) is.vector(v) && !is.matrix(v), logical(1))
+        ),
+      logical(1)
+    ))) {
       stop(
         "tspa() does not yet support groups with multiple missing-data ",
-        "patterns: one of the 'fsT', 'fsL', or 'fsb' attributes contains a ",
-        "per-pattern list of matrices/vectors for a group. Fit the stage-1 ",
-        "model on complete data; per-pattern stage-2 support is planned.",
+        "patterns: the 'fsb' attribute contains a per-pattern list of ",
+        "vectors without matching per-unit 'fsT'/'fsL'. Fit the stage-1 ",
+        "model on complete data.",
         call. = FALSE
       )
     }
@@ -225,6 +297,41 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
   }
 
   if (is.null(fsT)) { # single-factor measurement model
+    # FIML per-pattern se pooling (PLAN 09): a get_fs() result fitted with
+    # missing data carries per-observation `fs_<v>_se` columns that vary
+    # within a group, which a single (per-group) `se_fs` row cannot
+    # represent. Detect within-group se variation and, when it fires,
+    # replace `se_fs` with the per-group reduction of the per-row se
+    # columns. A group whose se column is constant within the group gives
+    # no signal, so complete-data (homogeneous) behavior is unchanged, and
+    # data without the se columns (not a get_fs() result) is left as-is.
+    sf_group_col <- attr(data, "group_col")
+    if (is.null(sf_group_col) && "group" %in% names(data)) {
+      sf_group_col <- "group"
+    }
+    if (!is.null(sf_group_col) && sf_group_col %in% names(data) &&
+        !is.null(se_fs) && nrow(se_fs) > 0 && ncol(se_fs) > 0) {
+      se_cols <- paste0("fs_", colnames(se_fs), "_se")
+      if (all(se_cols %in% names(data))) {
+        varied <- any(vapply(se_cols, function(cl) {
+          any(vapply(
+            split(data[[cl]], data[[sf_group_col]]),
+            function(x) sum(!is.na(unique(x))) > 1L,
+            logical(1)
+          ))
+        }, logical(1)))
+        if (varied) {
+          se_fs <- pool_se_fs(data, colnames(se_fs), reduce, sf_group_col)
+        }
+      }
+    }
+    # Pooling may have grown se_fs to one row per group: refresh the
+    # multigroup flag (computed before this branch) and the group=
+    # requirement, which must track the value actually fitted.
+    multigroup <- nrow(se_fs) > 1
+    if (multigroup && is.null(list(...)[["group"]])) {
+      stop("Please specify 'group = ' to fit a multigroup model in lavaan.")
+    }
     # Product-score columns (get_fs_int: `fs_a:fs_b`) are not valid lavaan
     # variable names; the schema's generated model name for latent `v` is
     # `fs_v`, so a matching product-score column is aliased into a working
@@ -247,9 +354,215 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
   if (!is.null(fsT)) {
     attr(tspa_fit, "fsT") <- fsT
     attr(tspa_fit, "fsL") <- fsL
+    if (!is.null(pooled_fs)) {
+      attr(tspa_fit, "pooled_fs") <- pooled_fs
+    }
   }
   attr(tspa_fit, "tspa_call") <- match.call()
   return(tspa_fit)
+}
+
+# ---------------------------------------------------------------------------
+# Per-unit factor-score pooling (PLAN 09): collapse FIML per-pattern or
+# merMod per-cluster fsL/fsT/fsb attributes to a single representative
+# per-group set that the existing stage-2 machinery accepts. The
+# long-form expansion reuses resolve_fs_per_row()/fs_row_cols() (R/fs_indiv.R)
+# so the per-row values are exactly the ones fs_indiv() reports.
+# ---------------------------------------------------------------------------
+
+# TRUE when `fsT`/`fsL` carry per-unit heterogeneity and are poolable:
+# a 3-D array (merMod per-cluster) or a per-group value that is itself a
+# list of matrices (lavaan per-pattern under missing data). Deliberately
+# FALSE for mirt per-obs input (a flat list of bare matrices, one per
+# observation) -- that path stays out of scope (PLAN 09 Section 8).
+is_per_unit_fs <- function(fsT, fsL) {
+  per_unit <- function(x) {
+    (is.array(x) && length(dim(x)) == 3L) ||
+      (is.list(x) && any(vapply(
+        x,
+        function(e) is.list(e) && length(e) > 0L &&
+          all(vapply(e, is.matrix, logical(1))),
+        logical(1)
+      )))
+  }
+  per_unit(fsT) || per_unit(fsL)
+}
+
+# Pool one get_fs() result (`fs`) to a single representative fsT/fsL/fsb
+# per group. `reduce` is "mean" (default; the mean of PSD matrices is PSD)
+# or "median" (element-wise; may break PSD, guarded by a warning). Returns
+# list(fsT, fsL, fsb): for a multi-group result (group_vals non-null) the
+# reduction is done within each group and each component is a list of one
+# value per group, named by group label (in the data's group order -- the
+# same order the stage-1 attribute lists use); otherwise each component is
+# a single matrix/vector (SG FIML, merMod). The returned shapes are exactly
+# what the existing stage-2 schema accepts.
+pool_per_unit <- function(fs, reduce, have_int) {
+  resolved <- resolve_fs_per_row(fs)
+  ref_T <- resolved$blocks[[1L]]$fsT
+  ref_L <- resolved$blocks[[1L]]$fsL
+  q <- ncol(ref_T)
+  has_int <- have_int && !is.null(resolved$blocks[[1L]]$fsb)
+
+  n <- resolved$n
+  k_ld <- q * q
+  k_ev <- q * (q + 1L) / 2
+  k_int <- if (has_int) q else 0L
+
+  se_mat <- matrix(NA_real_, nrow = n, ncol = q)
+  ld_mat <- matrix(NA_real_, nrow = n, ncol = k_ld)
+  ev_mat <- matrix(NA_real_, nrow = n, ncol = k_ev)
+  int_mat <- if (has_int) matrix(NA_real_, nrow = n, ncol = k_int) else NULL
+
+  # Same block loop as fs_indiv(): expand every unit's per-pattern/
+  # per-cluster matrices once per member row (the per-observation-equal
+  # reading), na.rm in the reduction below drops the all-NA rows.
+  for (b in seq_along(resolved$blocks)) {
+    blk <- resolved$blocks[[b]]
+    rows_b <- which(resolved$pattern_idx == b)
+    vals <- fs_row_cols(
+      resolved$scores[rows_b, , drop = FALSE],
+      blk$fsL,
+      blk$fsT,
+      if (has_int) blk$fsb else NULL
+    )
+    se_mat[rows_b, ] <- vals[, seq_len(q), drop = FALSE]
+    ld_mat[rows_b, ] <- vals[, (q + 1L):(q + k_ld), drop = FALSE]
+    ev_mat[rows_b, ] <- vals[, (q + k_ld + 1L):(q + k_ld + k_ev), drop = FALSE]
+    if (has_int) {
+      int_mat[rows_b, ] <-
+        vals[, (q + k_ld + k_ev + 1L):ncol(vals), drop = FALSE]
+    }
+  }
+
+  reduce_fn <- if (reduce == "median") stats::median else mean
+  dn_L <- dimnames(ref_L)
+  dn_T <- dimnames(ref_T)
+
+  # Reduce one row subset to (fsL, fsT, fsb): ld column-major into a
+  # q x q matrix; ev row-major lower triangle (i-outer / j<=i-inner, the
+  # fs_row_cols order) back into a symmetric matrix; int named from the
+  # score rows.
+  pool_rows <- function(rows_i) {
+    ld_red <- vapply(seq_len(k_ld), function(k) {
+      reduce_fn(ld_mat[rows_i, k], na.rm = TRUE)
+    }, numeric(1))
+    ev_red <- vapply(seq_len(k_ev), function(k) {
+      reduce_fn(ev_mat[rows_i, k], na.rm = TRUE)
+    }, numeric(1))
+    int_red <- if (has_int) {
+      vapply(seq_len(k_int), function(k) {
+        reduce_fn(int_mat[rows_i, k], na.rm = TRUE)
+      }, numeric(1))
+    } else {
+      NULL
+    }
+    fsL_p <- matrix(ld_red, nrow = q, ncol = q)
+    dimnames(fsL_p) <- dn_L
+    fsT_p <- matrix(NA_real_, nrow = q, ncol = q)
+    count <- 1L
+    for (i in seq_len(q)) {
+      for (j in seq_len(i)) {
+        fsT_p[i, j] <- ev_red[count]
+        fsT_p[j, i] <- ev_red[count]
+        count <- count + 1L
+      }
+    }
+    dimnames(fsT_p) <- dn_T
+    fsb_p <- if (is.null(int_red)) NULL else {
+      names(int_red) <- rownames(ref_T)
+      int_red
+    }
+    list(fsT = fsT_p, fsL = fsL_p, fsb = fsb_p)
+  }
+  psd_guard <- function(res, label) {
+    emin <- pooled_fsT_min_eigen(res$fsT)
+    if (!is.finite(emin) || emin < -.Machine$double.eps^0.5) {
+      warning(
+        "Pooled 'fsT'",
+        if (is.null(label)) "" else paste0(" for group '", label, "'"),
+        " (reduce = \"", reduce, "\") is not positive semi-definite; ",
+        "consider reduce = \"mean\" (the mean of PSD matrices is PSD).",
+        call. = FALSE
+      )
+    }
+  }
+
+  if (!is.null(resolved$group_vals)) {
+    # Multi-group: reduce within each group. Each component (fsT/fsL/fsb)
+    # is a list of one value per group, named by group label in the data's
+    # group order (factor: level order, the lavaan stage-2 group order),
+    # matching the stage-1 attribute list order.
+    glabs <- if (!is.null(resolved$group_col) &&
+                is.data.frame(fs) &&
+                resolved$group_col %in% names(fs)) {
+      # Unique values of the data's own group column: a factor's level
+      # order (the lavaan stage-2 group order), a character vector's
+      # first-appearance order -- matching the stage-1 attribute list order.
+      unique(fs[[resolved$group_col]])
+    } else {
+      # list-format input (no group column in the named list): group order
+      # of the list, which the per-row values follow.
+      unique(resolved$group_vals)
+    }
+    T_list <- vector("list", length(glabs))
+    L_list <- vector("list", length(glabs))
+    b_list <- vector("list", length(glabs))
+    gnames <- as.character(glabs)
+    names(T_list) <- gnames
+    names(L_list) <- gnames
+    names(b_list) <- gnames
+    for (k in seq_along(glabs)) {
+      rows_g <- which(resolved$group_vals == gnames[k])
+      res <- pool_rows(rows_g)
+      psd_guard(res, gnames[k])
+      T_list[[k]] <- res$fsT
+      L_list[[k]] <- res$fsL
+      b_list[[k]] <- res$fsb
+    }
+    return(list(
+      fsT = T_list,
+      fsL = L_list,
+      fsb = if (has_int) b_list else NULL
+    ))
+  }
+  res <- pool_rows(seq_len(n))
+  psd_guard(res, NULL)
+  res
+}
+
+# Smallest eigenvalue of a symmetric pooled fsT (non-finite when the
+# matrix is non-finite, e.g. a group with no scorable rows).
+pooled_fsT_min_eigen <- function(T_mat) {
+  if (!all(is.finite(T_mat))) {
+    return(NA_real_)
+  }
+  min(eigen(T_mat, symmetric = TRUE, only.values = TRUE)$values)
+}
+
+# Per-group reduction of the materialized `fs_<v>_se` columns of a get_fs()
+# result (single-factor FIML): one row per group (group order of the
+# data's group column) with the per-latent pooled se; a numeric vector
+# without a group column.
+pool_se_fs <- function(data, se_names, reduce, group_col) {
+  reduce_fn <- if (reduce == "median") stats::median else mean
+  if (is.null(group_col)) {
+    return(vapply(se_names, function(v) {
+      reduce_fn(data[[paste0("fs_", v, "_se")]], na.rm = TRUE)
+    }, numeric(1)))
+  }
+  gvals <- data[[group_col]]
+  gnames <- as.character(unique(gvals))
+  out <- do.call(rbind, lapply(gnames, function(g) {
+    rows_g <- gvals == g
+    vals <- vapply(se_names, function(v) {
+      reduce_fn(data[[paste0("fs_", v, "_se")]][rows_g], na.rm = TRUE)
+    }, numeric(1))
+    data.frame(t(vals), check.names = FALSE)
+  }))
+  colnames(out) <- se_names
+  rownames(out) <- gnames
+  out
 }
 
 # ---------------------------------------------------------------------------
