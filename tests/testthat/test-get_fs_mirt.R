@@ -4,8 +4,9 @@
 # per-row columns are identical (in set AND order) to the output of fs_indiv().
 # Each row carries its own implied loadings / error-covariance / intercept,
 # computed per-observation from mirt's EAP posterior covariance (Vpost) through
-# the shared regression-form matrix engine compute_lav_fs_matrices() (psi = I,
-# alpha = 0 by default, or a user prior_mean):
+# the shared regression-form matrix engine compute_lav_fs_matrices() (psi is the
+# mirt model's full estimated factor covariance -- diag(q) for a 1-factor model
+# or uncorrelated factors -- and alpha = 0, or a user prior_mean):
 #   fsL_i = I - Vpost_i               (1-factor: F1_by_fs_F1 == 1 - SE_i^2)
 #   fsT_i = fsL_i %*% Vpost_i         (1-factor: (1 - SE_i^2) * SE_i^2)
 #   fsb_i = (I - fsL_i) %*% alpha     (1-factor: SE_i^2 * alpha; 0 when alpha=0)
@@ -318,4 +319,55 @@ test_that("get_fs(): prior_mean validation (mirt)", {
                regexp = "names must match")
   expect_error(get_fs(m1, prior_mean = c(F1 = NA_real_)),
                regexp = "finite")
+})
+
+# ============================================================================
+# 10. 2-factor with CORRELATED factors: psi must be the full mirt covariance
+# ============================================================================
+
+test_that("get_fs(): 2-factor correlated -> psi is the full mirt covariance, not I", {
+  # correlated latent factors so the estimated factor covariance is non-diagonal
+  set.seed(1235)
+  nn <- 1000
+  eta <- MASS::mvrnorm(nn, c(0, 0), diag(c(1, 0.75)), empirical = TRUE)
+  th1 <- eta[, 1]
+  th2 <- -1 + 0.5 * th1 + eta[, 2]
+  dat1 <- mirt::simdata(a = matrix(1, 10), d = matrix(rnorm(10)), N = nn,
+                        itemtype = "2PL", Theta = th1)
+  dat2 <- mirt::simdata(a = matrix(runif(10, 0.5, 1.5)), d = matrix(rnorm(10)),
+                        N = nn, itemtype = "2PL", Theta = th2)
+  datc <- cbind(dat1, dat2)
+  colnames(datc) <- paste0("Item_", 1:20)
+  mc <- suppressWarnings(mirt::mirt(
+    datc, "F1=1-10\nF2=11-20\nCOV=F1*F2\nCONSTRAIN=(1-10,a1)",
+    itemtype = "2PL", verbose = FALSE
+  ))
+  fsc <- get_fs(mc)
+
+  # independent reconstruction of the mirt factor covariance from GroupPars
+  gp <- coef(mc)$GroupPars[1L, , drop = TRUE]
+  cv <- as.numeric(unname(gp[grepl("^COV_", names(gp))]))  # COV_11, COV_21, COV_22
+  Vp <- matrix(c(cv[1], cv[2], cv[2], cv[3]), 2)
+  dimnames(Vp) <- list(c("F1", "F2"), c("F1", "F2"))
+  expect_gt(abs(Vp[1L, 2L]), 0.2)   # the factors really do correlate in this data
+
+  # (a) get_fs psi == the full mirt covariance, and NOT the identity
+  expect_equal(unname(as.matrix(attr(fsc, "psi"))), unname(Vp), tolerance = 1e-8)
+  expect_false(isTRUE(all.equal(as.matrix(attr(fsc, "psi")), diag(2), tolerance = 1e-6)))
+
+  # (b) per-row fsL == I - Vpost_i %*% solve(full cov) (uses the covariances)
+  acov <- mirt::fscores(mc, full.scores = TRUE, return.acov = TRUE)
+  cm <- mirt::extract.mirt(mc, "completely_missing")
+  if (is.null(cm)) cm <- integer(0)
+  i <- 10L
+  k <- acov_index_for_row(acov, cm, i, nrow(fsc))
+  Lexp <- diag(2) - as.matrix(acov[[k]]) %*% solve(Vp)
+  expect_equal(unname(c(attr(fsc, "fsL")[[i]])), unname(c(Lexp)), tolerance = 1e-8)
+
+  # (c) independent identity: cov(EAP scores) == full_cov - mean(Vpost), and
+  #     NOT the identity-prior version (diag - mean Vpost) -- the old bug
+  sc <- as.data.frame(mirt::fscores(mc, full.scores = TRUE))
+  mvp <- Reduce("+", lapply(acov, as.matrix)) / length(acov)
+  expect_equal(unname(cov(sc)), unname(Vp - mvp), tolerance = 0.02)
+  expect_gt(max(abs(cov(sc) - (diag(2) - mvp))), 0.2)
 })

@@ -125,7 +125,8 @@ objects it instead sets the factor prior mean used for the EAP
 scores; the factor-score intercepts (\code{fsb}) then vary per observation
 as \code{Vpost_i \%*\% solve(psi) \%*\% prior_mean}, i.e. the latent mean
 scaled by the per-observation shrinkage factor (zero when
-\code{prior_mean = NULL}), with mirt's unit-variance prior (\code{psi = I}).
+\code{prior_mean = NULL}), where \code{psi} is the mirt model's estimated
+factor covariance.
 Only supported for lavaan objects with regression (EB) scoring (and
 for mirt); \code{reliability = TRUE} is not supported together with
 user-supplied \code{prior_mean}/\code{prior_cov}, and \code{prior_cov} is not

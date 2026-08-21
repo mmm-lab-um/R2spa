@@ -856,14 +856,16 @@ reorder_ecov_col <- function(nm) {
 # ===========================================================================
 # mirt (Item Response Theory) support
 #
-# get_fs() methods for mirt's S4 item-response fits. A fitted
-# SingleGroupClass has mirt's DEFAULT unit-variance factor prior (psi = I);
-# the mean is zero by default but can be overridden with `prior_mean`
-# (alpha = 0 or prior_mean, shared across the EAP and the intercepts). The
-# score for each observation is its EAP posterior mean (under that prior); its
-# EAP posterior covariance (Vpost) feeds the shared regression-form matrix
-# engine compute_lav_fs_matrices() (R/get_fscore_math.R), giving the
-# per-observation implied loading / error-covariance / intercept:
+# get_fs() methods for mirt's S4 item-response fits. A fitted SingleGroupClass
+# is scored by its EAP posterior means; the per-observation EAP posterior
+# covariance (Vpost) feeds the shared regression-form matrix engine
+# compute_lav_fs_matrices() (R/get_fscore_math.R). The latent covariance psi
+# there is the FULL factor covariance the mirt model estimates (mirt_full_cov(),
+# between-factor covariances included) -- NOT the unit-variance quadrature prior
+# mirt uses to score. The mean is zero by default but can be overridden with
+# `prior_mean` (alpha = 0 or prior_mean, shared across the EAP and the
+# intercepts), giving the per-observation implied loading / error-covariance /
+# intercept:
 #   fsL_i = I - Vpost_i %*% solve(psi)         (univariate: 1 - SE^2)
 #   fsT_i = fsL_i %*% Vpost_i                 (univariate: (1 - SE^2) * SE^2)
 #   fsb_i = (I - fsL_i) %*% alpha = Vpost_i %*% solve(psi) %*% alpha
@@ -883,6 +885,31 @@ require_mirt <- function() {
       call. = FALSE
     )
   }
+}
+
+# Full factor variance-covariance matrix estimated by a mirt model, q x q,
+# dimnames = factor names. mirt keeps the latent means (MEAN_i) and the
+# (lower-triangular) covariances (COV_ij) in the single-row
+# coef()$GroupPars table. Variances (COV_ii) are always present and fixed at 1
+# for a 1-factor model; between-factor covariances (COV_ij, i > j) are present
+# only when the model estimates them (independent factors leave the entry 0).
+mirt_full_cov <- function(fit) {
+  fn <- mirt::extract.mirt(fit, "factorNames")
+  q <- length(fn)
+  gp1 <- coef(fit)$GroupPars[1L, , drop = TRUE]
+  V <- matrix(0, q, q)
+  for (nm in names(gp1)[grepl("^COV_", names(gp1))]) {
+    s <- sub("^COV_", "", nm)
+    if (nchar(s) != 2L) {
+      stop("unsupported mirt factor covariance naming '", nm,
+           "': q must be < 10.", call. = FALSE)
+    }
+    i <- as.integer(substr(s, 1L, 1L))
+    j <- as.integer(substr(s, 2L, 2L))
+    V[i, j] <- V[j, i] <- as.numeric(gp1[[nm]])
+  }
+  dimnames(V) <- list(fn, fn)
+  V
 }
 
 #' @rdname get_fs
@@ -908,17 +935,17 @@ get_fs.SingleGroupClass <- function(object, prior_mean = NULL,
   }
   fs_names <- paste0("fs_", fn)
 
-  # Factor prior. mirt's default is unit-variance / zero-mean; the mean can be
-  # overridden with `prior_mean` (regression scoring). NOTE: object@Model$Theta
-  # is the quadrature NODE grid, not the (mean, cov) prior, so it is not read
-  # from the fit -- psi stays the identity and alpha is `prior_mean` or zero.
+  # Factor mean + covariance. object@Model$Theta is the quadrature NODE grid,
+  # not the (mean, cov) prior, so the mean is not read from the fit -- alpha is
+  # `prior_mean` or zero. psi must be the FULL estimated factor covariance
+  # (including the between-factor covariances); for a 1-factor model mirt fixes
+  # COV_11 = 1, so mirt_full_cov() returns diag(1) and 1-D is unchanged.
   alpha <- if (is.null(prior_mean)) {
     setNames(rep(0, q), fn)
   } else {
     validate_fs_priors(prior_mean, NULL, fn)$mean
   }
-  psi <- diag(q)
-  rownames(psi) <- colnames(psi) <- fn
+  psi <- mirt_full_cov(object)
   # mirt::fscores() prior-mean override, shared by both extraction calls so the
   # scores and the posterior covariances come from the same prior.
   fs_prior <- if (is.null(prior_mean)) list() else list(mean = alpha)

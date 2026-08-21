@@ -68,7 +68,8 @@
 #'        scores; the factor-score intercepts (`fsb`) then vary per observation
 #'        as `Vpost_i %*% solve(psi) %*% prior_mean`, i.e. the latent mean
 #'        scaled by the per-observation shrinkage factor (zero when
-#'        `prior_mean = NULL`), with mirt's unit-variance prior (`psi = I`).
+#'        `prior_mean = NULL`), where `psi` is the mirt model's estimated
+#'        factor covariance.
 #'        Only supported for lavaan objects with regression (EB) scoring (and
 #'        for mirt); `reliability = TRUE` is not supported together with
 #'        user-supplied `prior_mean`/`prior_cov`, and `prior_cov` is not

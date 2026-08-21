@@ -261,39 +261,20 @@ mfit <- mirt(dat, model = mod, itemtype = "2PL", verbose = FALSE)
 ```
 
 ```{r}
-# Factor scores
-fs <- fscores(mfit)
-# Error portion of factor scores
-fs_ecov <- fscores(mfit, return.acov = TRUE)
-# Latent variable covariance
-psi <- diag(2)
-psi[1, 2] <- psi[2, 1] <- coef(mfit)$GroupPars[1, "COV_21"]
-inv_psi <- solve(psi)
-load <- lapply(fs_ecov, FUN = function(err) {
-    diag(2) - err %*% inv_psi
-})
-fs_err <- Map(`%*%`, load, fs_ecov)
-# Convert to data frame
-load_dat <- lapply(load, FUN = c) |>
-    do.call(what = rbind) |>
-    as.data.frame() |>
-    setNames(c("F1_by_fs1", "F1_by_fs2", "F2_by_fs1", "F2_by_fs2"))
-fs_err_dat <- lapply(fs_err, FUN = `[`, c(1, 2, 4)) |>
-    do.call(what = rbind) |>
-    as.data.frame() |>
-    setNames(c("ev_fs1", "ecov_fs1_fs2", "ev_fs2"))
+# Factor scores, plus the per-row loadings and error covariances get_fs()
+# attaches (the same full-factor-covariance correction the hand-rolled form
+# below used to compute by hand).
+fs_dat <- get_fs(mfit)
 ```
 
 ```{r}
-# Combine into data set
-fs_dat <- cbind(fs, load_dat, fs_err_dat)
 # Structural model on the two latent dimensions (distinct from the score columns)
-S <- colnames(fs)   # "F1", "F2"
-cross_load <- matrix(c("F1_by_fs1", "F1_by_fs2",
-                       "F2_by_fs1", "F2_by_fs2"), nrow = 2) |>
+S <- c("fs_F1", "fs_F2")
+cross_load <- matrix(c("F1_by_fs_F1", "F1_by_fs_F2",
+                       "F2_by_fs_F1", "F2_by_fs_F2"), nrow = 2) |>
     `dimnames<-`(list(S, c("theta1", "theta2")))
-err_cov <- matrix(c("ev_fs1", "ecov_fs1_fs2",
-                    "ecov_fs1_fs2", "ev_fs2"), nrow = 2) |>
+err_cov <- matrix(c("ev_fs_F1", "ecov_fs_F2_fs_F1",
+                    "ecov_fs_F2_fs_F1", "ev_fs_F2"), nrow = 2) |>
     `dimnames<-`(rep(list(S), 2))
 tspa_mx2 <- tspa_mx_model(model = "theta2 ~ theta1\ntheta2 + theta1 ~ 1",
                           data = fs_dat, fsL = cross_load, fsT = err_cov)
