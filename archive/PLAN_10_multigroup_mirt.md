@@ -1,9 +1,24 @@
 # PLAN 10 — Multi-group mirt `get_fs()` support (`MultipleGroupClass`)
 
-**Status: PLANNED** (2026-08-22). Follow-up **F7** (`STATUS.md`). Builds on
-PLAN 08 (single-group mirt `get_fs()`) and the ψ fix (`fc16f81`). Base tree is
-green: **3298 pass** / 0 fail; `check()` 0 errors / 0 warnings. `mirt` stays a
-`Suggests`-only dependency (namespaced `mirt::` calls, `require_mirt()` guard).
+**Status: IMPLEMENTED** (2026-08-22, `31b3809` — all phases P0–P4 complete).
+See `STATUS.md` Closed **#18**. Follow-up **F7** (resolved). Built on PLAN 08
+(single-group mirt `get_fs()`) and the ψ fix (`fc16f81`). Final suite **3358
+pass** / 0 fail; `R CMD check` 0/0/0. `mirt` stays a `Suggests`-only dependency
+(namespaced `mirt::` calls, `require_mirt()` guard).
+
+> **Implementation outcome / deviations discovered during P0.** (1) `mirt::multipleGroup()`
+> requires `model` as a **number** of factors (not the string `"1"`) and `group` as a
+> factor/character **vector** of length `nrow` — the string form leaves `model$x` a 0-row
+> template → `subscript out of bounds`. (2) The standard identifiable form is
+> `invariance = "slopes"` (metric): it fixes **every** group's factor to `(0, I)`, so the
+> per-group EAP is on a common standard-normal scale and the group mean is carried by the
+> item intercepts — hence `alpha = 0` by default (identical to the single-group path), and a
+> per-group `psi` is the estimated factor covariance (coincides with `diag(q)` under metric
+> invariance; differs only under `free_mean(s)`/`free_var`). (3) mirt **drops completely-
+> missing rows** from every extraction (`N`/`group`/`rowID` are scorable-length); the full-row
+> `group` column is rebuilt as `groupNames[group][keep]`, `NA` for the missing rows. The
+> `format = "list"` (per-group data frames) is not implemented — `mirt` output is always a
+> single per-observation data frame + `group` column, like the single-group path.
 
 ## 1. Scope
 Implement `get_fs.MultipleGroupClass()` — today a `stop()` stub at
