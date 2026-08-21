@@ -79,31 +79,9 @@ cat(attr(tspa_fit, "tspaModel"))
 parameterestimates(tspa_fit)
 ```
 
-
-```{r include=FALSE, eval=FALSE}
-# Compute factor scores using lavPredict
-fs_dat <- lavPredict(cfa_fit, acov = "standard")
-colnames(fs_dat) <- c("fs_ind60", "fs_dem60")
-# alambda %*% attr(fs_dat, "acov")[[1]] %*% t(alambda)
-my2spa <- "
-  # latent variables (indicated by factor scores)
-    ind60 =~ 0.95538579 * fs_ind60 + 0.05816994 * fs_dem60
-    dem60 =~ 0.01834111 * fs_ind60 + 0.86888887 * fs_dem60
-  # constrain the errors
-    fs_ind60 ~~ 0.034595518 * fs_ind60
-    fs_dem60 ~~ 0.090775708 * fs_dem60
-    fs_ind60 ~~ 0.004017388 * fs_dem60
-  # latent variances
-    ind60 ~~ ind60
-    dem60 ~~ dem60
-  # regressions
-    dem60 ~ ind60
-"
-tspa_fit <- sem(model = my2spa, data  = fs_dat)
-standardizedsolution(tspa_fit)
-```
-
-which is more consistent with the SEM results.
+The non-diagonal `fsL` (cross-loadings) is what makes the score-based model
+recover the joint-model structure, because each score is a weighted composite of
+all the indicators.
 
 ## Three-factor model example
 
@@ -147,36 +125,6 @@ cat(attr(tspa_fit_3fac, "tspaModel"))
 parameterestimates(tspa_fit_3fac)
 ```
 
-
-```{r include=FALSE, eval=FALSE}
-# Compute factor scores using lavPredict
-fs_3fac_dat <- lavPredict(cfa_3fac_fit, acov = "standard")
-colnames(fs_3fac_dat) <- c("fs_ind60", "fs_dem60", "fs_dem65")
-# alambda %*% attr(fs_dat, "acov")[[1]] %*% t(alambda)
-mod_2spa_3fac <- "
-  # latent variables (indicated by factor scores)
-    ind60 =~ 0.95064774 * fs_ind60 + (-0.02069724) * fs_dem60 + 
-             0.09868528 * fs_dem65
-    dem60 =~ (-0.005967124) * fs_ind60 + 0.533020047 * fs_dem60 +
-             0.401095944 * fs_dem65
-    dem65 =~ 0.02951139 * fs_ind60 + 0.41603787 * fs_dem60 +
-             0.49133377 * fs_dem65
-  # constrain the errors
-    fs_ind60 ~~ 0.0340104952 * fs_ind60 + 0.0003881641 * fs_dem60 + 
-                0.005026024 * fs_dem65
-    fs_dem60 ~~ 0.0586870314 * fs_dem60 + 0.0533752458 * fs_dem65
-    fs_dem65 ~~ 0.051573299 * fs_dem65
-  # latent variances
-    ind60 ~~ ind60
-    dem60 ~~ dem60
-    dem65 ~~ dem65
-  # regressions
-    dem60 ~ ind60
-    dem65 ~ ind60 + dem60
-"
-tspa_fit_3fac <- sem(model = mod_2spa_3fac, data = fs_3fac_dat)
-standardizedsolution(tspa_fit_3fac)
-```
 
 Compare to SEM:
 

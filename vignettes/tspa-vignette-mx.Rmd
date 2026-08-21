@@ -121,7 +121,7 @@ coef(jreg)["dem60~ind60"]
 
 # Combined with IRT
 
-Example from Lai & Hsiao (2021, Psychological Methods)
+Example from Lai & Hsiao (2022, Psychological Methods)
 
 ## Not accounting for error
 

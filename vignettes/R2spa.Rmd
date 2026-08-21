@@ -24,6 +24,63 @@ library(lavaan)
 library(R2spa)
 ```
 
+## Why two-stage path analysis
+
+When the constructs in a path model are measured with error, plugging composite
+or factor scores into a regression as if they were error-free biases the path
+coefficients (Cole & Preacher, 2014). A single joint structural equation model,
+estimating the
+measurement and structural models together, is the gold standard, but it can be
+hard to specify, is prone to convergence and admissibility problems in small
+samples, and forces a whole-model refit whenever the measurement *or* the
+structural part changes (Rosseel, 2012).
+
+Two-stage path analysis (2S-PA; Lai & Hsiao, 2022) is a practical alternative
+that splits the problem:
+
+- **Stage 1 — score each construct** with an appropriate psychometric model (a
+  `lavaan` CFA, an `lme4` mixed model, a `mirt` IRT model, or even an EFA) and
+  record each score's measurement error / reliability.
+- **Stage 2 — regress on the scores**, correcting for each score's measurement
+  error with *definition variables* that fix the error variance to its
+  observation-specific value.
+
+Because the stages are separate, you can tune and diagnose each on its own, mix
+estimators across constructs (one construct from a CFA, another from an IRT
+model), and avoid the small-sample convergence problems of one large joint
+model. Simulations find 2S-PA tracks the joint model in large samples but
+converges more often, with less standard-error bias and better Type-I error /
+CI coverage in small samples and with categorical items (Lai & Hsiao, 2022;
+Lai et al., 2023); the same two-stage idea also covers empirical-Bayes random
+slopes from mixed models (Lai & Liu, 2026).
+
+`R2spa` implements both stages: `get_fs()` is stage 1 (scores plus their
+loadings, error covariances and intercepts) and `tspa()` / `tspa_mx_model()`
+are stage 2.
+
+## How the measurement error is supplied
+
+`tspa()` needs each score's measurement error, in one of two forms:
+
+- **`se_fs`** — one standard error per score (a scalar, or a list / data frame
+  of per-group scalars for multigroup). This treats the error *variance* as
+  constant across observations and assumes each score is an indicator of a
+  single latent (no cross-loadings, no correlated score errors). It is the
+  simple path: suitable for a unidimensional construct scored from continuous,
+  roughly equally reliable items.
+- **`fsT`** (with **`fsL`** and **`fsb`**) — the general form `get_fs()` returns
+  as attributes (`attr(fs, "fsT")`, `attr(fs, "fsL")`, `attr(fs, "fsb")`).
+  `fsT` is the score error *variance-covariance* (so it also carries correlated
+  errors and cross-loadings) and `fsL` the implied loading of each latent on the
+  score. Use this when scores are composite (several indicators per latent, or a
+  score loading on several latents), and note it is the only form that carries
+  per-observation reliability, which the `mirt` (IRT) and `merMod` (mixed
+  model) paths need because reliability varies by person / cluster (see the
+  `multiple-factors`, `tspa-vignette-mx` and `multilevel` vignettes).
+
+The examples below use `se_fs`, since each construct is a single-factor score
+from continuous items; the `multiple-factors` vignette shows the `fsT`/`fsL`
+form.
 
 ## Single group, single predictor^[In the model, `a`, `b`, and `c` are coefficients where variables `y1`, `y2`, `y3`, and `y4` are indicators of the latent variable `dem60`.]
 
@@ -160,3 +217,26 @@ To view the Two-Stage Path Analysis model for multigroup, use `attributes([model
 ```{r}
 cat(attributes(tspa_fit)$tspaModel)
 ```
+
+## References
+
+- Cole, D. A., & Preacher, K. J. (2014). Manifest variable path analysis:
+  Potentially serious and misleading consequences due to uncorrected measurement
+  error. *Psychological Methods, 19*(2), 300–315.
+  [https://doi.org/10.1037/a0033805](https://doi.org/10.1037/a0033805)
+- Lai, M. H. C., & Hsiao, Y.-Y. (2022). Two-stage path analysis with definition
+  variables: An alternative framework to account for measurement error.
+  *Psychological Methods, 27*(4), 568–588.
+  [https://doi.org/10.1037/met0000410](https://doi.org/10.1037/met0000410)
+- Lai, M. H. C., Tse, W. W.-Y., Zhang, G., Li, Y., & Hsiao, Y.-Y. (2023).
+  Correcting for unreliability and partial invariance: A two-stage path analysis
+  approach. *Structural Equation Modeling: A Multidisciplinary Journal, 30*(2),
+  258–271.
+  [https://doi.org/10.1080/10705511.2022.2125397](https://doi.org/10.1080/10705511.2022.2125397)
+- Lai, M. H. C., & Liu, S. (2026). A two-stage approach to account for
+  measurement error when using empirical Bayes estimates of random slopes.
+  *Psychological Methods.* Advance online publication.
+  [https://doi.org/10.1037/met0000838](https://doi.org/10.1037/met0000838)
+- Rosseel, Y. (2012). *lavaan*: An R package for structural equation modeling.
+  *Journal of Statistical Software, 48*(2), 1–36.
+  [https://doi.org/10.18637/jss.v048.i02](https://doi.org/10.18637/jss.v048.i02)

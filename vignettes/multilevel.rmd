@@ -101,6 +101,23 @@ m2 <- lmer(y2 ~ time2 + (time2 | clus_id2),
 fs_dat2 <- get_fs_lmer(m2)
 ```
 
+`get_fs_lmer()` carries each EB score (`u0_eb`, `u1_eb`) alongside its
+per-cluster standard error (`u0_eb_se`), implied loadings (`u0_by_u0_eb`, …),
+error variances (`ev_u0_eb`) and error covariance (`ecov_u0_eb_u1_eb`):
+
+```{r}
+knitr::kable(head(fs_dat1), digits = 3)
+```
+
+The loading, error-variance and error-covariance column names are exactly the
+*definition variables* `tspa_mx_model()` reads in the model below.
+
+One caveat: because `get_fs_lmer()` does not attach a per-cluster score
+intercept (`fsb`), stage 2 fixes the score intercepts at zero. That does not
+affect the latent *covariances* compared below (a covariance is separable from
+the mean), but it pins the latent *mean* estimates (`u0 + u1 ~ 1`) to the shrunk
+EB score means, so read those means with that caveat.
+
 ## Using EB Without Accounting for Error
 
 ```{r}
