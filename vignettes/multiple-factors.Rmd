@@ -2,7 +2,7 @@
 title: "Multi-Factor Measurement Model"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{multiple-factors}
+  %\VignetteIndexEntry{Multi-Factor Measurement Model}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

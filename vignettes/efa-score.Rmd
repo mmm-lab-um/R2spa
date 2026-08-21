@@ -4,7 +4,7 @@ author: "Mark Lai"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{efa-scores}
+  %\VignetteIndexEntry{EFA Scores}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

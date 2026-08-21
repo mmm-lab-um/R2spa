@@ -1,8 +1,8 @@
 ---
-title: "Multi-Factor Measurement Model (OpenMx)"
+title: "2S-PA with OpenMx and IRT (mirt)"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{tspa-vignette-mx}
+  %\VignetteIndexEntry{2S-PA with OpenMx and IRT (mirt)}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

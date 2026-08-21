@@ -6,7 +6,7 @@ output:
   rmarkdown::html_vignette:
     toc: true
 vignette: >
-  %\VignetteIndexEntry{2spa_vignette}
+  %\VignetteIndexEntry{Two-Stage Path Analysis (2S-PA) Model Examples}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -235,6 +235,16 @@ To view the Two-Stage Path Analysis model for multigroup, use `attributes([model
 ```{r}
 cat(attributes(tspa_fit)$tspaModel)
 ```
+
+## Related vignettes
+
+- [`Multiple factors`](multiple-factors.html) — a score that is a composite of several indicators: the `fsT`/`fsL` path and `tspa()` cross-loadings.
+- [`2S-PA with Random Effects`](multilevel.html) — stage 1 from an `lme4` mixed model, feeding empirical-Bayes random effects into 2S-PA.
+- [`Scoring Matrices: lavaan CFA and lme4`](scoring-matrices.html) — the per-observation scoring matrices `get_fs()` attaches, and the empirical-Bayes identity behind them.
+- [`Correction to Measurement Error`](correction-error.html) — the measurement-error correction factor and its effect on standard errors.
+- [`EFA Scores`](efa-score.html) — stage 1 from an exploratory factor analysis (EFA) rather than a CFA.
+- [`Linear Growth Modeling with 2S-PA`](tspa-growth-vignette.html) — 2S-PA for longitudinal / growth-curve measurement models.
+- [`2S-PA with OpenMx and IRT (mirt)`](tspa-vignette-mx.html) — stage 2 via `tspa_mx_model()` (OpenMx), including the `mirt` (IRT) path.
 
 ## References
 

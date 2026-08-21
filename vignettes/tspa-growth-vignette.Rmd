@@ -2,7 +2,7 @@
 title: "Linear Growth Modeling with Two-Stage Path Analysis"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{tspa-growth-vignette}
+  %\VignetteIndexEntry{Linear Growth Modeling with Two-Stage Path Analysis}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

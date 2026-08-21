@@ -47,8 +47,8 @@
 #'            latent variables to the factor scores `fs`, which
 #'            can be obtained from the output of [get_fs()] using
 #'            `attr()` with the argument `which = "fsL"`.
-#'            For details see the multiple-factors vignette:
-#'            `vignette("multiple-factors", package = "R2spa")`.
+#'            For details see the Multi-Factor Measurement Model vignette:
+#'            `vignette("Multi-Factor Measurement Model", package = "R2spa")`.
 #'            As with `fsT`, per-pattern (FIML missing data) and per-cluster
 #'            (merMod) values are supported and reduced per group by `reduce`;
 #'            the pooled (not the nested/per-cluster) matrix is attached to the

@@ -4,7 +4,7 @@ author: "Mark Lai"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{scoring-matrices}
+  %\VignetteIndexEntry{Scoring Matrices: lavaan CFA and lme4}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

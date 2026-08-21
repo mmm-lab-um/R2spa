@@ -50,8 +50,8 @@ returned fit as the \code{fsT} attribute.}
 latent variables to the factor scores \code{fs}, which
 can be obtained from the output of \code{\link[=get_fs]{get_fs()}} using
 \code{attr()} with the argument \code{which = "fsL"}.
-For details see the multiple-factors vignette:
-\code{vignette("multiple-factors", package = "R2spa")}.
+For details see the Multi-Factor Measurement Model vignette:
+\code{vignette("Multi-Factor Measurement Model", package = "R2spa")}.
 As with \code{fsT}, per-pattern (FIML missing data) and per-cluster
 (merMod) values are supported and reduced per group by \code{reduce};
 the pooled (not the nested/per-cluster) matrix is attached to the

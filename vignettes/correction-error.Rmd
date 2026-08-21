@@ -4,7 +4,7 @@ author: "Mark Lai"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{correction-error}
+  %\VignetteIndexEntry{Correction to Measurement Error}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -17,6 +17,18 @@ knitr::opts_chunk$set(
 ```
 
 When computing the reliability or the standard errors of factor scores, we typically condition on the estimates of the model parameters, aka assuming that they are known. However, when sample size is small, ignoring those can be problematic as the model parameters are imprecise. This vignette provides details on how to obtain more realistic estimates of standard errors of factor scores.
+
+In short: by default `get_fs()` computes score error variances *conditional on the
+estimated* parameters — i.e. it treats the scoring weights as known. That is the
+within-sample error variance, but in small samples, or weakly-identified models
+(where the weights are estimated with substantial error), it understates the
+score's error variance. `get_fs(..., corrected_fsT = TRUE)` adds the delta-method
+correction term for the sampling error of the scoring weights, inflating `fsT`
+accordingly. The effect is negligible in large, well-identified samples (the
+weight-sampling variance tends to zero) and grows as identification gets poorer.
+Scope/constraints: `corrected_fsT` applies to `lavaan` regression / Bartlett
+scores; it is ignored for `merMod` objects and is not supported when the data
+contain missing values.
 
 # Unidimensional Case
 
