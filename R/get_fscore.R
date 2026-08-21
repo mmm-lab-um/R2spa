@@ -63,10 +63,17 @@
 #'        latent variables) giving fixed external prior means for the latent
 #'        variables. `NULL` (default) uses the lavaan-estimated (group-specific)
 #'        latent means. Non-NULL values are treated as fixed external priors
-#'        shared across all lavaan groups. Only supported for lavaan objects
-#'        with regression (EB) scoring; `reliability = TRUE` is not supported
-#'        together with user-supplied `prior_mean`/`prior_cov`. Conceptually
-#'        similar to the `mean` argument of `mirt::fscores()`.
+#'        shared across all lavaan groups. For `mirt` `SingleGroupClass`
+#'        objects it instead sets the factor prior mean used for the EAP
+#'        scores; the factor-score intercepts (`fsb`) then vary per observation
+#'        as `Vpost_i %*% solve(psi) %*% prior_mean`, i.e. the latent mean
+#'        scaled by the per-observation shrinkage factor (zero when
+#'        `prior_mean = NULL`), with mirt's unit-variance prior (`psi = I`).
+#'        Only supported for lavaan objects with regression (EB) scoring (and
+#'        for mirt); `reliability = TRUE` is not supported together with
+#'        user-supplied `prior_mean`/`prior_cov`, and `prior_cov` is not
+#'        supported for mirt. Conceptually similar to the `mean` argument of
+#'        `mirt::fscores()`.
 #' @param prior_cov An optional numeric `q x q` covariance matrix (a scalar or
 #'        1 x 1 matrix is accepted when `q = 1`) giving fixed external prior
 #'        covariance for the latent variables. `NULL` (default) uses the

@@ -149,6 +149,35 @@ fs2 <- fscores(mod2, full.scores.SE = TRUE)
 lm(fs2[, 1] ~ fs1[, 1])  # attenuated coefficient
 ```
 
+## Factor-score intercepts via get_fs()
+
+The `mirt` fit above is also scored directly by `get_fs()`, which returns the EAP
+scores together with their per-row standard errors, implied loadings and error
+variances (and, via `fs_indiv()`, the definition variables) — so the hand-rolled
+`fs_eap` frame in the next section is optional. A factor prior mean can be given
+with `prior_mean` (mirt's default is a zero-mean factor). When the mean is not
+zero, the per-row factor-score intercepts stored in the `fsb` attribute are
+non-zero: each `fsb_i` is the prior mean scaled by that row's shrinkage factor
+(the posterior variance `Vpost_i`), so the intercepts — and the score means —
+track the prior mean, and vary from row to row.
+
+```{r}
+fs  <- get_fs(mod1)
+fse <- get_fs(mod1, prior_mean = c(F1 = 2))
+head(fs, 3)                                   # score / SE / loading / error variance
+round(c(fsb.r1.default = unname(attr(fs, "fsb")[[1]]),
+        fsb.r2.default = unname(attr(fs, "fsb")[[2]]),
+        fsb.r1.prior2  = unname(attr(fse, "fsb")[[1]]),
+        fsb.r2.prior2  = unname(attr(fse, "fsb")[[2]])), 4)
+round(c(score.mean.default = mean(fs$fs_F1),
+        score.mean.prior2  = mean(fse$fs_F1)), 4)
+```
+
+Under mirt's default zero-mean prior every `fsb` is zero (the scores are mean
+zero); with `prior_mean = c(F1 = 2)` they are non-zero and differ by row. These
+`fsb` values are exactly what `tspa_mx_model()` reads as its score-intercept row
+("With Mean Structure" above).
+
 ## 2S-PA with EAP (shrinkage) scores
 
 Because EAP (shrinkage) scores are used, we use the following properties for

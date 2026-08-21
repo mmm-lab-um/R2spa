@@ -62,10 +62,17 @@ for multi-factor models a warning is issued and no
 latent variables) giving fixed external prior means for the latent
 variables. \code{NULL} (default) uses the lavaan-estimated (group-specific)
 latent means. Non-NULL values are treated as fixed external priors
-shared across all lavaan groups. Only supported for lavaan objects
-with regression (EB) scoring; \code{reliability = TRUE} is not supported
-together with user-supplied \code{prior_mean}/\code{prior_cov}. Conceptually
-similar to the \code{mean} argument of \code{mirt::fscores()}.}
+shared across all lavaan groups. For \code{mirt} \code{SingleGroupClass}
+objects it instead sets the factor prior mean used for the EAP
+scores; the factor-score intercepts (\code{fsb}) then vary per observation
+as \code{Vpost_i \%*\% solve(psi) \%*\% prior_mean}, i.e. the latent mean
+scaled by the per-observation shrinkage factor (zero when
+\code{prior_mean = NULL}), with mirt's unit-variance prior (\code{psi = I}).
+Only supported for lavaan objects with regression (EB) scoring (and
+for mirt); \code{reliability = TRUE} is not supported together with
+user-supplied \code{prior_mean}/\code{prior_cov}, and \code{prior_cov} is not
+supported for mirt. Conceptually similar to the \code{mean} argument of
+\code{mirt::fscores()}.}
 
 \item{prior_cov}{An optional numeric \verb{q x q} covariance matrix (a scalar or
 1 x 1 matrix is accepted when \code{q = 1}) giving fixed external prior

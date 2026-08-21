@@ -2,16 +2,18 @@
 #
 # get_fs() on a fitted mirt SingleGroupClass returns a data.frame whose
 # per-row columns are identical (in set AND order) to the output of fs_indiv().
-# Each row carries its own implied loadings / error-covariance, computed
-# per-observation from mirt's EAP posterior covariance (Vpost) through the
-# shared regression-form matrix engine compute_lav_fs_matrices() (psi = I,
-# alpha = 0):
-#   fsL_i = I - Vpost_i        (1-factor: F1_by_fs_F1 == 1 - SE_i^2)
-#   fsT_i = fsL_i %*% Vpost_i  (1-factor: (1 - SE_i^2) * SE_i^2)
-#   fsb   = 0                  (alpha = 0)
+# Each row carries its own implied loadings / error-covariance / intercept,
+# computed per-observation from mirt's EAP posterior covariance (Vpost) through
+# the shared regression-form matrix engine compute_lav_fs_matrices() (psi = I,
+# alpha = 0 by default, or a user prior_mean):
+#   fsL_i = I - Vpost_i               (1-factor: F1_by_fs_F1 == 1 - SE_i^2)
+#   fsT_i = fsL_i %*% Vpost_i         (1-factor: (1 - SE_i^2) * SE_i^2)
+#   fsb_i = (I - fsL_i) %*% alpha     (1-factor: SE_i^2 * alpha; 0 when alpha=0)
 # where diag(Vpost_i) == SE_i^2 (the SE column of mirt::fscores(full.scores.SE
-# = TRUE)). In addition to the per-row list-valued attributes (fsL/fsT) and the
-# `mirt_per_obs` marker, psi/alpha are attached as group-level moments.
+# = TRUE)). fsb is a PER-ROW list attribute (like fsL/fsT); in addition the
+# `mirt_per_obs` marker is set and psi/alpha are attached as group-level moments.
+# With a non-zero prior_mean the EAP scores are extracted under that factor
+# prior (mirt::fscores(mean = ...)).
 #
 # These tests cover: S3 dispatch + the MultipleGroupClass guard, the
 # column-set / row-count contract, the 1-factor regression identities, the
@@ -167,11 +169,14 @@ test_that("get_fs(): per-observation list attributes + group-level psi/alpha/fsb
   expect_length(alpha, q1)
   expect_named(alpha, fn1)
   expect_true(all(unname(alpha) == 0))
-  # fsb: a named zero vector
+  # fsb: a per-row list of named q-vectors, all zero when alpha = 0
   fsb <- attr(fs, "fsb")
-  expect_length(fsb, q1)
-  expect_named(fsb, paste0("fs_", fn1))
-  expect_true(all(unname(fsb) == 0))
+  expect_true(is.list(fsb))
+  expect_length(fsb, n1)
+  expect_true(all(vapply(fsb, function(x) {
+    length(x) == q1 && identical(names(x), paste0("fs_", fn1)) &&
+      all(unname(x) == 0)
+  }, logical(1L))))
 })
 
 # ============================================================================
@@ -257,4 +262,60 @@ test_that("get_fs(): completely-missing rows -> NA score/SE/ev, rows preserved",
   expect_true(all(is.na(ind_na[na_rows, "fs_F1"])))
   expect_true(all(is.na(ind_na[na_rows, "fs_F1_se"])))
   expect_true(all(is.na(ind_na[na_rows, "ev_fs_F1"])))
+})
+
+# ============================================================================
+# 9. prior_mean: non-zero factor prior mean -> per-row non-zero fsb
+# ============================================================================
+
+test_that("get_fs(): prior_mean -> per-row fsb == Vpost_i * alpha (1-factor)", {
+  al <- 2.0
+  n1 <- nrow(fs)
+  fs0 <- get_fs(m1)                          # default (alpha = 0)
+  fsp <- get_fs(m1, prior_mean = c(F1 = al))
+  fb0 <- attr(fs0, "fsb")
+  fb <- attr(fsp, "fsb")
+  # per-row list of named (by score name) q-vectors
+  expect_true(is.list(fb))
+  expect_length(fb, n1)
+  expect_true(all(vapply(fb, function(x) identical(names(x), "fs_F1"),
+                        logical(1L))))
+  # default (alpha = 0): per-row fsb all zero
+  expect_true(all(vapply(fb0, function(x) all(unname(x) == 0), logical(1L))))
+  # non-zero: per-row fsb_i == Vpost_i * alpha, cross-checked against mirt's
+  # posterior covariance (independent of fsL)
+  acov <- mirt::fscores(m1, full.scores = TRUE, return.acov = TRUE,
+                        mean = c(F1 = al))
+  cm <- mirt::extract.mirt(m1, "completely_missing")
+  if (is.null(cm)) cm <- integer(0)
+  for (i in c(1L, 40L, n1)) {
+    k <- acov_index_for_row(acov, cm, i, n1)
+    Vpost_i <- as.numeric(as.matrix(acov[[k]])[1L, 1L])
+    expect_identical(length(fb[[i]]), 1L)
+    expect_equal(unname(as.numeric(fb[[i]])), Vpost_i * al, tolerance = 1e-8)
+  }
+  # the group-level alpha moment reflects the supplied prior
+  expect_equal(unname(as.numeric(attr(fsp, "alpha"))), al)
+  # the EAP scores are extracted under the prior, so they differ from default
+  expect_false(isTRUE(all.equal(unname(fsp$fs_F1), unname(fs0$fs_F1))))
+})
+
+test_that("get_fs(): prior_mean -> fs_indiv(include_intercept) carries per-row fsb", {
+  al <- 2.0
+  fsp <- get_fs(m1, prior_mean = c(F1 = al))
+  fb <- unlist(attr(fsp, "fsb"))
+  iv <- fs_indiv(fsp, include_intercept = TRUE)
+  expect_true("int_fs_F1" %in% names(iv))
+  expect_equal(unname(iv$int_fs_F1), unname(fb), tolerance = 1e-8)
+  # without the flag, no intercept column
+  expect_false("int_fs_F1" %in% names(fs_indiv(fsp)))
+})
+
+test_that("get_fs(): prior_mean validation (mirt)", {
+  expect_error(get_fs(m2, prior_mean = c(1.0, 0.5, 0.3)),
+               regexp = "must have length 2")
+  expect_error(get_fs(m1, prior_mean = c(F9 = 1.0)),
+               regexp = "names must match")
+  expect_error(get_fs(m1, prior_mean = c(F1 = NA_real_)),
+               regexp = "finite")
 })

@@ -266,16 +266,38 @@ resolve_per_obs <- function(fs) {
     )
   }
   ref_L <- L_attr[[1L]]
+  # Per-row intercepts: get_fs() (mirt) attaches fsb as a per-row list (each
+  # element a q-vector, or all-NA for a completely-missing row). Fall back to a
+  # shared constant vector for the (legacy) single-value case.
+  b_is_list <- is.list(b_attr)
+  if (b_is_list && length(b_attr) != n) {
+    stop(
+      "Per-row 'fsb' list (length ", length(b_attr), ") does not match the ",
+      "number of rows (", n, ").",
+      call. = FALSE
+    )
+  }
   # Completely-missing rows were minted with an all-NA fsT; give them an
   # all-NA intercept too (the lavaan NA-row convention: a row with no scorable
   # pattern has NA score/SE/ev AND NA intercept, not the shared constant).
-  b_na <- if (is.null(b_attr)) NULL else rep(NA_real_, length(b_attr))
+  b_na <- if (is.null(b_attr)) {
+    NULL
+  } else {
+    rep(NA_real_, if (b_is_list) length(b_attr[[1L]]) else length(b_attr))
+  }
   blocks <- lapply(seq_len(n), function(i) {
     Ti <- T_attr[[i]]
+    if (all(is.na(Ti))) {
+      fsb_i <- b_na
+    } else if (b_is_list) {
+      fsb_i <- b_attr[[i]]
+    } else {
+      fsb_i <- b_attr
+    }
     list(
       fsL = L_attr[[i]],
       fsT = Ti,
-      fsb = if (all(is.na(Ti))) b_na else b_attr
+      fsb = fsb_i
     )
   })
   make_resolved(

@@ -857,16 +857,19 @@ reorder_ecov_col <- function(nm) {
 # mirt (Item Response Theory) support
 #
 # get_fs() methods for mirt's S4 item-response fits. A fitted
-# SingleGroupClass has mirt's DEFAULT unit-variance / zero-mean factor prior
-# (psi = I, alpha = 0). The score for each observation is its EAP posterior
-# mean; its EAP posterior covariance (Vpost) feeds the shared regression-form
-# matrix engine compute_lav_fs_matrices() (R/get_fscore_math.R), giving the
-# per-observation implied loading / error-covariance:
-#   fsL_i = I - Vpost_i        (univariate: 1 - SE^2)
-#   fsT_i = fsL_i %*% Vpost_i  (univariate: (1 - SE^2) * SE^2)
-#   fsb   = 0                  (alpha = 0)
-# Because Vpost_i varies per observation, fsL/fsT are attached as PER-ROW
-# (list) attributes plus the `mirt_per_obs` marker so that fs_indiv()
+# SingleGroupClass has mirt's DEFAULT unit-variance factor prior (psi = I);
+# the mean is zero by default but can be overridden with `prior_mean`
+# (alpha = 0 or prior_mean, shared across the EAP and the intercepts). The
+# score for each observation is its EAP posterior mean (under that prior); its
+# EAP posterior covariance (Vpost) feeds the shared regression-form matrix
+# engine compute_lav_fs_matrices() (R/get_fscore_math.R), giving the
+# per-observation implied loading / error-covariance / intercept:
+#   fsL_i = I - Vpost_i %*% solve(psi)         (univariate: 1 - SE^2)
+#   fsT_i = fsL_i %*% Vpost_i                 (univariate: (1 - SE^2) * SE^2)
+#   fsb_i = (I - fsL_i) %*% alpha = Vpost_i %*% solve(psi) %*% alpha
+#         (univariate: SE^2 * alpha;  zero when alpha = 0)
+# Because Vpost_i varies per observation, fsL/fsT/fsb are all attached as
+# PER-ROW (list) attributes plus the `mirt_per_obs` marker so that fs_indiv()
 # (resolve_per_obs(), R/fs_indiv.R) mints one block per row.
 # ===========================================================================
 
@@ -886,7 +889,8 @@ require_mirt <- function() {
 #' @param format Currently not used for `mirt` objects: the output is always a
 #'        single data frame with one row per observation (no `group` column).
 #' @export
-get_fs.SingleGroupClass <- function(object, format = c("unified", "list"), ...) {
+get_fs.SingleGroupClass <- function(object, prior_mean = NULL,
+                                    format = c("unified", "list"), ...) {
   require_mirt()
   if (!inherits(object, "SingleGroupClass")) {
     stop("`object` must be a mirt `SingleGroupClass` model object.", call. = FALSE)
@@ -904,16 +908,33 @@ get_fs.SingleGroupClass <- function(object, format = c("unified", "list"), ...) 
   }
   fs_names <- paste0("fs_", fn)
 
+  # Factor prior. mirt's default is unit-variance / zero-mean; the mean can be
+  # overridden with `prior_mean` (regression scoring). NOTE: object@Model$Theta
+  # is the quadrature NODE grid, not the (mean, cov) prior, so it is not read
+  # from the fit -- psi stays the identity and alpha is `prior_mean` or zero.
+  alpha <- if (is.null(prior_mean)) {
+    setNames(rep(0, q), fn)
+  } else {
+    validate_fs_priors(prior_mean, NULL, fn)$mean
+  }
+  psi <- diag(q)
+  rownames(psi) <- colnames(psi) <- fn
+  # mirt::fscores() prior-mean override, shared by both extraction calls so the
+  # scores and the posterior covariances come from the same prior.
+  fs_prior <- if (is.null(prior_mean)) list() else list(mean = alpha)
+
   # EAP posterior means (+ per-observation SEs). mirt re-adds completely-
   # missing rows here, so `full` has one row per observation with NA scores
   # for the rows it could not score.
-  full <- mirt::fscores(object, full.scores = TRUE, full.scores.SE = TRUE)
+  full <- do.call(mirt::fscores, c(list(object = object, full.scores = TRUE,
+    full.scores.SE = TRUE), fs_prior))
   full <- as.data.frame(full)
 
   # Per-observation EAP posterior covariance (acov). This early-returns BEFORE
   # mirt re-adds completely-missing rows, so the list has one q x q matrix per
   # SCORABLE observation only (named by scorable-row index).
-  acov <- mirt::fscores(object, full.scores = TRUE, return.acov = TRUE)
+  acov <- do.call(mirt::fscores, c(list(object = object, full.scores = TRUE,
+    return.acov = TRUE), fs_prior))
   n <- nrow(full)
   # Plain numeric score matrix (one row per observation); column subsetting on
   # a matrix (not a data frame) keeps the `drop` argument honoured.
@@ -921,13 +942,6 @@ get_fs.SingleGroupClass <- function(object, format = c("unified", "list"), ...) 
   if (n < 1 || length(acov) < 1) {
     stop("mirt returned no factor scores; the fit has no scorable observations.")
   }
-
-  # Unit-variance / zero-mean factor prior (mirt's default). NOTE:
-  # object@Model$Theta is the quadrature NODE grid, not the factor covariance,
-  # so psi/alpha are not read from the fit.
-  psi <- diag(q)
-  rownames(psi) <- colnames(psi) <- fn
-  alpha <- setNames(rep(0, q), fn)
 
   # Reconcile row alignment. `full` (score/SE call) includes the
   # completely-missing rows (NA scores); `acov` skips them. extract.mirt(
@@ -947,11 +961,15 @@ get_fs.SingleGroupClass <- function(object, format = c("unified", "list"), ...) 
   }
 
   # Per-row regression-form matrices (one source of truth with the lavaan /
-  # merMod paths: compute_lav_fs_matrices() with psi = I, alpha = 0).
+  # merMod paths: compute_lav_fs_matrices() with psi = I and the prior mean
+  # alpha; alpha = 0 gives all-zero intercepts). fsb_i is a function of the
+  # latent mean and the per-row shrinkage factor (Vpost_i %*% solve(psi)).
   fsL_list <- vector("list", n)
   fsT_list <- vector("list", n)
+  fsb_list <- vector("list", n)
   naL <- matrix(NA_real_, q, q, dimnames = list(fs_names, fn))
   naT <- matrix(NA_real_, q, q, dimnames = list(fs_names, fs_names))
+  naB <- setNames(rep(NA_real_, q), fs_names)
   for (k in seq_len(length(scorsc))) {
     i <- scorsc[k]
     Vpost_i <- as.matrix(acov[[k]])
@@ -963,14 +981,15 @@ get_fs.SingleGroupClass <- function(object, format = c("unified", "list"), ...) 
     rownames(T_i) <- colnames(T_i) <- fs_names
     fsL_list[[i]] <- L_i
     fsT_list[[i]] <- T_i
+    fsb_list[[i]] <- setNames(as.numeric(m_i$fsb), fs_names)
   }
   # Completely-missing rows: R2spa's NA-row convention (all-NA per-row block,
   # keeping reference dimnames for the column-name resolver).
   for (i in setdiff(seq_len(n), scorsc)) {
     fsL_list[[i]] <- naL
     fsT_list[[i]] <- naT
+    fsb_list[[i]] <- naB
   }
-  fsb <- setNames(rep(0, q), fs_names)  # alpha = 0 => zero intercept (constant)
 
   # Per-row se / loadings / error terms -- the shared value-only engine
   # fs_row_cols() (R/fs_indiv.R), applied row by row. fsb is passed as NULL so
@@ -1019,7 +1038,7 @@ get_fs.SingleGroupClass <- function(object, format = c("unified", "list"), ...) 
   # fs_indiv()'s resolve_per_obs() dispatches on.
   attr(out, "fsT") <- fsT_list
   attr(out, "fsL") <- fsL_list
-  attr(out, "fsb") <- fsb
+  attr(out, "fsb") <- fsb_list
   attr(out, "fs_pattern") <- list(label = seq_len(n), pat = NULL)
   attr(out, "psi") <- psi
   attr(out, "alpha") <- alpha
