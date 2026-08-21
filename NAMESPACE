@@ -15,6 +15,14 @@ export(get_fs)
 export(get_fs_lavaan)
 export(get_fs_lmer)
 export(tspa)
+export(tspa_mx_model)
+importFrom(OpenMx,
+  mxData,
+  mxFitFunctionML,
+  mxModel,
+  mxPath,
+  mxRun
+)
 importFrom(lavaan,
   cfa,
   coef,
