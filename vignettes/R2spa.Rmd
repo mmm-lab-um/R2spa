@@ -82,7 +82,25 @@ The examples below use `se_fs`, since each construct is a single-factor score
 from continuous items; the `multiple-factors` vignette shows the `fsT`/`fsL`
 form.
 
-## Single group, single predictor^[In the model, `a`, `b`, and `c` are coefficients where variables `y1`, `y2`, `y3`, and `y4` are indicators of the latent variable `dem60`.]
+## Reading the `get_fs()` output
+
+`get_fs()` returns one row per observation. For a construct called `<name>` it
+contributes these columns:
+
+| Column(s) | Meaning |
+| --- | --- |
+| `fs_<name>` | the factor score |
+| `fs_<name>_se` | that score's standard error — the measurement-error term `tspa()` corrects for |
+| `ev_fs_<name>` | the score's error variance (`1 - reliability` when the construct is univariate) |
+| `ecov_fs_<a>_fs_<b>` | error covariance between scores `a` and `b` (only from a shared multi-factor model) |
+| `<indicator>_by_fs_<name>` | model-implied loading — the mean of the indicator on the score |
+
+The same correction is also available in matrix form, attached as attributes on
+the same data frame — `attr(fs, "fsT")` (error covariance), `attr(fs, "fsL")`
+(score-loadings) and `attr(fs, "fsb")` (per-row intercept) — which is what
+`tspa_mx_model()` consumes.
+
+## Single group, single factor
 
 ```{r}
 model <- ' 
@@ -119,7 +137,7 @@ To view the Two-Stage Path Analysis model, use `attributes([model name])$tspaMod
 cat(attributes(tspa_fit)$tspaModel)
 ```
 
-## Single group, multiple predictors
+## Single group, multiple factors
 
 ```{r}
 model <- ' 
@@ -164,7 +182,7 @@ tspa_3var_fit <- tspa(model = "dem60 ~ ind60
 cat(attributes(tspa_3var_fit)$tspaModel)
 ```
 
-## Multigroup, single predictor
+## Multigroup, multiple factors
 
 ```{r}
 model <- ' 

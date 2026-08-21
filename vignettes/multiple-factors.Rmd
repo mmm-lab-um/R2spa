@@ -142,3 +142,15 @@ sem_3fac <- sem("
 )
 standardizedsolution(sem_3fac)
 ```
+
+The `lavaan::sem()` fit above is the **gold-standard** joint model: it estimates
+the measurement model and the structural paths together, treating the indicators
+as observed, so no separate measurement-error correction is needed. `tspa()`
+reaches the same structural estimates a different way — by correcting the stage-1
+*scores* for their measurement error — so the two agree when the sample is large.
+The simulation studies find 2S-PA tracks the joint model closely while staying
+more reliable, with less biased standard errors and better coverage, in small
+samples and with unreliable or categorical items (Lai & Hsiao, 2022; Lai et
+al., 2023). `PoliticalDemocracy` is a real data set, so there is no "true value"
+to compare against here; the point of putting the two side by side is that they
+target the same structural model.
