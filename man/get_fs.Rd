@@ -53,7 +53,7 @@
 
 \method{get_fs}{SingleGroupClass}(object, prior_mean = NULL, format = c("unified", "list"), ...)
 
-\method{get_fs}{MultipleGroupClass}(object, ...)
+\method{get_fs}{MultipleGroupClass}(object, prior_mean = NULL, format = c("unified", "list"), ...)
 
 get_fs(object, ...)
 }
@@ -114,7 +114,12 @@ groups it carries a \code{group} column and attributes \code{fsT}, \code{fsL},
 \code{fsb}, and \code{scoring_matrix} are named lists keyed by group
 label. \code{"list"} returns the legacy shape: a named list of data
 frames (one per group) with per-group matrix attributes. Use
-\code{\link[=fs_to_group_list]{fs_to_group_list()}} to convert between the two.}
+\code{\link[=fs_to_group_list]{fs_to_group_list()}} to convert between the two. For \code{mirt}
+\code{SingleGroupClass} and \code{MultipleGroupClass} objects \code{format} is
+accepted but the output is always a single per-observation data
+frame; the multi-group result additionally carries a trailing
+\code{group} column (the model's group levels, \code{NA} for
+completely-missing rows) and a per-group (\code{list}) \code{psi} attribute.}
 
 \item{prior_mean}{An optional numeric vector of length \code{q} (the number of
 latent variables) giving fixed external prior means for the latent
@@ -126,7 +131,11 @@ scores; the factor-score intercepts (\code{fsb}) then vary per observation
 as \code{Vpost_i \%*\% solve(psi) \%*\% prior_mean}, i.e. the latent mean
 scaled by the per-observation shrinkage factor (zero when
 \code{prior_mean = NULL}), where \code{psi} is the mirt model's estimated
-factor covariance.
+factor covariance. For \code{mirt} \code{MultipleGroupClass} objects a
+non-NULL \code{prior_mean} (length \code{q}) is applied as the factor prior
+mean to every group (mirt's per-group EAP is otherwise centred on a
+zero-mean standard-normal prior); each observation's regression form
+uses the factor covariance of its own group.
 Only supported for lavaan objects with regression (EB) scoring (and
 for mirt); \code{reliability = TRUE} is not supported together with
 user-supplied \code{prior_mean}/\code{prior_cov}, and \code{prior_cov} is not
@@ -247,9 +256,10 @@ by pattern name.
 \description{
 \code{get_fs()} is an S3 generic that extracts factor scores from fitted models.
 Methods are available for \code{data.frame} (fits a CFA internally), \code{lavaan}
-objects, \code{lmerMod} objects, and fitted \code{mirt} single-group models
-(\code{SingleGroupClass}; \code{mirt} is a \code{Suggests} dependency). Multi-group mirt
-models (\code{MultipleGroupClass}) are not supported.
+objects, \code{lmerMod} objects, and fitted \code{mirt} models (single-group
+\code{SingleGroupClass} and multi-group \code{MultipleGroupClass}; \code{mirt} is a
+\code{Suggests} dependency). Multi-group mirt results carry a trailing \code{group}
+column and a per-group (\code{list}) \code{psi} attribute.
 }
 \details{
 When \code{object} is a data frame and \code{model} is supplied as a lavaan syntax string,

@@ -3,9 +3,10 @@
 #' @description
 #' `get_fs()` is an S3 generic that extracts factor scores from fitted models.
 #' Methods are available for `data.frame` (fits a CFA internally), `lavaan`
-#' objects, `lmerMod` objects, and fitted `mirt` single-group models
-#' (`SingleGroupClass`; `mirt` is a `Suggests` dependency). Multi-group mirt
-#' models (`MultipleGroupClass`) are not supported.
+#' objects, `lmerMod` objects, and fitted `mirt` models (single-group
+#' `SingleGroupClass` and multi-group `MultipleGroupClass`; `mirt` is a
+#' `Suggests` dependency). Multi-group mirt results carry a trailing `group`
+#' column and a per-group (`list`) `psi` attribute.
 #'
 #' @details
 #' When `object` is a data frame and `model` is supplied as a lavaan syntax string,
@@ -66,10 +67,14 @@
 #'        shared across all lavaan groups. For `mirt` `SingleGroupClass`
 #'        objects it instead sets the factor prior mean used for the EAP
 #'        scores; the factor-score intercepts (`fsb`) then vary per observation
-#'        as `Vpost_i %*% solve(psi) %*% prior_mean`, i.e. the latent mean
-#'        scaled by the per-observation shrinkage factor (zero when
-#'        `prior_mean = NULL`), where `psi` is the mirt model's estimated
-#'        factor covariance.
+ #'        as `Vpost_i %*% solve(psi) %*% prior_mean`, i.e. the latent mean
+ #'        scaled by the per-observation shrinkage factor (zero when
+ #'        `prior_mean = NULL`), where `psi` is the mirt model's estimated
+ #'        factor covariance. For `mirt` `MultipleGroupClass` objects a
+ #'        non-NULL `prior_mean` (length `q`) is applied as the factor prior
+ #'        mean to every group (mirt's per-group EAP is otherwise centred on a
+ #'        zero-mean standard-normal prior); each observation's regression form
+ #'        uses the factor covariance of its own group.
 #'        Only supported for lavaan objects with regression (EB) scoring (and
 #'        for mirt); `reliability = TRUE` is not supported together with
 #'        user-supplied `prior_mean`/`prior_cov`, and `prior_cov` is not
@@ -101,8 +106,13 @@
 #'        groups it carries a `group` column and attributes `fsT`, `fsL`,
 #'        `fsb`, and `scoring_matrix` are named lists keyed by group
 #'        label. `"list"` returns the legacy shape: a named list of data
-#'        frames (one per group) with per-group matrix attributes. Use
-#'        [fs_to_group_list()] to convert between the two.
+ #'        frames (one per group) with per-group matrix attributes. Use
+ #'        [fs_to_group_list()] to convert between the two. For `mirt`
+ #'        `SingleGroupClass` and `MultipleGroupClass` objects `format` is
+ #'        accepted but the output is always a single per-observation data
+ #'        frame; the multi-group result additionally carries a trailing
+ #'        `group` column (the model's group levels, `NA` for
+ #'        completely-missing rows) and a per-group (`list`) `psi` attribute.
 #' @param ... additional arguments passed to \code{\link[lavaan]{cfa}}
 #'            (when `object` is a data frame). See \code{\link[lavaan]{lavOptions}}
 #'            for a complete list.

@@ -63,7 +63,7 @@ acov_index_for_row <- function(acov, cm, i, n) {
 }
 
 # ============================================================================
-# 1. S3 dispatch + type + MultipleGroupClass guard
+# 1. S3 dispatch + type
 # ============================================================================
 
 test_that("get_fs(): S3 dispatch -- mirt S4 objects route to the mirt methods", {
@@ -71,13 +71,10 @@ test_that("get_fs(): S3 dispatch -- mirt S4 objects route to the mirt methods", 
   # SingleGroupClass -> a data.frame carrying the per-observation marker
   expect_true(is.data.frame(fs))
   expect_true(isTRUE(attr(fs, "mirt_per_obs")))
-  # The MultipleGroupClass guard is registered and fires with a clear message
+  # Both mirt methods are registered (multi-group behaviour is exercised in
+  # test-get_fs_mirt_multigroup.R)
+  expect_true(exists("get_fs.SingleGroupClass", where = asNamespace("R2spa")))
   expect_true(exists("get_fs.MultipleGroupClass", where = asNamespace("R2spa")))
-  stub <- structure(list(), class = "MultipleGroupClass")
-  expect_error(
-    get_fs(stub),
-    regexp = "Multi-group mirt models are not supported by get_fs\\(\\)"
-  )
   # Non-mirt input still routes to get_fs.default (unchanged behaviour)
   expect_error(get_fs(42L), regexp = "not implemented for objects of class")
 })

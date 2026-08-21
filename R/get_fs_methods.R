@@ -1073,13 +1073,199 @@ get_fs.SingleGroupClass <- function(object, prior_mean = NULL,
   out
 }
 
+# Per-group factor (co)variances for a mirt MultipleGroupClass. Returns a list
+# with `group_names` (character, one per group, in mirt's code order) and `psi`
+# (a named list, one q x q full covariance per group, keyed by label). Each
+# group's covariance is the estimated factor covariance of that group's
+# single-group model, so this is the natural multi-group generalisation of
+# mirt_full_cov(). Under the usual metric invariance every group's factor is
+# fixed to (0, I), so all entries coincide; they differ only under free_means /
+# free_var or a between-factor covariance model.
+mirt_group_pars <- function(object) {
+  group_names <- mirt::extract.mirt(object, "groupNames")
+  K <- length(group_names)
+  psi <- lapply(seq_len(K), function(k) {
+    mirt_full_cov(mirt::extract.group(object, k))
+  })
+  names(psi) <- group_names
+  list(group_names = group_names, psi = psi)
+}
+
 #' @rdname get_fs
 #' @export
-get_fs.MultipleGroupClass <- function(object, ...) {
-  stop(
-    "Multi-group mirt models are not supported by get_fs(). Fit or extract a ",
-    "single group first (e.g. with mirt::extract.group()) and call get_fs() ",
-    "on the resulting SingleGroupClass object.",
-    call. = FALSE
+get_fs.MultipleGroupClass <- function(object, prior_mean = NULL,
+                                      format = c("unified", "list"), ...) {
+  require_mirt()
+  if (!inherits(object, "MultipleGroupClass")) {
+    stop("`object` must be a mirt `MultipleGroupClass` model object.", call. = FALSE)
+  }
+  format <- match.arg(format)  # accepted but unused: mirt -> one per-obs df + group
+
+  q <- mirt::extract.mirt(object, "nfact")
+  fn <- mirt::extract.mirt(object, "factorNames")
+  if (length(fn) != q) {
+    stop(
+      "internal error: nfact (", q, ") does not match the number of factor ",
+      "names (", length(fn), ").",
+      call. = FALSE
+    )
+  }
+  fs_names <- paste0("fs_", fn)
+
+  # Per-group factor (co)variances (named list, length K) + the group labels in
+  # mirt's code order. mirt drops completely-missing rows from every extraction,
+  # so all per-observation quantities below are reconciled against the scorable
+  # rows exactly as in the single-group path.
+  gp <- mirt_group_pars(object)
+  psi <- gp$psi
+  group_names <- gp$group_names
+
+  # alpha: the prior mean used to build the regression-form intercept. mirt's
+  # multi-group EAP is centred on a standard-normal prior per group (the group
+  # mean is carried by the item intercepts, not the factor prior), so it is 0
+  # by default -- identical to the single-group path -- or the user's
+  # prior_mean (a length-q vector applied to every group).
+  alpha <- if (is.null(prior_mean)) {
+    setNames(rep(0, q), fn)
+  } else {
+    validate_fs_priors(prior_mean, NULL, fn)$mean
+  }
+  fs_prior <- if (is.null(prior_mean)) list() else list(mean = alpha)
+
+  # EAP posterior means (+ per-observation SEs). mirt re-adds completely-
+  # missing rows here, so `full` has one row per observation with NA scores for
+  # the rows it could not score.
+  full <- do.call(mirt::fscores, c(list(object = object, full.scores = TRUE,
+    full.scores.SE = TRUE), fs_prior))
+  full <- as.data.frame(full)
+  n <- nrow(full)
+  # Plain numeric score matrix (one row per observation).
+  score_mx <- as.matrix(full[, fn])
+
+  # Per-observation EAP posterior covariance (acov): scorable rows only.
+  acov <- do.call(mirt::fscores, c(list(object = object, full.scores = TRUE,
+    return.acov = TRUE), fs_prior))
+
+  if (n < 1 || length(acov) < 1) {
+    stop("mirt returned no factor scores; the fit has no scorable observations.")
+  }
+
+  # Row alignment. `full` (score/SE call) includes the completely-missing rows
+  # (NA scores); `acov` skips them. extract.mirt("completely_missing") names
+  # those original-data positions, so the scorable rows are their complement, in
+  # which order acov[[k]] is the k-th scorable row.
+  cm <- mirt::extract.mirt(object, "completely_missing")
+  if (is.null(cm)) cm <- integer(0)
+  keep <- !seq_len(n) %in% cm
+  scorsc <- which(keep)
+  if (length(acov) != length(scorsc)) {
+    stop(
+      "internal error: mirt posterior covariances (", length(acov),
+      ") do not match the number of scorable rows (", length(scorsc), ").",
+      call. = FALSE
+    )
+  }
+
+  # Per-row group. extract.mirt("group") returns the group LABEL of each
+  # scorable observation (completely-missing rows are dropped, so it has length
+  # == scorsc); map it onto the scorable row positions. The per-group psi that
+  # each scorable row uses is indexed by matching its label to group_names.
+  grp_scor <- as.character(mirt::extract.mirt(object, "group"))
+  if (length(grp_scor) != length(scorsc)) {
+    stop(
+      "internal error: mirt per-observation groups (", length(grp_scor),
+      ") do not match the number of scorable rows (", length(scorsc), ").",
+      call. = FALSE
+    )
+  }
+  psi_idx <- match(grp_scor, group_names)
+  if (any(is.na(psi_idx))) {
+    stop("internal error: a scorable group value is not among the model's group names.",
+         call. = FALSE)
+  }
+
+  # Per-row regression-form matrices -- the shared source of truth with the
+  # lavaan / merMod / single-group-mirt paths (compute_lav_fs_matrices()), using
+  # each row's own group factor covariance.
+  fsL_list <- vector("list", n)
+  fsT_list <- vector("list", n)
+  fsb_list <- vector("list", n)
+  naL <- matrix(NA_real_, q, q, dimnames = list(fs_names, fn))
+  naT <- matrix(NA_real_, q, q, dimnames = list(fs_names, fs_names))
+  naB <- setNames(rep(NA_real_, q), fs_names)
+  for (k in seq_len(length(scorsc))) {
+    i <- scorsc[k]
+    Vpost_i <- as.matrix(acov[[k]])
+    psi_i <- psi[[ psi_idx[k] ]]
+    m_i <- compute_lav_fs_matrices(Vpost_i, psi_i, alpha, method = "regression")
+    L_i <- m_i$fsL
+    T_i <- m_i$fsT
+    rownames(L_i) <- fs_names
+    colnames(L_i) <- fn
+    rownames(T_i) <- colnames(T_i) <- fs_names
+    fsL_list[[i]] <- L_i
+    fsT_list[[i]] <- T_i
+    fsb_list[[i]] <- setNames(as.numeric(m_i$fsb), fs_names)
+  }
+  # Completely-missing rows: R2spa's NA-row convention (all-NA per-row block).
+  for (i in setdiff(seq_len(n), scorsc)) {
+    fsL_list[[i]] <- naL
+    fsT_list[[i]] <- naT
+    fsb_list[[i]] <- naB
+  }
+
+  # Per-row se / loadings / error terms -- the shared value-only engine
+  # fs_row_cols(), applied row by row (no intercept columns emitted here;
+  # fs_indiv() may emit them via include_intercept = TRUE using the fsb attr).
+  K <- q + q * q + q * (q + 1L) / 2L
+  vals <- matrix(NA_real_, nrow = n, ncol = K)
+  for (k in seq_len(length(scorsc))) {
+    i <- scorsc[k]
+    vals[i, ] <- fs_row_cols(
+      as.data.frame(score_mx[i, , drop = FALSE]),
+      fsL_list[[i]], fsT_list[[i]], NULL
+    )[1L, , drop = FALSE]
+  }
+
+  # Assemble the canonical data frame (identical column set + order to the
+  # single-group path), then append the trailing `group` column.
+  scores_df <- as.data.frame(score_mx)
+  colnames(scores_df) <- fs_names
+  se_nm <- paste0(fs_names, "_se")
+  ld_nm <- c(create_fsL_names(fn, fs_names))
+  ev_nm <- character(q * (q + 1L) / 2L)
+  count <- 1L
+  for (i in seq_len(q)) {
+    for (j in seq_len(i)) {
+      ev_nm[count] <- if (i == j) {
+        paste0("ev_", fs_names[i])
+      } else {
+        paste0("ecov_", fs_names[i], "_", fs_names[j])
+      }
+      count <- count + 1L
+    }
+  }
+  out <- as.data.frame(
+    cbind(as.matrix(scores_df), vals),
+    check.names = FALSE
   )
+  colnames(out) <- c(fs_names, se_nm, ld_nm, ev_nm)
+
+  # The group column: one value per observation; NA for completely-missing rows
+  # (which carry no group, mirroring the all-NA row convention).
+  g_full <- rep(NA_character_, n)
+  g_full[scorsc] <- grp_scor
+  out$group <- factor(g_full, levels = group_names)
+
+  # Per-row attributes + group-level latent moments + the per-obs marker that
+  # fs_indiv()'s resolve_per_obs() dispatches on. `psi` is a named list (one q x
+  # q per group); fs_indiv() does not read it on the per-obs path.
+  attr(out, "fsT") <- fsT_list
+  attr(out, "fsL") <- fsL_list
+  attr(out, "fsb") <- fsb_list
+  attr(out, "fs_pattern") <- list(label = seq_len(n), pat = NULL)
+  attr(out, "psi") <- psi
+  attr(out, "alpha") <- alpha
+  attr(out, "mirt_per_obs") <- TRUE
+  out
 }

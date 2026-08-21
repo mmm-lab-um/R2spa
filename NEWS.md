@@ -4,6 +4,11 @@
 - Add function `get_fs_int()` for estimating interaction effects in 2S-PA (#82).
 - Add computation of reliability function in `get_fscore()` (#81)
 - Add functions of obtaining tidy-ed factor scores data for `get_fscore()` (#79)
+- `get_fs()` now supports multi-group `mirt` models (`MultipleGroupClass`):
+  per-observation factor scores are extracted from the whole fit, carry a
+  trailing `group` column (the model's group levels, `NA` for
+  completely-missing rows) and a per-group (\code{list}) `psi` attribute, with
+  each observation using its own group's factor covariance.
 
 ## Improvements
 - Add examples for `get_fs_int()` (#82).
