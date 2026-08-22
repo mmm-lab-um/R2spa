@@ -750,3 +750,28 @@ test_that("Missing group argument for a multigroup model", {
     "Please specify 'group = ' to fit a multigroup model in lavaan"
   )
 })
+
+########## tspa_args self-contained replay ##########
+
+test_that("tspa() records a self-contained replayable argument list", {
+  # Single-group multi-factor fit (the vcov_corrected() SG use case).
+  mod2s <- "ind60 =~ x1 + x2 + x3
+            dem60 =~ y1 + y2 + y3 + y4"
+  fs_sg_mf <- get_fs(cfa(mod2s, data = PoliticalDemocracy))
+  fit_sg_mf <- tspa(
+    model = "dem60 ~ ind60",
+    data = fs_sg_mf,
+    fsT = attr(fs_sg_mf, "fsT"),
+    fsL = attr(fs_sg_mf, "fsL")
+  )
+  for (fit in list(tspa_single, tspa_multi, tspa_fit_m, fit_sg_mf)) {
+    args <- attr(fit, "tspa_args")
+    expect_true(is.list(args))
+    # Evaluated values only: no calls/symbols (a match.call() style record
+    # would trip this).
+    expect_false(any(vapply(args, is.language, logical(1))))
+    refit <- do.call(tspa, args)
+    expect_equal(coef(refit), coef(fit), tolerance = 1e-10)
+    expect_equal(vcov(refit), vcov(fit), ignore_attr = TRUE, tolerance = 1e-10)
+  }
+})

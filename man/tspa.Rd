@@ -83,8 +83,17 @@ semi-definite. The pooled (not the nested/per-cluster) \code{fsT} and
 \code{\link[lavaan]{lavOptions}} for a complete list.}
 }
 \value{
-An object of class \code{lavaan}, with an attribute \code{tspaModel}
-that contains the model syntax.
+An object of class \code{lavaan} carrying the following
+\code{R2spa}-specific attributes: \code{tspaModel}, the stage-2
+model syntax actually fitted; \code{tspa_call}, the matched
+\code{tspa()} call; and \code{tspa_args}, the argument list used to
+build the stage-2 model (captured at fit time as evaluated
+values), which lets the fit be re-evaluated without its original
+environment, e.g. by the \code{vcov_corrected()} SE correction. When
+\code{fsT}/\code{fsL} are supplied (multi-factor measurement
+model), the (possibly reduced) matrices are also attached as the
+\code{fsT}/\code{fsL} attributes, and \code{pooled_fs} records the
+\code{reduce} method used when per-unit values were collapsed.
 }
 \description{
 Fit a two-stage path analysis (2S-PA) model.

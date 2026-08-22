@@ -304,7 +304,7 @@ test_that("tspa() attributes are intact and complete", {
   plain <- sem(attr(fit, "tspaModel"), data = fs4g_long, group = "school")
   expect_equal(
     sort(setdiff(names(attributes(fit)), names(attributes(plain)))),
-    c("fsL", "fsT", "tspaModel", "tspa_call")
+    c("fsL", "fsT", "tspaModel", "tspa_args", "tspa_call")
   )
   # single-group fit carries no fsT/fsL attributes
   fit_sg <- tspa("dem60 ~ ind60", data = fs_sg,
@@ -315,7 +315,7 @@ test_that("tspa() attributes are intact and complete", {
   plain_sg <- sem(attr(fit_sg, "tspaModel"), data = fs_sg)
   expect_equal(
     sort(setdiff(names(attributes(fit_sg)), names(attributes(plain_sg)))),
-    c("tspaModel", "tspa_call")
+    c("tspaModel", "tspa_args", "tspa_call")
   )
 })
 

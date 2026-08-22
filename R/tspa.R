@@ -75,8 +75,17 @@
 #'            `fsL` are what get attached to the returned fit.
 #' @param ... Additional arguments passed to \code{\link[lavaan]{sem}}. See
 #'            \code{\link[lavaan]{lavOptions}} for a complete list.
-#' @return An object of class \code{lavaan}, with an attribute \code{tspaModel}
-#'         that contains the model syntax.
+#' @return An object of class \code{lavaan} carrying the following
+#'         \code{R2spa}-specific attributes: \code{tspaModel}, the stage-2
+#'         model syntax actually fitted; \code{tspa_call}, the matched
+#'         `tspa()` call; and \code{tspa_args}, the argument list used to
+#'         build the stage-2 model (captured at fit time as evaluated
+#'         values), which lets the fit be re-evaluated without its original
+#'         environment, e.g. by the `vcov_corrected()` SE correction. When
+#'         \code{fsT}/\code{fsL} are supplied (multi-factor measurement
+#'         model), the (possibly reduced) matrices are also attached as the
+#'         \code{fsT}/\code{fsL} attributes, and \code{pooled_fs} records the
+#'         \code{reduce} method used when per-unit values were collapsed.
 #'
 #' @export
 #'
@@ -358,6 +367,16 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
       attr(tspa_fit, "pooled_fs") <- pooled_fs
     }
   }
+  # Self-contained replay record: every refit-relevant argument as an
+  # evaluated value, plus the forwarded lavaan dots, so
+  # do.call(tspa, attr(fit, "tspa_args")) reproduces the fit without the
+  # original call environment. All element names are tspa() formals, so the
+  # spliced dots structurally cannot shadow them.
+  attr(tspa_fit, "tspa_args") <- c(
+    list(model = model, data = data, reliability = reliability, se = se,
+         se_fs = se_fs, fsT = fsT, fsL = fsL, fsb = fsb, reduce = reduce),
+    list(...)
+  )
   attr(tspa_fit, "tspa_call") <- match.call()
   return(tspa_fit)
 }

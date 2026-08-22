@@ -45,6 +45,12 @@
 #                                          S4 slot); values proven equal to
 #                                          lavInspect(what = <name>) (STATUS
 #                                          item 6)
+#   fit@optim$converged / lavInspect("converged")
+#                                          optimizer convergence flag; scalar
+#                                          logical (MG fits optimize the
+#                                          combined free-parameter vector in
+#                                          a single call; verified 0.7-2,
+#                                          SG + MG); read via tsp_converged()
 #   lavTech(fit, what = "est" | "free")        flat list of 6 matrices
 #                                             (lambda, theta, psi, beta, nu,
 #                                             alpha) repeated per group; no
@@ -73,8 +79,14 @@
 #   - lavInspect(what = "data"/"meanstructure"/"implied"/"free"/"nobs"/
 #     "ngroups"/"orig")                    R/get_fscore_math.R
 #   - fit@implied$cov / fit@implied$mean   vignettes (user-facing examples)
-#   - lavaan::lav_func_jacobian_complex    R/tspa_corrected_se.R,
-#     R/get_fscore_math.R, R/grandStandardizedSolution.R
+#   - lavaan::lav_func_jacobian_complex    R/get_fscore_math.R (correct_evfs,
+#     compute_grad_ld_evfs, compute_fsrel — purely algebraic closures, no
+#     optimizer boundary => complex steps valid),
+#     .quarantine/R/grandStandardizedSolution.R (quarantined, same shape).
+#     NOT used by the corrected-SE path: .quarantine/R/tspa_corrected_se.R
+#     computes its stage-2 Jacobian by explicit central differences (stepped
+#     refits through the optimizer silently degrade; complex literals die in
+#     the model-string parser).
 #
 # ---------------------------------------------------------------------------
 #
@@ -271,5 +283,15 @@ tsp_norig <- function(fit) {
   tryCatch(
     unlist(fit@Data@norig),
     error = function(e) lavInspect(fit, what = "norig")
+  )
+}
+
+# Optimizer convergence flag (scalar logical). MG fits optimize the combined
+# free-parameter vector in a single call, so one flag covers all groups
+# (verified 0.7-2, SG + MG).
+tsp_converged <- function(fit) {
+  tryCatch(
+    fit@optim$converged,
+    error = function(e) lavInspect(fit, what = "converged")
   )
 }
