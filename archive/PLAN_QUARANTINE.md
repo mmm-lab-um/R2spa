@@ -33,7 +33,7 @@ test with `devtools::test()` after functional changes; `devtools::check()` befor
 - [x] **Phase 2 — extract embedded test blocks** (5 in-place edits, 2 new quarantined test files, 2 appends) — done 2026-08-17
 - [x] **Phase 3 — hygiene** (`.Rbuildignore`, orphaned `@importFrom`, dangling roxygen links) — done 2026-08-17 (plan-file already covered by `^_PLAN_.*\.md$`; only `^\.quarantine$` added)
 - [x] **Phase 4 — regenerate + verify** (`load_all` → `document` → `test` → `check`) — done 2026-08-17: tests 707 pass / 0 fail; check = 0 error, 0 warning, 1 NOTE ("OpenMx in Imports not imported from" — expected consequence of the user decision to keep OpenMx in Imports until re-integration)
-- [x] **Re-integration (partial) — grand standardization** — done 2026-08-22, branch `rejoin/grand-std-sol` (parent `126a63a`): `git mv` of `R/grandStandardizedSolution.R` + `tests/testthat/test-grandStandardizedSolution.R` back (pure rename; zero code edits); `document()` → `test()` (3378 pass / 0 fail) → `check()` (0 errors / 0 warnings / 0 notes, as-cran). `vignettes/gr-std-coef.Rmd` deliberately **not** restored (deferred — see Re-integration notes).
+- [x] **Re-integration (partial) — grand standardization** — done 2026-08-22, branch `rejoin/grand-std-sol` (parent `126a63a`): `git mv` of `R/grandStandardizedSolution.R` + `tests/testthat/test-grandStandardizedSolution.R` back (pure rename; zero code edits); `document()` → `test()` (3377 pass / 0 fail) → `check()` (0 errors / 0 warnings / 0 notes, as-cran). `vignettes/gr-std-coef.Rmd` deliberately not restored in this commit (reintroduced separately in a follow-up commit — see Re-integration notes).
 
 ---
 
@@ -360,5 +360,5 @@ vignettes/     R2spa.Rmd  multiple-factors.Rmd  correction-error.Rmd  tspa-growt
   self-contained test file (incl. the Phase 2.5 wrapper A/B block) passed
   unmodified. Still quarantined: `R/get_fs_int.R`, `R/tspa_corrected_se.R` (+ their
   test files, and the stale `.quarantine/tests/test-tspa_mx.R` leftover from the
-  `bcd42a3` rewrite-style re-integration) and 6 vignettes + 3 RDS fixtures —
-  **including `vignettes/gr-std-coef.Rmd`, still deferred** (see decision below).
+  `bcd42a3` rewrite-style re-integration) and 5 vignettes + 3 RDS fixtures
+  (`vignettes/gr-std-coef.Rmd` was reintroduced separately in a follow-up commit).
