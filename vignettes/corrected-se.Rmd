@@ -96,7 +96,12 @@ sqrt(diag(vc_cor))
 
 Standardized solution
 
+The corrected standard error of the `dem60 ~ ind60` coefficient, derived by hand as the standard error of the standardized coefficient plus a first-order delta-method term:
+
 ```{r}
+keep_dem_ind <- function(std) {
+  std[std$lhs == "dem60" & std$rhs == "ind60" & std$op == "~", , drop = FALSE]
+}
 tspa_est_std <- function(ld_ev) {
   ld1 <- ld
   ev1 <- ev
@@ -106,17 +111,30 @@ tspa_est_std <- function(ld_ev) {
                data = fs_dat,
                fsL = ld1,
                fsT = ev1)
-  standardizedSolution(tfit)$est.std[8]
+  keep_dem_ind(standardizedSolution(tfit))$est.std
 }
 tspa_est_std(c(ld[c(1, 4)], ev[c(1, 4)]))
-# Jacobian
+# Jacobian of the standardized coefficient w.r.t. (loadings, error variances)
 jac_std <- numDeriv::jacobian(tspa_est_std,
                               x = c(ld[c(1, 4)], ev[c(1, 4)]))
-# Corrected standard error
-sqrt(
-  standardizedSolution(tspa_fit)[8, "se"]^2 +
-    jac_std %*% vldev %*% t(jac_std)
-)
+ss0 <- keep_dem_ind(standardizedSolution(tspa_fit))
+sqrt(ss0$se^2 + jac_std %*% vldev %*% t(jac_std))
+```
+
+The same value comes from the one-call option. Because the two factors were fitted in separate models, only the two loadings and the two error variances are free (positions 1, 4, 5, 7), so we pass the matching 4 x 4 submatrix of `vldev` together with `which_free`:
+
+```{r}
+tspa_fit_corr <- tspa(model = "dem60 ~ ind60",
+                      data = fs_dat,
+                      fsL = ld,
+                      fsT = ev,
+                      vfsLT = vldev,
+                      which_free = c(1, 4, 5, 7),
+                      corrected_se = TRUE)
+sc <- keep_dem_ind(standardizedSolution(tspa_fit_corr))
+sc$est.std              # unchanged point estimate
+sc$se                   # corrected standard SE (matches the hand-derived value)
+attr(tspa_fit_corr, "tspa_corrected")   # TRUE
 ```
 
 Compare to joint structural and measurement model
@@ -298,18 +316,14 @@ mod <- "
     speed =~ x7 + x8 + x9
 "
 # Factor scores based on partial invariance
-fs_dat <- get_fs(HolzingerSwineford1939, model = mod, std.lv = TRUE,
-                 group = "school",
-                 group.equal = c("loadings", "intercepts"),
-                 group.partial = c("visual=~x2", "x7~1"))
 fit <- cfa(mod,
            data = HolzingerSwineford1939,
            std.lv = TRUE,
            group = "school",
            group.equal = c("loadings", "intercepts"),
            group.partial = c("visual=~x2", "x7~1"))
-fs_dat <- get_fs_lavaan(fit)
-vldev <- R2spa:::vcov_ld_evfs(fit)
+fs_dat <- get_fs_lavaan(fit, vfsLT = TRUE)
+vldev <- attr(fs_dat, which = "vfsLT")
 ```
 
 ```{r}
@@ -323,4 +337,43 @@ tspa_fit <- tspa(model = "visual ~~ textual + speed
 vcov(tspa_fit)[c(1:6, 10:15), c(1:6, 10:15)]
 # Adjusted covariance
 vcov_corrected(tspa_fit, vfsLT = vldev)[c(1:6, 10:15), c(1:6, 10:15)]
+```
+
+The correction can be requested in place on `tspa()`, so `vcov()` (and hence the SEs derived from it) and `standardizedSolution()` on the returned fit report the corrected standard errors (the point estimates are unchanged):
+
+```{r}
+tspa_fit_corr <- tspa(model = "visual ~~ textual + speed
+                          textual ~~ speed",
+                      data = fs_dat,
+                      group = "school",
+                      fsL = attr(fs_dat, which = "fsL"),
+                      fsT = attr(fs_dat, which = "fsT"),
+                      vfsLT = vldev,
+                      corrected_se = TRUE)
+attr(tspa_fit_corr, "tspa_corrected")   # TRUE
+round(cbind(unadjusted = sqrt(diag(vcov(tspa_fit))),
+            corrected    = sqrt(diag(vcov(tspa_fit_corr)))), 4)
+```
+
+### Corrected grand-standardized solution (multigroup)
+
+`grandStandardizedSolution()` pools across groups (grand mean / grand SD) rather than standardizing each group separately as `lavaan::standardizedSolution()` does. Feeding it the corrected fit's covariance yields the corrected grand-standardized SEs; we use a structural path model so there is a regression to standardize:
+
+```{r}
+path_mg <- "textual ~ visual + speed
+            visual  ~ speed"
+tspa_path  <- tspa(path_mg, data = fs_dat, group = "school",
+                   fsL = attr(fs_dat, "fsL"), fsT = attr(fs_dat, "fsT"))
+tspa_path_corr <- tspa(path_mg, data = fs_dat, group = "school",
+                       fsL = attr(fs_dat, "fsL"), fsT = attr(fs_dat, "fsT"),
+                       vfsLT = vldev, corrected_se = TRUE)
+gr0 <- grandStandardizedSolution(tspa_path)       # uncorrected
+gr1 <- grandStandardizedSolution(tspa_path_corr)  # corrected (SE only)
+keep <- gr1$op == "~"
+round(cbind(grand_std = gr1$est.std[keep],
+            se_plain  = gr0$se[keep],
+            se_corr   = gr1$se[keep]), 4)
+# SE-only: identical point estimates, corrected SEs >= uncorrected
+all(gr1$est.std[keep] == gr0$est.std[keep])
+all(gr1$se[keep] >= gr0$se[keep])
 ```

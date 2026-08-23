@@ -8,9 +8,10 @@ vcov_corrected(tspa_fit, vfsLT, which_free = NULL, ...)
 }
 \arguments{
 \item{tspa_fit}{A fit from \code{\link[=tspa]{tspa()}} with \code{fsT} and \code{fsL} supplied
-(multi-factor measurement model), so that it carries the
-\code{fsT}, \code{fsL}, and \code{tspa_args} attributes. A fit corrected in
-place via \code{tspa(corrected_se = TRUE)} (attribute
+(multi-factor measurement model, single- or multi-group),
+so that it carries the \code{fsT}, \code{fsL}, and \code{tspa_args}
+attributes. A fit corrected in place via
+\code{tspa(corrected_se = TRUE)} (attribute
 \code{tspa_corrected = TRUE}) is rejected.}
 
 \item{vfsLT}{The sampling covariance matrix of the free \code{fsL}/\code{fsT}
@@ -33,10 +34,17 @@ lower-triangular part of \code{fsT} including the diagonal
 \code{fsT} positions 5:7, so the two error variances are 5
 and 7 and the error covariance between the two factor
 scores (the \verb{[2, 1]} element of \code{fsT}) is position 6.
-\code{NULL} (the default) treats every \code{fsL}/\code{fsT} element
-as free. A non-\code{NULL} \code{which_free} of length \code{k}
-requires \code{vfsLT} to be the matching \verb{k x k} principal
-submatrix (see \code{vfsLT}).}
+For a multigroup fit the positions run per group, in
+group order: group 1's full \code{fsL} (column-major), then
+group 2's full \code{fsL}, ..., then group 1's
+lower-triangular \code{fsT} (column-major), then group 2's,
+i.e. all loadings across groups first, then all
+error-variance elements (matching the order of the
+\code{vfsLT} attribute from \code{get_fs(vfsLT = TRUE)}).
+\code{NULL} (the default) treats every per-group \code{fsL}/\code{fsT}
+element as free. A non-\code{NULL} \code{which_free} of length
+\code{k} requires \code{vfsLT} to be the matching \verb{k x k}
+principal submatrix (see \code{vfsLT}).}
 
 \item{...}{Currently not used.}
 }

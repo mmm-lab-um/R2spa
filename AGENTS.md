@@ -20,8 +20,11 @@ remaining contracts settle (see `archive/PLAN_QUARANTINE.md`).
   "fix" it unless working on re-integration. Re-integration: `git mv` files back, then
    `document()` → `test()` → `check()`. Its test files are self-contained with provenance
    headers (plan: `archive/PLAN_QUARANTINE.md`). Re-integration log: `tspa_corrected_se.R` (`vcov_corrected()`),
-   `grandStandardizedSolution.R`, and `tspa_mx.R`/`tspa_mx_model()` are re-integrated into
-   `R/` (2026-08); only `get_fs_int.R` remains. The `tspa()` `tspa_args` attribute
+    `grandStandardizedSolution.R`, and `tspa_mx.R`/`tspa_mx_model()` are re-integrated into
+    `R/` (2026-08); only `get_fs_int.R` remains. The `corrected-se.Rmd` vignette (and its
+    `boo_separate.RDS`/`boo_joint.RDS` fixtures, now shared with the corrected-SE tests) was
+    re-integrated to `vignettes/` when `tspa(corrected_se)` gained multigroup support and the
+    corrected grand-standardized SE path (2026-08). The `tspa()` `tspa_args` attribute
    (self-contained evaluated argument list) and the `tsp_set_vcov()` lavaan-compat boundary
    (the single `@vcov[["vcov"]]` write behind `corrected_se`) are staying-code features
    consumed by the now-package-internal `vcov_corrected()`.
@@ -114,9 +117,13 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
    `fsL`/`fsT` elements at `h0 = 1e-5` (refits via `do.call(tspa, tspa_args)`), returning
    `vcov(fit) + J %*% vfsLT %*% t(J)`; in-place via `tspa(corrected_se = TRUE, vfsLT = ...)`,
    which overwrites the fit covariance through the `tsp_set_vcov()` lavaan-compat boundary
-   (`fit@vcov[["vcov"]]` only, `est.std` unchanged → `standardizedSolution()` reports
-   corrected std SEs). Single-group only (v1); a double-correction guard rejects an
-   already-`tspa_corrected` fit. Helpers: `tsp_tri2full_colmajor()`, `check_refit_convergence()`.
+    (`fit@vcov[["vcov"]]` only, `est.std` unchanged → `standardizedSolution()` reports
+    corrected std SEs). Single- **and** multi-group: `which_free` positions run per group
+    (group 1's `fsL`, group 2's, … then all groups' lower-tri `fsT`) in the same order as the
+    `vfsLT` attribute; a double-correction guard rejects an already-`tspa_corrected` fit.
+    `grandStandardizedSolution()` threads the corrected covariance, so a corrected fit reports
+    corrected grand-standardized SEs (point estimates unchanged). Helpers:
+    `tsp_tri2full_colmajor()`, `check_refit_convergence()`.
 
 Quarantined (in `.quarantine/R/`, do not build against): `get_fs_int.R` (latent interaction)
 **only**. `tspa_corrected_se.R` (`vcov_corrected()`), `grandStandardizedSolution.R`

@@ -25,10 +25,10 @@
 # base fit first — base unchanged but correction moved => bug in the fix,
 # do NOT update the golden.
 # T4 fixture: boo_joint.RDS = corrected-se vignette bootstrap (R = 1999),
-# labels pinned by the vignette's setNames. Shipped in tests/testthat/
-# (moved from .quarantine/vignettes/ on re-integration 2026-08; the
-# quarantined corrected-se vignette still references it but is out of
-# build scope).
+# labels pinned by the vignette's setNames. Shipped in vignettes/ (relocated
+# 2026-08 from tests/testthat/): the fixture is shared between the
+# corrected-se vignette and this test, so the test reads it from the repo
+# root via test_path("../../vignettes/boo_joint.RDS").
 
 library(lavaan)
 
@@ -50,13 +50,25 @@ tspa_prior <- tspa("dem60 ~ ind60", data = fs_prior,
                    fsT = attr(fs_prior, "fsT"), fsL = attr(fs_prior, "fsL"),
                    fsb = attr(fs_prior, "fsb"))
 
-## Multigroup, two-factor (feeds T2, T7)
+## Multigroup, two-factor (feeds T2, T7, T9, IT6-IT8)
 mod2g <- "visual =~ x1 + x2 + x3\nspeed =~ x7 + x8 + x9"
 fs_mg <- get_fs(HolzingerSwineford1939, model = mod2g, std.lv = TRUE,
                 group = "school", vfsLT = TRUE, format = "list")
 tspa_mg <- tspa("visual ~ speed", data = do.call(rbind, fs_mg),
                 fsT = attr(fs_mg, "fsT"), fsL = attr(fs_mg, "fsL"),
                 group = "school")
+
+## Multigroup corrected fit (feeds IT6/IT7/IT8) — built once at file scope
+## to bound cost: each corrected build refits stage 2 ~twice per free
+## fsL/fsT element (~28 refits for this q=2, 2-group case), so doing it
+## per-test would multiply that cost.
+tspa_mg_corr <- tspa("visual ~ speed", data = do.call(rbind, fs_mg),
+                     fsT = attr(fs_mg, "fsT"), fsL = attr(fs_mg, "fsL"),
+                     vfsLT = attr(fs_mg, "vfsLT"), corrected_se = TRUE,
+                     group = "school")
+## Standalone multigroup correction (feeds T2/IT6/T9) — computed once for
+## the same cost reason.
+vcov_corr_mg <- vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"))
 
 ## Joint two-factor (feeds T4, T8)
 mod2 <- "ind60 =~ x1 + x2 + x3
@@ -89,7 +101,9 @@ test_that("T1: vcov_corrected() works with prior-adjusted factor scores (no glob
 })
 
 test_that("T2: vcov_corrected() runs on an MG fit (no globalenv objects)", {
-  vc <- vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"))
+  # Precomputed at file scope (vcov_corr_mg) to bound cost — a fresh
+  # vcov_corrected() call here would spend ~28 stage-2 refits per run.
+  vc <- vcov_corr_mg
   expect_s3_class(vc, "matrix")
   expect_equal(dim(vc), dim(vcov(tspa_mg)))
   expect_true(all(is.finite(vc)))
@@ -124,8 +138,9 @@ test_that("T3: q = 3 correction is non-zero and matches golden values (B1 guard)
 })
 
 test_that("T4: corrected SEs are within a loose tolerance of the bootstrap MAD", {
-  p <- test_path("boo_joint.RDS")
-  skip_if(!file.exists(p), "bootstrap fixture not shipped")
+  p <- test_path("../../vignettes/boo_joint.RDS")
+  skip_if(!file.exists(p),
+          "bootstrap fixture not shipped (vignettes/boo_joint.RDS)")
   boo <- readRDS(p)
   mad_v <- setNames(apply(boo$t, 2, mad),
                     c("dem60~ind60", "ind60~~ind60", "dem60~~dem60"))
@@ -296,15 +311,9 @@ test_that("IT4: tspa() option guards and the tspa_corrected attribute", {
   # (b) the attribute marks only the corrected fit
   expect_true(isTRUE(attr(tspa_it_corr, "tspa_corrected")))
   expect_null(attr(tspa_it_plain, "tspa_corrected"))
-  # MG rejection (option guard; no MG corrected fit is built here — the
-  # T2 multigroup fixture supplies only the inputs to the error path)
-  expect_error(
-    tspa("visual ~ speed", data = do.call(rbind, fs_mg),
-         fsT = attr(fs_mg, "fsT"), fsL = attr(fs_mg, "fsL"),
-         vfsLT = attr(fs_mg, "vfsLT"), corrected_se = TRUE,
-         group = "school"),
-    "not yet supported for multigroup"
-  )
+  # The former MG-rejection check is gone: the guard was removed and
+  # multigroup corrected fits now build (positive-path MG coverage lives
+  # in IT6/IT7/IT8).
 })
 
 test_that("IT5: double-correction guard on vcov_corrected()", {
@@ -317,5 +326,90 @@ test_that("IT5: double-correction guard on vcov_corrected()", {
   # The plain fit does not trip the guard: IT1 runs
   # vcov_corrected(tspa_it_plain, vfsLT = vfs_it) to completion, which is
   # the no-error side of this guard (not re-run here — a full Jacobian).
+})
+
+########## IT6-IT8: corrected_se option on tspa(), multigroup ##########
+## The MG corrected fixtures (tspa_mg_corr, vcov_corr_mg) are built once
+## at file scope with the T-block fixtures (cost-bounded); IT8's replay
+## is the one MG corrected build that stays in-test — the replay itself
+## is the object under test.
+
+test_that("IT6: MG in-place corrected fit equals the standalone correction", {
+  expect_equal(sqrt(diag(vcov(tspa_mg_corr))), sqrt(diag(vcov_corr_mg)),
+               tolerance = 1e-8)
+})
+
+test_that("IT7: MG corrected_se is SE-only (est unchanged, SEs inflated-or-equal)", {
+  # coef()/diag(vcov()) directly: lavaan exports no se() generic in this
+  # dependency set, so the standard-error side is taken from the
+  # covariance's diagonal (same invariant: SE-only, estimates unchanged).
+  expect_identical(names(coef(tspa_mg)), names(coef(tspa_mg_corr)))
+  expect_equal(coef(tspa_mg_corr), coef(tspa_mg), tolerance = 1e-10)
+  sp <- sqrt(diag(vcov(tspa_mg)))
+  sc <- sqrt(diag(vcov(tspa_mg_corr)))
+  expect_true(all(sc >= sp - 1e-8))
+})
+
+test_that("IT8: MG corrected fit replays via tspa_args", {
+  rep <- do.call(tspa, attr(tspa_mg_corr, "tspa_args"))
+  expect_equal(rep@vcov[["vcov"]], tspa_mg_corr@vcov[["vcov"]],
+               tolerance = 1e-8)
+  expect_true(isTRUE(attr(rep, "tspa_corrected")))
+})
+
+test_that("T9: MG Jacobian wiring — independent central differences reproduce the correction", {
+  args0 <- attr(tspa_mg, "tspa_args")
+  fsL0 <- args0$fsL          # list of ngrp q x q matrices
+  fsT0 <- args0$fsT          # list of ngrp q x q symmetric matrices
+  ng <- length(fsL0)
+  q <- ncol(fsL0[[1]])
+  ld_len <- q * q
+  ev_len <- q * (q + 1L) / 2L
+  tri_list <- lapply(fsT0, function(T) which(lower.tri(T, diag = TRUE), arr.ind = TRUE))
+  # Parameter layout must match vcov_corrected()'s val_fsLT: all groups'
+  # fsL (column-major) first, then all groups' fsT (lower triangle,
+  # column-major) — [ld_g1, ld_g2, ev_g1, ev_g2] for q=2, ngrp=2.
+  x0 <- c(unlist(fsL0),
+          unlist(lapply(fsT0, function(T) T[lower.tri(T, diag = TRUE)])))
+  expect_true(length(x0) == ng * (ld_len + ev_len))
+  names_coef <- names(coef(tspa_mg))
+
+  f <- function(x) {
+    L_list <- fsL0; T_list <- fsT0; pos <- 1L
+    for (g in seq_len(ng)) {
+      L_list[[g]][, ] <- x[pos:(pos + ld_len - 1L)]
+      pos <- pos + ld_len
+    }
+    for (g in seq_len(ng)) {
+      tri_g <- tri_list[[g]]
+      for (k in seq_len(nrow(tri_g))) {
+        T_list[[g]][tri_g[k, 1], tri_g[k, 2]] <- x[pos]
+        pos <- pos + 1L
+      }
+    }
+    a <- args0
+    a$fsL <- L_list
+    a$fsT <- T_list
+    a$se <- "none"
+    coef(do.call(tspa, a))
+  }
+  # Base round-trip: a mis-wired perturbation index would be invisible
+  # unless the unperturbed replay reproduces the base coefficients.
+  expect_equal(unname(f(x0)), unname(coef(tspa_mg)), tolerance = 1e-10)
+
+  h <- 1e-5
+  J_test <- matrix(NA_real_, nrow = length(names_coef), ncol = length(x0))
+  for (p in seq_along(x0)) {
+    step <- h * max(1, abs(x0[p])); e <- numeric(length(x0)); e[p] <- 1
+    J_test[, p] <- (f(x0 + step * e) - f(x0 - step * e)) / (2 * step)
+  }
+  rownames(J_test) <- names_coef
+
+  # Wiring: the package correction equals J_test %*% vfsLT %*% t(J_test).
+  # A wiring/ordering bug makes the LHS zero or scrambled while the RHS
+  # stays correct.
+  vfsLT <- attr(fs_mg, "vfsLT")
+  cor_pkg <- vcov_corr_mg - vcov(tspa_mg)
+  expect_equal(cor_pkg, J_test %*% vfsLT %*% t(J_test), tolerance = 1e-4)
 })
 

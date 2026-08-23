@@ -33,7 +33,11 @@ model, in \code{lavaan} syntax.}
 standardized parameters will be computed.}
 
 \item{acov_par}{An asymptotic variance-covariance matrix for a fitted
-model object.}
+model object; defaults to \code{vcov(object)}. Supplying the
+covariance of an SE-corrected \code{tspa()} fit (produced
+with \code{tspa(corrected_se = TRUE)}) carries the first-order
+correction through to the grand-standardized standard
+errors reported by this function.}
 
 \item{free_list}{A list of model matrices that indicate the position of
 the free parameters in the parameter vector.}
@@ -45,6 +49,17 @@ A matrix of the standardized model parameters and standard errors.
 }
 \description{
 Grand standardized solution of a two-stage path analysis model.
+}
+\details{
+For a \strong{multigroup} fit the grand standardized solution is computed
+from the grand (pooled) means and variance-covariances and is \strong{not}
+equivalent to \code{\link[lavaan:standardizedSolution]{lavaan::standardizedSolution()}}, which matches it only
+in the single-group case (the function emits that message when it
+applies). When the input fit is an SE-corrected \code{tspa()} fit (produced
+with \code{tspa(corrected_se = TRUE)}, attribute \code{tspa_corrected = TRUE}) --
+or when \code{acov_par = vcov(corrected_fit)} is supplied -- the reported
+standard errors are the first-order corrected grand-standardized
+standard errors, while the point estimates (\code{est.std}) are unchanged.
 }
 \examples{
 library(lavaan)

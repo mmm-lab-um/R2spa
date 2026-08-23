@@ -14,6 +14,12 @@
   path coefficients with delta-method SEs for (multi)group `lavaan` fit objects.
 
 ## Improvements
+- `tspa(corrected_se = TRUE)` now supports multigroup fits, and
+  `grandStandardizedSolution()` threads `vcov(object)` (or an explicit
+  `acov_par = vcov(corrected_fit)`) so a corrected fit yields corrected
+  grand-standardized SEs with unchanged point estimates; the
+  re-integrated `corrected-se` vignette documents the in-place single-
+  and multigroup correction.
 - Add examples for `get_fs_int()` (#82).
 - Update naming for `get_fscore()` (#79)
     * Rename `vc` to `ev` (error variance-covariance) for better consistency

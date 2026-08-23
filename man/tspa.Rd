@@ -91,9 +91,10 @@ result fitted with \code{vfsLT = TRUE}. Required when
 returned fit is replaced by the first-order (delta-method)
 correction of \code{\link[=vcov_corrected]{vcov_corrected()}} and the \code{tspa_corrected}
 attribute is set to \code{TRUE}. Requires a multi-factor fit (both
-\code{fsT} and \code{fsL} supplied) and \code{vfsLT}; not yet supported for
-multigroup fits. Default \code{FALSE} (the returned fit is
-unchanged).}
+\code{fsT} and \code{fsL} supplied) and \code{vfsLT}. Supported for
+single-group and multigroup fits (the multigroup \code{fsL}/\code{fsT}
+are the per-group list attributes from \code{get_fs()}). Default
+\code{FALSE} (the returned fit is unchanged).}
 
 \item{which_free}{An optional numeric vector of positions selecting which
 \code{fsL}/\code{fsT} free elements to propagate through the corrected
@@ -119,7 +120,7 @@ When \code{corrected_se = TRUE}, the returned fit additionally
 carries \code{tspa_corrected = TRUE} and its covariance is the
 first-order corrected matrix, so \code{vcov()}, \code{se()}, and
 \code{standardizedSolution()} on it report the corrected standard
-errors.
+errors, for multigroup fits as well as single-group ones.
 }
 \description{
 Fit a two-stage path analysis (2S-PA) model.

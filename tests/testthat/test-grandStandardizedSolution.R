@@ -228,3 +228,40 @@ test_that("grand_standardized_solution output is unchanged by the wrapper", {
   expect_true(all(is.finite(mg$est.std)))
   expect_true(all(is.finite(mg$se)))
 })
+
+## MG 2S-PA: corrected grand-standardized SEs (SE-only correction) ------
+## A distinct model from fit3 above (`visual ~ speed` free in both
+## `school` groups, no group.equal constraints): fit by two-stage path
+## analysis on factor scores so a corrected stage-2 covariance exists to
+## thread through grandStandardizedSolution() -- the existing MG fixtures
+## in this file are plain sem() fits over raw data, which cannot be
+## SE-corrected. The corrected fit is built once at file scope for the
+## same cost reason as in test-tspa_corrected_se.R (~28 stage-2 refits).
+mod_tspa_mg <- "visual =~ x1 + x2 + x3\nspeed =~ x7 + x8 + x9"
+fs_mg_gs <- get_fs(HolzingerSwineford1939, model = mod_tspa_mg, std.lv = TRUE,
+                   group = "school", vfsLT = TRUE, format = "list")
+tspa_mg_gs_plain <- tspa("visual ~ speed", data = do.call(rbind, fs_mg_gs),
+                         fsT = attr(fs_mg_gs, "fsT"), fsL = attr(fs_mg_gs, "fsL"),
+                         group = "school")
+tspa_mg_gs_corr <- tspa("visual ~ speed", data = do.call(rbind, fs_mg_gs),
+                        fsT = attr(fs_mg_gs, "fsT"), fsL = attr(fs_mg_gs, "fsL"),
+                        vfsLT = attr(fs_mg_gs, "vfsLT"), corrected_se = TRUE,
+                        group = "school")
+gr_gs_plain <- grandStandardizedSolution(tspa_mg_gs_plain)
+gr_gs_corr  <- grandStandardizedSolution(tspa_mg_gs_corr)
+gr_gs_inj   <- grandStandardizedSolution(tspa_mg_gs_plain,
+                                         acov_par = vcov(tspa_mg_gs_corr))
+
+test_that("grand standardization threads the corrected covariance (MG, 2S-PA)", {
+  keep <- gr_gs_corr$op == "~"
+  # (a) SE-only: corrected grand-std SEs >= uncorrected
+  expect_true(all(gr_gs_corr$se[keep] >= gr_gs_plain$se[keep] - 1e-8))
+  # (b) A/B invariant: injecting the corrected covariance into the plain
+  #     fit equals calling grandStandardizedSolution on the corrected fit
+  expect_equal(gr_gs_inj$se[keep], gr_gs_corr$se[keep], tolerance = 1e-8)
+  expect_equal(gr_gs_inj$est.std[keep], gr_gs_corr$est.std[keep],
+               tolerance = 1e-8)
+  # (c) point estimates unchanged by the correction
+  expect_equal(gr_gs_corr$est.std[keep], gr_gs_plain$est.std[keep],
+               tolerance = 1e-8)
+})

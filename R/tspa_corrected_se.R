@@ -27,9 +27,10 @@
 #' correction is never applied twice).
 #'
 #' @param tspa_fit A fit from [tspa()] with `fsT` and `fsL` supplied
-#'              (multi-factor measurement model), so that it carries the
-#'              `fsT`, `fsL`, and `tspa_args` attributes. A fit corrected in
-#'              place via `tspa(corrected_se = TRUE)` (attribute
+#'              (multi-factor measurement model, single- or multi-group),
+#'              so that it carries the `fsT`, `fsL`, and `tspa_args`
+#'              attributes. A fit corrected in place via
+#'              `tspa(corrected_se = TRUE)` (attribute
 #'              `tspa_corrected = TRUE`) is rejected.
 #' @param vfsLT The sampling covariance matrix of the free `fsL`/`fsT`
 #'              elements, taken (or sub-matrixed) from the `vfsLT` attribute
@@ -50,10 +51,17 @@
 #'                   `fsT` positions 5:7, so the two error variances are 5
 #'                   and 7 and the error covariance between the two factor
 #'                   scores (the `[2, 1]` element of `fsT`) is position 6.
-#'                   `NULL` (the default) treats every `fsL`/`fsT` element
-#'                   as free. A non-`NULL` `which_free` of length `k`
-#'                   requires `vfsLT` to be the matching `k x k` principal
-#'                   submatrix (see `vfsLT`).
+#'                   For a multigroup fit the positions run per group, in
+#'                   group order: group 1's full `fsL` (column-major), then
+#'                   group 2's full `fsL`, ..., then group 1's
+#'                   lower-triangular `fsT` (column-major), then group 2's,
+#'                   i.e. all loadings across groups first, then all
+#'                   error-variance elements (matching the order of the
+#'                   `vfsLT` attribute from `get_fs(vfsLT = TRUE)`).
+#'                   `NULL` (the default) treats every per-group `fsL`/`fsT`
+#'                   element as free. A non-`NULL` `which_free` of length
+#'                   `k` requires `vfsLT` to be the matching `k x k`
+#'                   principal submatrix (see `vfsLT`).
 #' @param ... Currently not used.
 #' @return A corrected covariance matrix in the same dimension as
 #'     `vcov(tspa_fit)` (symmetric).

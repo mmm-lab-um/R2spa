@@ -81,9 +81,10 @@
 #'            returned fit is replaced by the first-order (delta-method)
 #'            correction of [vcov_corrected()] and the `tspa_corrected`
 #'            attribute is set to `TRUE`. Requires a multi-factor fit (both
-#'            `fsT` and `fsL` supplied) and `vfsLT`; not yet supported for
-#'            multigroup fits. Default `FALSE` (the returned fit is
-#'            unchanged).
+#'            `fsT` and `fsL` supplied) and `vfsLT`. Supported for
+#'            single-group and multigroup fits (the multigroup `fsL`/`fsT`
+#'            are the per-group list attributes from `get_fs()`). Default
+#'            `FALSE` (the returned fit is unchanged).
 #' @param which_free An optional numeric vector of positions selecting which
 #'            `fsL`/`fsT` free elements to propagate through the corrected
 #'            covariance (see [vcov_corrected()]); used only when
@@ -105,7 +106,7 @@
 #'         carries \code{tspa_corrected = TRUE} and its covariance is the
 #'         first-order corrected matrix, so `vcov()`, `se()`, and
 #'         `standardizedSolution()` on it report the corrected standard
-#'         errors.
+#'         errors, for multigroup fits as well as single-group ones.
 #'
 #' @export
 #'
@@ -405,17 +406,14 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
   # First-order (delta-method) SE correction: replace the lavaan covariance
   # with vcov(fit) + J %*% vfsLT %*% t(J) (see vcov_corrected()). Only
   # meaningful for the multi-factor path (fsT and fsL supplied) with a
-  # vfsLT matrix from get_fs(..., vfsLT = TRUE); single-group fits only
-  # (v1).
+  # vfsLT matrix from get_fs(..., vfsLT = TRUE); single- and multi-group
+  # fits.
   if (isTRUE(corrected_se)) {
     if (is.null(fsT) || is.null(fsL) || is.null(vfsLT)) {
       stop(
         "corrected_se = TRUE requires a multi-factor fit (both 'fsT' and ",
         "'fsL' supplied) and a 'vfsLT' matrix from get_fs(..., vfsLT = TRUE)."
       )
-    }
-    if (tsp_ngroups(tspa_fit) > 1) {
-      stop("corrected_se is not yet supported for multigroup fits.")
     }
     corrected <- vcov_corrected(tspa_fit, vfsLT = vfsLT,
                                 which_free = which_free)
