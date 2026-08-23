@@ -18,6 +18,7 @@ export(grandStandardizedSolution)
 export(grand_standardized_solution)
 export(tspa)
 export(tspa_mx_model)
+export(vcov_corrected)
 importFrom(OpenMx,
   mxData,
   mxFitFunctionML,

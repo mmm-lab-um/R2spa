@@ -70,6 +70,24 @@
 #                                             row subsetting; 0.7-2 changed
 #                                             lavInspect list-access
 #                                             semantics)
+#   fit@vcov                                     S4 slot; list of
+#                                                 {se = method string,
+#                                                 information = string,
+#                                                 vcov = p x p covariance
+#                                                 of the free parameters}.
+#                                                 The only field written
+#                                                 by the package:
+#                                                 fit@vcov[["vcov"]], via
+#                                                 tsp_set_vcov() for the
+#                                                 corrected-SE path (R/
+#                                                 tspa_corrected_se.R);
+#                                                 canary-covered. The
+#                                                 method-string keys
+#                                                 (fit@vcov$se,
+#                                                 @Options$se) stay
+#                                                 intact, so se() /
+#                                                 standardizedSolution()
+#                                                 dispatch is unchanged
 #
 # Known but NOT wrapped (deliberately deferred, PLAN 04 §1 — most stable
 # views; detection falls to the existing equivalence tests rather than the
@@ -83,7 +101,7 @@
 #     compute_grad_ld_evfs, compute_fsrel — purely algebraic closures, no
 #     optimizer boundary => complex steps valid),
 #     R/grandStandardizedSolution.R (re-integrated, same shape).
-#     NOT used by the corrected-SE path: .quarantine/R/tspa_corrected_se.R
+#     NOT used by the corrected-SE path: R/tspa_corrected_se.R
 #     computes its stage-2 Jacobian by explicit central differences (stepped
 #     refits through the optimizer silently degrade; complex literals die in
 #     the model-string parser).
@@ -294,4 +312,15 @@ tsp_converged <- function(fit) {
     fit@optim$converged,
     error = function(e) lavInspect(fit, what = "converged")
   )
+}
+
+# Overwrite the fitted p x p covariance of the free parameters: the lavaan
+# @vcov slot is a list of {se = method string, information = string,
+# vcov = matrix} and only the matrix element is touched, so vcov(), se(),
+# and standardizedSolution() report the corrected values while the SE-method
+# dispatch keys (@vcov$se, @Options$se) stay intact. Consumed by the
+# corrected-SE path (R/tspa_corrected_se.R); canary-covered slot write.
+tsp_set_vcov <- function(fit, m) {
+  fit@vcov[["vcov"]] <- m
+  fit
 }

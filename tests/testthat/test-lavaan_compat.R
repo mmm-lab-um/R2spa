@@ -135,3 +135,28 @@ test_that("tsp_layout is memoized per lavaan version", {
   tsp_layout_reset()
   expect_error(tsp_layout("not a lavaan fit"))
 })
+
+## Slot-write canary ----------------------------------------------------------
+## tsp_set_vcov() is the single boundary that writes into lavaan's @vcov slot
+## (the corrected-SE path, R/tspa_corrected_se.R, depends on downstream
+## vcov()/standardizedSolution() dispatch reading that slot as the effective
+## covariance source). If a future lavaan release stops routing those calls
+## through the slot, exactly this test fails.
+
+test_that("tsp_set_vcov(): the @vcov slot is the effective covariance source", {
+  fit <- sem(canon_mod, data = PoliticalDemocracy, std.lv = TRUE)
+  v0 <- vcov(fit)
+  f2 <- tsp_set_vcov(fit, 4 * v0)
+  # a valid lavaan fit (S4), with the slot write read back through vcov()
+  expect_s4_class(f2, "lavaan")
+  expect_equal(vcov(f2), 4 * v0, tolerance = 1e-10)
+  # ... and through standardizedSolution(): variance scales by 4, every std
+  # SE by 2 (x4 = 2^2 => exact power-of-two rescaling), point estimates
+  # (est.std) untouched.
+  s0 <- standardizedSolution(fit)
+  s2 <- standardizedSolution(f2)
+  expect_equal(s2$se, 2 * s0$se, tolerance = 1e-10)
+  expect_identical(s2$est.std, s0$est.std)
+  # the write is on the returned copy; the original fit is untouched
+  expect_equal(vcov(fit), v0, tolerance = 1e-14)
+})

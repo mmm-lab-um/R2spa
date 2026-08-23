@@ -73,6 +73,21 @@
 #'            warning is emitted when the pooled `fsT` is not positive
 #'            semi-definite. The pooled (not the nested/per-cluster) `fsT` and
 #'            `fsL` are what get attached to the returned fit.
+#' @param vfsLT The sampling covariance matrix of the free `fsL`/`fsT`
+#'            elements, taken from the `vfsLT` attribute of a [get_fs()]
+#'            result fitted with `vfsLT = TRUE`. Required when
+#'            `corrected_se = TRUE`; ignored otherwise.
+#' @param corrected_se A logical; when `TRUE`, the stage-2 covariance of the
+#'            returned fit is replaced by the first-order (delta-method)
+#'            correction of [vcov_corrected()] and the `tspa_corrected`
+#'            attribute is set to `TRUE`. Requires a multi-factor fit (both
+#'            `fsT` and `fsL` supplied) and `vfsLT`; not yet supported for
+#'            multigroup fits. Default `FALSE` (the returned fit is
+#'            unchanged).
+#' @param which_free An optional numeric vector of positions selecting which
+#'            `fsL`/`fsT` free elements to propagate through the corrected
+#'            covariance (see [vcov_corrected()]); used only when
+#'            `corrected_se = TRUE`.
 #' @param ... Additional arguments passed to \code{\link[lavaan]{sem}}. See
 #'            \code{\link[lavaan]{lavOptions}} for a complete list.
 #' @return An object of class \code{lavaan} carrying the following
@@ -86,6 +101,11 @@
 #'         model), the (possibly reduced) matrices are also attached as the
 #'         \code{fsT}/\code{fsL} attributes, and \code{pooled_fs} records the
 #'         \code{reduce} method used when per-unit values were collapsed.
+#'         When \code{corrected_se = TRUE}, the returned fit additionally
+#'         carries \code{tspa_corrected = TRUE} and its covariance is the
+#'         first-order corrected matrix, so `vcov()`, `se()`, and
+#'         `standardizedSolution()` on it report the corrected standard
+#'         errors.
 #'
 #' @export
 #'
@@ -205,7 +225,9 @@
 
 tspa <- function(model, data, reliability = NULL, se = "standard",
                  se_fs = NULL, fsT = NULL, fsL = NULL, fsb = NULL,
-                 reduce = c("mean", "median"), ...) {
+                 reduce = c("mean", "median"),
+                 vfsLT = NULL, corrected_se = FALSE, which_free = NULL,
+                 ...) {
   reduce <- match.arg(reduce)
   # Set when the per-unit fsT/fsL/fsb attributes were collapsed to a single
   # representative per-group set via `reduce` (PLAN 09); attached to the
@@ -374,10 +396,34 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
   # spliced dots structurally cannot shadow them.
   attr(tspa_fit, "tspa_args") <- c(
     list(model = model, data = data, reliability = reliability, se = se,
-         se_fs = se_fs, fsT = fsT, fsL = fsL, fsb = fsb, reduce = reduce),
+         se_fs = se_fs, fsT = fsT, fsL = fsL, fsb = fsb, reduce = reduce,
+         vfsLT = vfsLT, corrected_se = corrected_se,
+         which_free = which_free),
     list(...)
   )
   attr(tspa_fit, "tspa_call") <- match.call()
+  # First-order (delta-method) SE correction: replace the lavaan covariance
+  # with vcov(fit) + J %*% vfsLT %*% t(J) (see vcov_corrected()). Only
+  # meaningful for the multi-factor path (fsT and fsL supplied) with a
+  # vfsLT matrix from get_fs(..., vfsLT = TRUE); single-group fits only
+  # (v1).
+  if (isTRUE(corrected_se)) {
+    if (is.null(fsT) || is.null(fsL) || is.null(vfsLT)) {
+      stop(
+        "corrected_se = TRUE requires a multi-factor fit (both 'fsT' and ",
+        "'fsL' supplied) and a 'vfsLT' matrix from get_fs(..., vfsLT = TRUE)."
+      )
+    }
+    if (tsp_ngroups(tspa_fit) > 1) {
+      stop("corrected_se is not yet supported for multigroup fits.")
+    }
+    corrected <- vcov_corrected(tspa_fit, vfsLT = vfsLT,
+                                which_free = which_free)
+    # The @vcov slot write goes through the lavaan-internal boundary
+    # (single point of coupling, canary-covered).
+    tspa_fit <- tsp_set_vcov(tspa_fit, corrected)
+    attr(tspa_fit, "tspa_corrected") <- TRUE
+  }
   return(tspa_fit)
 }
 

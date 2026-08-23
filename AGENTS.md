@@ -6,10 +6,11 @@ structural-equation-modeling (SEM) technique. Stage 1 extracts factor scores and
 observation-specific SEs/reliability from a `lavaan` CFA (or `lme4` mixed model). Stage 2 feeds
 those scores and error-variance estimates into a `lavaan::sem()` path model that corrects for
 measurement error. Core machinery: factor-score computation, schema-driven stage-2 model
-assembly. The delta-method SE correction (`vcov_corrected`), grand standardization, latent
-interaction are currently **quarantined** in `.quarantine/` while the
-`get_fs()`/`tspa()` output contracts settle (see `archive/PLAN_QUARANTINE.md`). The
-`tspa_mx_model()` OpenMx path was re-integrated in 2026-08 (commit `bcd42a3`).
+assembly. The first-order delta-method SE correction (`vcov_corrected()`, also exposed
+in-place via `tspa(corrected_se = TRUE)`), multigroup grand standardization, and the
+`tspa_mx_model()` OpenMx path have all been **re-integrated** into `R/` (2026-08). Only
+latent interaction (`get_fs_int()`) remains **quarantined** in `.quarantine/` while the
+remaining contracts settle (see `archive/PLAN_QUARANTINE.md`).
 
 ## Repository Facts
 - ~2,500 lines of R across 7 files in `R/`; 9 test files in `tests/testthat/`.
@@ -18,10 +19,12 @@ interaction are currently **quarantined** in `.quarantine/` while the
   Not part of the build, tests, or docs — never modify package code to match it, and don't
   "fix" it unless working on re-integration. Re-integration: `git mv` files back, then
    `document()` → `test()` → `check()`. Its test files are self-contained with provenance
-   headers (plan: `archive/PLAN_QUARANTINE.md`). Exception (user-approved 2026-08-22,
-   `vcov_corrected()` fix): `tspa()` attaches a `tspa_args` attribute
-   (self-contained evaluated argument list) — a deliberate capability addition to staying
-   code, consumed by the quarantined SE correction; not quarantine-matching, do not revert.
+   headers (plan: `archive/PLAN_QUARANTINE.md`). Re-integration log: `tspa_corrected_se.R` (`vcov_corrected()`),
+   `grandStandardizedSolution.R`, and `tspa_mx.R`/`tspa_mx_model()` are re-integrated into
+   `R/` (2026-08); only `get_fs_int.R` remains. The `tspa()` `tspa_args` attribute
+   (self-contained evaluated argument list) and the `tsp_set_vcov()` lavaan-compat boundary
+   (the single `@vcov[["vcov"]]` write behind `corrected_se`) are staying-code features
+   consumed by the now-package-internal `vcov_corrected()`.
 - `legacy/` — `tspa_plot.R` (diagnostic plotting, removed from package). `archive/` — 
   `tspa-plot-vignette.Rmd` + completed plan files (`PLAN_01` … `PLAN_04`, `PLAN_QUARANTINE`).
   Both directories are ignored for development.
@@ -76,10 +79,9 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
 
 ## Naming / Style
 - Exported: `snake_case` (current inventory: `get_fs`, `tspa`, `get_fs_lavaan`, `get_fs_lmer`,
-  `compute_fscore`, `augment_lav_predict`, `fs_to_group_list`, `block_diag`, `tspa_mx_model`;
-  quarantined: `get_fs_int`, `vcov_corrected`,
-  `grand_standardized_solution`/`grandStandardizedSolution` — the legacy CamelCase alias pair
-  must be kept in sync on re-integration).
+  `compute_fscore`, `augment_lav_predict`, `fs_to_group_list`, `block_diag`, `tspa_mx_model`,
+  `vcov_corrected`, `grand_standardized_solution`/`grandStandardizedSolution` — the legacy
+  CamelCase alias pair is kept in sync; quarantined: `get_fs_int` only).
 - Column conventions from `get_fs()`/`get_fs_int()` (the latter is quarantined — the
   conventions remain the spec for re-integration) — downstream functions parse by name:
   - `fs_<name>` score | `<name>_se` SE | `ev_<name>` error variance
@@ -107,11 +109,19 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
    internals (layout/partable probing, tested-up-to version canary). Currently consumed only
    by its own canary tests (`test-lavaan_compat.R`); its package consumers are quarantined.
 6. **`helper.R`** / **`globals.R`** — `block_diag()`, NSE NOTE suppression. Low risk.
+7. **`tspa_corrected_se.R`** — `vcov_corrected()`, the first-order (delta-method) corrected-SE
+   path (re-integrated 2026-08-23). Central-difference stage-2 Jacobian `J` over the free
+   `fsL`/`fsT` elements at `h0 = 1e-5` (refits via `do.call(tspa, tspa_args)`), returning
+   `vcov(fit) + J %*% vfsLT %*% t(J)`; in-place via `tspa(corrected_se = TRUE, vfsLT = ...)`,
+   which overwrites the fit covariance through the `tsp_set_vcov()` lavaan-compat boundary
+   (`fit@vcov[["vcov"]]` only, `est.std` unchanged → `standardizedSolution()` reports
+   corrected std SEs). Single-group only (v1); a double-correction guard rejects an
+   already-`tspa_corrected` fit. Helpers: `tsp_tri2full_colmajor()`, `check_refit_convergence()`.
 
-Quarantined (in `.quarantine/R/`, do not build against): `get_fs_int.R` (latent
-interaction), `tspa_corrected_se.R` (`vcov_corrected()`, sensitive to `fsT`/`fsL`
-shapes), `grandStandardizedSolution.R` (multigroup standardization, Jacobian SEs).
-(`tspa_mx.R`/`tspa_mx_model()` was re-integrated to `R/` in 2026-08.)
+Quarantined (in `.quarantine/R/`, do not build against): `get_fs_int.R` (latent interaction)
+**only**. `tspa_corrected_se.R` (`vcov_corrected()`), `grandStandardizedSolution.R`
+(multigroup standardization), and `tspa_mx.R`/`tspa_mx_model()` (OpenMx) were re-integrated
+to `R/` in 2026-08.
 
 ## General Instruction
 Trust and follow the rules above exactly. Never hand-edit `NAMESPACE` or `man/*.Rd`, never call

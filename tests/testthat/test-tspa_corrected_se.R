@@ -1,9 +1,13 @@
-# Quarantined with R/tspa_corrected_se.R (see archive/PLAN_QUARANTINE.md).
+# Re-integrated 2026-08 into the package (corrected-SE path, incl. the new
+# tspa(corrected_se = TRUE) option); original provenance: quarantined with
+# R/tspa_corrected_se.R (see archive/PLAN_QUARANTINE.md).
 # Provenance:
 #  - tests/testthat/test-tspa_render.R: vcov_corrected() multigroup test
 #    (lines 322-344 as of 2026-08-17) plus mod2g (line 17).
 #  - tests/testthat/test-get_fs_priors.R: vcov_corrected() prior test
 #    (lines 175-205) plus single-group setup (lines 1-18).
+# T1-T8 (standalone vcov_corrected() tests) are the A/B gate for the
+# relocation: their assertions are unchanged since quarantine.
 # T1/T2: globalenv scaffolding removed 2026-08-22 — tspa() records
 # tspa_args (evaluated values), so refits are environment-agnostic; the
 # passing of T1/T2 with fixtures in file scope only IS that regression
@@ -21,7 +25,10 @@
 # base fit first — base unchanged but correction moved => bug in the fix,
 # do NOT update the golden.
 # T4 fixture: boo_joint.RDS = corrected-se vignette bootstrap (R = 1999),
-# labels pinned by the vignette's setNames.
+# labels pinned by the vignette's setNames. Shipped in tests/testthat/
+# (moved from .quarantine/vignettes/ on re-integration 2026-08; the
+# quarantined corrected-se vignette still references it but is out of
+# build scope).
 
 library(lavaan)
 
@@ -117,7 +124,7 @@ test_that("T3: q = 3 correction is non-zero and matches golden values (B1 guard)
 })
 
 test_that("T4: corrected SEs are within a loose tolerance of the bootstrap MAD", {
-  p <- test_path("..", "vignettes", "boo_joint.RDS")
+  p <- test_path("boo_joint.RDS")
   skip_if(!file.exists(p), "bootstrap fixture not shipped")
   boo <- readRDS(p)
   mad_v <- setNames(apply(boo$t, 2, mad),
@@ -230,3 +237,85 @@ test_that("T8: Jacobian wiring — independent central differences reproduce the
   J_ref <- numDeriv::jacobian(f, x0)
   expect_equal(J_test, J_ref, tolerance = 1e-3, ignore_attr = TRUE)
 })
+########## IT fixtures (corrected_se option on tspa(), single-group) ##########
+
+## Same model family as the joint2 fixture above (mod2), kept as a separate
+## fixture set: the corrected fit is a new object kind (tspa_corrected
+## attribute + overwritten @vcov slot) and the IT blocks must not depend on
+## the T-block fixtures.
+cfa_it <- cfa(mod2, data = PoliticalDemocracy)
+fs_it <- get_fs_lavaan(cfa_it, vfsLT = TRUE)
+vfs_it <- attr(fs_it, "vfsLT")
+tspa_it_plain <- tspa("dem60 ~ ind60", data = fs_it,
+                      fsT = attr(fs_it, "fsT"), fsL = attr(fs_it, "fsL"))
+tspa_it_corr <- tspa("dem60 ~ ind60", data = fs_it,
+                     fsT = attr(fs_it, "fsT"), fsL = attr(fs_it, "fsL"),
+                     vfsLT = vfs_it, corrected_se = TRUE)
+
+########## IT tests: corrected_se option on tspa() ##########
+
+test_that("IT1: corrected_se on tspa() equals standalone vcov_corrected()", {
+  se_on <- sqrt(diag(vcov(tspa_it_corr)))
+  se_st <- sqrt(diag(vcov_corrected(tspa_it_plain, vfsLT = vfs_it)))
+  expect_equal(se_on, se_st, tolerance = 1e-8)
+})
+
+test_that("IT2: corrected standardized SE >= naive, matches golden; SE-only", {
+  ss0 <- standardizedSolution(tspa_it_plain)
+  ss1 <- standardizedSolution(tspa_it_corr)
+  keep <- ss1$lhs == "dem60" & ss1$rhs == "ind60" & ss1$op == "~"
+  # (a) on this coefficient the correction inflates the SE, never deflates
+  expect_gte(ss1$se[keep], ss0$se[keep])
+  # (b) golden derived 2026-08-23 by running the code (R 4.6.1 /
+  # lavaan 0.7-2, PoliticalDemocracy): 0.10293499... vs 0.10010434...
+  # naive on the plain fit.
+  expect_equal(ss1$se[keep], 0.102935, tolerance = 1e-3)
+  # (c) point estimates are untouched — the correction is SE-only
+  expect_identical(ss0$est.std[keep], ss1$est.std[keep])
+})
+
+test_that("IT3: replaying tspa_args reproduces the corrected covariance", {
+  rep <- do.call(tspa, attr(tspa_it_corr, "tspa_args"))
+  # The replay re-runs the correction through the recorded args; the
+  # double-correction guard must not fire (the internal base fit inside
+  # the replay is uncorrected), so this also proves the guard terminates.
+  expect_equal(rep@vcov[["vcov"]], tspa_it_corr@vcov[["vcov"]],
+               tolerance = 1e-8)
+  expect_true(isTRUE(attr(rep, "tspa_corrected")))
+})
+
+test_that("IT4: tspa() option guards and the tspa_corrected attribute", {
+  # (a) corrected_se = TRUE without vfsLT is a clear error naming 'vfsLT'
+  # (fires after the stage-2 fit, by design of the option placement)
+  expect_error(
+    tspa("dem60 ~ ind60", data = fs_it,
+         fsT = attr(fs_it, "fsT"), fsL = attr(fs_it, "fsL"),
+         corrected_se = TRUE),
+    "vf"
+  )
+  # (b) the attribute marks only the corrected fit
+  expect_true(isTRUE(attr(tspa_it_corr, "tspa_corrected")))
+  expect_null(attr(tspa_it_plain, "tspa_corrected"))
+  # MG rejection (option guard; no MG corrected fit is built here — the
+  # T2 multigroup fixture supplies only the inputs to the error path)
+  expect_error(
+    tspa("visual ~ speed", data = do.call(rbind, fs_mg),
+         fsT = attr(fs_mg, "fsT"), fsL = attr(fs_mg, "fsL"),
+         vfsLT = attr(fs_mg, "vfsLT"), corrected_se = TRUE,
+         group = "school"),
+    "not yet supported for multigroup"
+  )
+})
+
+test_that("IT5: double-correction guard on vcov_corrected()", {
+  # Single regex with true alternation (two separate string args would be
+  # OR'd by R before expect_error ever sees them).
+  expect_error(
+    vcov_corrected(tspa_it_corr, vfsLT = vfs_it),
+    "twice|already SE-corrected"
+  )
+  # The plain fit does not trip the guard: IT1 runs
+  # vcov_corrected(tspa_it_plain, vfsLT = vfs_it) to completion, which is
+  # the no-error side of this guard (not re-run here — a full Jacobian).
+})
+

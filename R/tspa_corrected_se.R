@@ -19,7 +19,18 @@
 #' cross-covariance between the stage-1 estimates and the stage-2 data is not
 #' modelled.
 #'
-#' @param tspa_fit A fitted model from [tspa()].
+#' The same correction can also be requested in place via
+#' `tspa(..., corrected_se = TRUE, vfsLT = <matrix>)`; `tspa()` then sets the
+#' `tspa_corrected = TRUE` attribute on the returned fit, and
+#' `standardizedSolution()` on that fit reports corrected standard SEs. Such
+#' an already-corrected fit is rejected by `vcov_corrected()` (the
+#' correction is never applied twice).
+#'
+#' @param tspa_fit A fit from [tspa()] with `fsT` and `fsL` supplied
+#'              (multi-factor measurement model), so that it carries the
+#'              `fsT`, `fsL`, and `tspa_args` attributes. A fit corrected in
+#'              place via `tspa(corrected_se = TRUE)` (attribute
+#'              `tspa_corrected = TRUE`) is rejected.
 #' @param vfsLT The sampling covariance matrix of the free `fsL`/`fsT`
 #'              elements, taken (or sub-matrixed) from the `vfsLT` attribute
 #'              of a [get_fs()] result fitted with `vfsLT = TRUE`. Its row and
@@ -70,6 +81,11 @@ vcov_corrected <- function(tspa_fit, vfsLT, which_free = NULL, ...) {
     if (is.null(attr(tspa_fit, "fsT"))) {
         stop("corrected vcov requires a tspa() fit with ",
              "'fsT' and 'fsL' supplied (multi-factor measurement model).")
+    }
+    if (isTRUE(attr(tspa_fit, "tspa_corrected"))) {
+        stop("the fit is already SE-corrected (tspa_corrected = TRUE; from ",
+             "tspa(corrected_se = TRUE)); pass the uncorrected fit so the ",
+             "correction is not applied twice.")
     }
     args0 <- attr(tspa_fit, "tspa_args")
     if (is.null(args0)) {
@@ -202,6 +218,8 @@ vcov_corrected <- function(tspa_fit, vfsLT, which_free = NULL, ...) {
             a$fsT <- mat$fsT
         }
         a$se <- "none"
+        # Refits must be plain stage-2 fits (no re-correction).
+        a$corrected_se <- FALSE
         fit_i <- do.call(tspa, a)
         check_refit_convergence(fit_i, k)
         c_i <- coef(fit_i)

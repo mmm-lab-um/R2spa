@@ -14,6 +14,9 @@ tspa(
   fsL = NULL,
   fsb = NULL,
   reduce = c("mean", "median"),
+  vfsLT = NULL,
+  corrected_se = FALSE,
+  which_free = NULL,
   ...
 )
 }
@@ -79,6 +82,24 @@ warning is emitted when the pooled \code{fsT} is not positive
 semi-definite. The pooled (not the nested/per-cluster) \code{fsT} and
 \code{fsL} are what get attached to the returned fit.}
 
+\item{vfsLT}{The sampling covariance matrix of the free \code{fsL}/\code{fsT}
+elements, taken from the \code{vfsLT} attribute of a \code{\link[=get_fs]{get_fs()}}
+result fitted with \code{vfsLT = TRUE}. Required when
+\code{corrected_se = TRUE}; ignored otherwise.}
+
+\item{corrected_se}{A logical; when \code{TRUE}, the stage-2 covariance of the
+returned fit is replaced by the first-order (delta-method)
+correction of \code{\link[=vcov_corrected]{vcov_corrected()}} and the \code{tspa_corrected}
+attribute is set to \code{TRUE}. Requires a multi-factor fit (both
+\code{fsT} and \code{fsL} supplied) and \code{vfsLT}; not yet supported for
+multigroup fits. Default \code{FALSE} (the returned fit is
+unchanged).}
+
+\item{which_free}{An optional numeric vector of positions selecting which
+\code{fsL}/\code{fsT} free elements to propagate through the corrected
+covariance (see \code{\link[=vcov_corrected]{vcov_corrected()}}); used only when
+\code{corrected_se = TRUE}.}
+
 \item{...}{Additional arguments passed to \code{\link[lavaan]{sem}}. See
 \code{\link[lavaan]{lavOptions}} for a complete list.}
 }
@@ -94,6 +115,11 @@ environment, e.g. by the \code{vcov_corrected()} SE correction. When
 model), the (possibly reduced) matrices are also attached as the
 \code{fsT}/\code{fsL} attributes, and \code{pooled_fs} records the
 \code{reduce} method used when per-unit values were collapsed.
+When \code{corrected_se = TRUE}, the returned fit additionally
+carries \code{tspa_corrected = TRUE} and its covariance is the
+first-order corrected matrix, so \code{vcov()}, \code{se()}, and
+\code{standardizedSolution()} on it report the corrected standard
+errors.
 }
 \description{
 Fit a two-stage path analysis (2S-PA) model.
