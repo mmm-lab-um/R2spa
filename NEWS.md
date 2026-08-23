@@ -12,6 +12,11 @@
 - Re-integrated `grand_standardized_solution()` / legacy alias
   `grandStandardizedSolution()` (from `.quarantine/`): grand-standardized
   path coefficients with delta-method SEs for (multi)group `lavaan` fit objects.
+- `tspa()` now accepts **multi-factor mirt** factor scores — single- and
+  multi-group `get_fs()` output (per-observation `fsL`/`fsT` lists) — by
+  reducing them to one representative set per group via `reduce` (default
+  `"mean"`), the same per-unit pooling path as FIML/merMod; completely-missing
+  mirt rows are dropped from the reduction.
 
 ## Improvements
 - `tspa(corrected_se = TRUE)` now supports multigroup fits, and

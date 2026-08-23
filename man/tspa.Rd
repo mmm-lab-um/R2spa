@@ -44,10 +44,11 @@ with the argument \code{which = "fsT"}. When a group was fitted with
 missing data (\code{missing = "fiml"}), the attribute carries
 per-pattern values (a per-group list of one matrix per
 observed-indicator pattern); for a \code{merMod} fit it is a 3-D
-per-cluster array. Values of these per-unit shapes are reduced
-to a single representative per-group matrix by \code{reduce}; the
-pooled (not the nested/per-cluster) matrix is attached to the
-returned fit as the \code{fsT} attribute.}
+per-cluster array; for a \code{mirt} fit it is a per-observation list
+(one matrix per row, marked \code{mirt_per_obs}). Values of these
+per-unit shapes are reduced to a single representative per-group
+matrix by \code{reduce}; the pooled (not the nested/per-cluster)
+matrix is attached to the returned fit as the \code{fsT} attribute.}
 
 \item{fsL}{A matrix of loadings and cross-loadings from the
 latent variables to the factor scores \code{fs}, which
@@ -55,23 +56,25 @@ can be obtained from the output of \code{\link[=get_fs]{get_fs()}} using
 \code{attr()} with the argument \code{which = "fsL"}.
 For details see the Multi-Factor Measurement Model vignette:
 \code{vignette("Multi-Factor Measurement Model", package = "R2spa")}.
-As with \code{fsT}, per-pattern (FIML missing data) and per-cluster
-(merMod) values are supported and reduced per group by \code{reduce};
-the pooled (not the nested/per-cluster) matrix is attached to the
-returned fit as the \code{fsL} attribute.}
+As with \code{fsT}, per-pattern (FIML missing data), per-cluster
+(merMod), and per-observation (mirt) values are supported and
+reduced per group by \code{reduce}; the pooled (not the nested)
+matrix is attached to the returned fit as the \code{fsL} attribute.}
 
 \item{fsb}{A vector of intercepts for the factor scores \code{fs}, which can
 be obtained from the output of \code{\link[=get_fs]{get_fs()}} using \code{attr()}
 with the argument \code{which = "fsb"}. As with \code{fsT}, per-pattern
-(FIML missing data) and per-cluster (merMod) values are supported
+(FIML missing data), per-cluster (merMod), and per-observation
+(mirt) values are supported
 and reduced per group by \code{reduce}; the pooled (not the
 nested/per-cluster) vector is used for the stage-2 intercept
 constraints.}
 
 \item{reduce}{Controls how per-unit \code{fsL}/\code{fsT}/\code{fsb} from a group fitted
 with missing data (\code{missing = "fiml"}; per-pattern lists of
-matrices) or per-cluster values from a \code{merMod} fit (3-D arrays)
-are collapsed to a single representative value per group for
+matrices), per-cluster values from a \code{merMod} fit (3-D arrays),
+or per-observation values from a \code{mirt} fit, are collapsed to a
+single representative value per group for
 stage 2. A no-op when the per-unit quantities are constant within
 the group (e.g. complete single-group data). One of \code{"mean"}
 (the default) or \code{"median"}. With \code{"mean"} the pooled \code{fsT} is a

@@ -39,31 +39,34 @@
 #'            missing data (`missing = "fiml"`), the attribute carries
 #'            per-pattern values (a per-group list of one matrix per
 #'            observed-indicator pattern); for a `merMod` fit it is a 3-D
-#'            per-cluster array. Values of these per-unit shapes are reduced
-#'            to a single representative per-group matrix by `reduce`; the
-#'            pooled (not the nested/per-cluster) matrix is attached to the
-#'            returned fit as the `fsT` attribute.
+#'            per-cluster array; for a `mirt` fit it is a per-observation list
+#'            (one matrix per row, marked `mirt_per_obs`). Values of these
+#'            per-unit shapes are reduced to a single representative per-group
+#'            matrix by `reduce`; the pooled (not the nested/per-cluster)
+#'            matrix is attached to the returned fit as the `fsT` attribute.
 #' @param fsL A matrix of loadings and cross-loadings from the
 #'            latent variables to the factor scores `fs`, which
 #'            can be obtained from the output of [get_fs()] using
 #'            `attr()` with the argument `which = "fsL"`.
 #'            For details see the Multi-Factor Measurement Model vignette:
 #'            `vignette("Multi-Factor Measurement Model", package = "R2spa")`.
-#'            As with `fsT`, per-pattern (FIML missing data) and per-cluster
-#'            (merMod) values are supported and reduced per group by `reduce`;
-#'            the pooled (not the nested/per-cluster) matrix is attached to the
-#'            returned fit as the `fsL` attribute.
+#'            As with `fsT`, per-pattern (FIML missing data), per-cluster
+#'            (merMod), and per-observation (mirt) values are supported and
+#'            reduced per group by `reduce`; the pooled (not the nested)
+#'            matrix is attached to the returned fit as the `fsL` attribute.
 #' @param fsb A vector of intercepts for the factor scores `fs`, which can
 #'            be obtained from the output of [get_fs()] using `attr()`
 #'            with the argument `which = "fsb"`. As with `fsT`, per-pattern
-#'            (FIML missing data) and per-cluster (merMod) values are supported
+#'            (FIML missing data), per-cluster (merMod), and per-observation
+#'            (mirt) values are supported
 #'            and reduced per group by `reduce`; the pooled (not the
 #'            nested/per-cluster) vector is used for the stage-2 intercept
 #'            constraints.
 #' @param reduce Controls how per-unit `fsL`/`fsT`/`fsb` from a group fitted
 #'            with missing data (`missing = "fiml"`; per-pattern lists of
-#'            matrices) or per-cluster values from a `merMod` fit (3-D arrays)
-#'            are collapsed to a single representative value per group for
+#'            matrices), per-cluster values from a `merMod` fit (3-D arrays),
+#'            or per-observation values from a `mirt` fit, are collapsed to a
+#'            single representative value per group for
 #'            stage 2. A no-op when the per-unit quantities are constant within
 #'            the group (e.g. complete single-group data). One of `"mean"`
 #'            (the default) or `"median"`. With `"mean"` the pooled `fsT` is a
@@ -270,11 +273,13 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
       )
     }
     # Per-unit values -- FIML per-pattern (per-group attribute lists of
-    # matrices) or merMod per-cluster (3-D arrays) -- are collapsed to a
-    # single representative per-group fsT/fsL/fsb via `reduce` (PLAN 09)
-    # BEFORE multigroup detection, name matching, and schema building, so
-    # those run on clean per-group (or single) matrices.
-    if (is_per_unit_fs(fsT, fsL)) {
+    # matrices), merMod per-cluster (3-D arrays), or mirt per-obs (the
+    # `mirt_per_obs` marker; PLAN 11) -- are collapsed to a single
+    # representative per-group fsT/fsL/fsb via `reduce` (PLAN 09/11) BEFORE
+    # multigroup detection, name matching, and schema building, so those
+    # run on clean per-group (or single) matrices.
+    if (is_per_unit_fs(fsT, fsL,
+                       mirt_per_obs = isTRUE(attr(data, "mirt_per_obs")))) {
       pooled <- pool_per_unit(data, reduce, have_int = !is.null(fsb))
       fsT <- pooled$fsT
       fsL <- pooled$fsL
@@ -434,11 +439,13 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
 # ---------------------------------------------------------------------------
 
 # TRUE when `fsT`/`fsL` carry per-unit heterogeneity and are poolable:
-# a 3-D array (merMod per-cluster) or a per-group value that is itself a
-# list of matrices (lavaan per-pattern under missing data). Deliberately
-# FALSE for mirt per-obs input (a flat list of bare matrices, one per
-# observation) -- that path stays out of scope (PLAN 09 Section 8).
-is_per_unit_fs <- function(fsT, fsL) {
+# a 3-D array (merMod per-cluster), a per-group value that is itself a
+# list of matrices (lavaan per-pattern under missing data), or mirt
+# per-obs input (a flat list of bare matrices, one per observation) when
+# the authoritative `mirt_per_obs` marker is passed through. The marker is
+# required so a bare flat list of matrices is never mistaken for per-unit
+# values on its own (PLAN 09 Section 8 / PLAN 11).
+is_per_unit_fs <- function(fsT, fsL, mirt_per_obs = FALSE) {
   per_unit <- function(x) {
     (is.array(x) && length(dim(x)) == 3L) ||
       (is.list(x) && any(vapply(
@@ -448,7 +455,8 @@ is_per_unit_fs <- function(fsT, fsL) {
         logical(1)
       )))
   }
-  per_unit(fsT) || per_unit(fsL)
+  per_unit(fsT) || per_unit(fsL) ||
+    (mirt_per_obs && is.list(fsT) && length(fsT) > 1L)
 }
 
 # Pool one get_fs() result (`fs`) to a single representative fsT/fsL/fsb
@@ -462,6 +470,19 @@ is_per_unit_fs <- function(fsT, fsL) {
 # what the existing stage-2 schema accepts.
 pool_per_unit <- function(fs, reduce, have_int) {
   resolved <- resolve_fs_per_row(fs)
+  # Effective per-row grouping. lavaan/merMod carry it in the resolved
+  # structure; mirt per-obs does not (resolve_per_obs() always sets the
+  # group fields to NULL), so recover it from the data's own `group` column
+  # when the mirt marker is set -- otherwise MG mirt would pool into one
+  # group (PLAN 11).
+  g_vals <- resolved$group_vals
+  g_col <- resolved$group_col
+  mirt_mg <- isTRUE(attr(fs, "mirt_per_obs")) &&
+    is.data.frame(fs) && "group" %in% names(fs)
+  if (is.null(g_vals) && mirt_mg) {
+    g_col <- "group"
+    g_vals <- as.character(fs[["group"]])
+  }
   ref_T <- resolved$blocks[[1L]]$fsT
   ref_L <- resolved$blocks[[1L]]$fsL
   q <- ncol(ref_T)
@@ -551,22 +572,26 @@ pool_per_unit <- function(fs, reduce, have_int) {
     }
   }
 
-  if (!is.null(resolved$group_vals)) {
+  if (!is.null(g_vals)) {
     # Multi-group: reduce within each group. Each component (fsT/fsL/fsb)
     # is a list of one value per group, named by group label in the data's
     # group order (factor: level order, the lavaan stage-2 group order),
     # matching the stage-1 attribute list order.
-    glabs <- if (!is.null(resolved$group_col) &&
+    glabs <- if (!is.null(g_col) &&
                 is.data.frame(fs) &&
-                resolved$group_col %in% names(fs)) {
+                g_col %in% names(fs)) {
       # Unique values of the data's own group column: a factor's level
       # order (the lavaan stage-2 group order), a character vector's
-      # first-appearance order -- matching the stage-1 attribute list order.
-      unique(fs[[resolved$group_col]])
+      # first-appearance order -- matching the stage-1 attribute list
+      # order. mirt's `group` is a factor; use the full level set (not
+      # unique()) so the pooled list always has K entries, one per mirt
+      # group, matching lavaan's `group=` levels.
+      gc <- fs[[g_col]]
+      if (isTRUE(mirt_mg) && is.factor(gc)) levels(gc) else unique(gc)
     } else {
       # list-format input (no group column in the named list): group order
       # of the list, which the per-row values follow.
-      unique(resolved$group_vals)
+      unique(g_vals)
     }
     T_list <- vector("list", length(glabs))
     L_list <- vector("list", length(glabs))
@@ -576,7 +601,7 @@ pool_per_unit <- function(fs, reduce, have_int) {
     names(L_list) <- gnames
     names(b_list) <- gnames
     for (k in seq_along(glabs)) {
-      rows_g <- which(resolved$group_vals == gnames[k])
+      rows_g <- which(g_vals == gnames[k])
       res <- pool_rows(rows_g)
       psd_guard(res, gnames[k])
       T_list[[k]] <- res$fsT

@@ -441,7 +441,10 @@ test_that("is_per_unit_fs: mirt per-obs (flat list of bare matrices) is NOT trea
            dimnames = list(c("fs_a", "fs_b"), c("fs_a", "fs_b"))))
   fsL_flat <- lapply(1:3L, function(i)
     matrix(1, 2, 2, dimnames = list(c("fs_a", "fs_b"), c("a", "b"))))
+  # a bare flat list is NOT per-unit on its own (marker-gated, PLAN 11)
   expect_false(R2spa:::is_per_unit_fs(fsT_flat, fsL_flat))
+  # ...but IS per-unit when the authoritative mirt_per_obs marker is set
+  expect_true(R2spa:::is_per_unit_fs(fsT_flat, fsL_flat, mirt_per_obs = TRUE))
   # positive controls: the poolable per-unit shapes
   T_nested <- structure(
     list(list(mkT2(0.5, 0.1, 0.6), mkT2(0.7, 0.1, 0.8))), names = "")
@@ -470,8 +473,90 @@ test_that("tspa(): per-unit fsT/fsL with a non-get_fs data frame errors informat
     tspa("b ~ a", data = dat_mg, group = "school",
          fsT = setNames(rep(list(setNames(list(Tn1, Tn2), pats)), 2L),
                         c("V", "G")),
-         fsL = setNames(rep(list(setNames(list(L2, L2), pats)), 2L),
+         fsL = setNames(rep(list(setNames(list(Tn1, Tn2), pats)), 2L),
                         c("V", "G"))),
     "get_fs\\(\\) result"
   )
+})
+
+# ============================================================================
+# 8. mirt per-obs MULTI-FACTOR -> tspa() is pooled (SG + MG) (PLAN 11)
+# ============================================================================
+
+skip_if_not_installed("mirt")
+
+set.seed(2025)
+NMF <- 120L
+mrt_sim2f <- function(N) as.data.frame(mirt::simdata(
+  a = matrix(c(runif(4L, 0.5, 1.5), runif(4L, 0.5, 1.5)), 8L, 2L),
+  d = rnorm(8L), N = N, itemtype = "2PL",
+  Theta = cbind(rnorm(N), rnorm(N))))
+isnaT_mf <- function(fs) vapply(attr(fs, "fsT"), function(m) all(is.na(m)),
+                                logical(1))
+
+dat_mf_sg <- mrt_sim2f(NMF); dat_mf_sg[1L, ] <- NA
+mf_sg <- suppressWarnings(mirt::mirt(dat_mf_sg, 2L, invariance = "slopes",
+                                     verbose = FALSE))
+fs_mf_sg <- get_fs(mf_sg)
+
+dat_mf_mg <- rbind(mrt_sim2f(NMF), mrt_sim2f(NMF))
+dat_mf_mg[1L, ] <- NA
+grp_mf <- factor(rep(c("A", "B"), each = NMF))
+mf_mg <- suppressWarnings(mirt::multipleGroup(dat_mf_mg, 2L, group = grp_mf,
+                                              invariance = "slopes",
+                                              verbose = FALSE))
+fs_mf_mg <- get_fs(mf_mg)
+
+test_that("tspa(): mirt multi-factor (SG) -- per-obs fsT/fsL == scorable row mean (PLAN 11)", {
+  sc <- which(!isnaT_mf(fs_mf_sg))
+  hand_T <- Reduce(`+`, attr(fs_mf_sg, "fsT")[sc]) / length(sc)
+  hand_L <- Reduce(`+`, attr(fs_mf_sg, "fsL")[sc]) / length(sc)
+  fit <- suppressWarnings(
+    tspa("F2 ~ F1", data = fs_mf_sg,
+         fsT = attr(fs_mf_sg, "fsT"), fsL = attr(fs_mf_sg, "fsL")))
+  expect_identical(dim(attr(fit, "fsT")), c(2L, 2L))
+  expect_equal(as.numeric(attr(fit, "fsT")), as.numeric(hand_T),
+               tolerance = 1e-10)
+  expect_equal(as.numeric(attr(fit, "fsL")), as.numeric(hand_L),
+               tolerance = 1e-10)
+})
+
+test_that("tspa(): mirt multi-factor (MG) -- one matrix per group, levels order, scorable means (PLAN 11)", {
+  fit <- suppressWarnings(
+    tspa("F2 ~ F1", data = fs_mf_mg, group = "group",
+         fsT = attr(fs_mf_mg, "fsT"), fsL = attr(fs_mf_mg, "fsL")))
+  ft <- attr(fit, "fsT")
+  expect_type(ft, "list")
+  expect_length(ft, 2L)
+  # group order == the mirt group column's factor levels
+  expect_identical(names(ft), as.character(levels(fs_mf_mg$group)))
+  for (g in levels(fs_mf_mg$group)) {
+    rows_g <- which(as.character(fs_mf_mg$group) == g)
+    sc_g <- rows_g[!isnaT_mf(fs_mf_mg)[rows_g]]
+    hand_T <- Reduce(`+`, attr(fs_mf_mg, "fsT")[sc_g]) / length(sc_g)
+    expect_equal(as.numeric(ft[[g]]), as.numeric(hand_T), tolerance = 1e-10)
+  }
+})
+
+test_that("tspa(): mirt multi-factor -- completely-missing row (group NA) is excluded (PLAN 11)", {
+  # the fully-NA row is reconciled to group NA + an all-NA per-row fsT, so it
+  # cannot contribute to any group's finite pool
+  expect_true(is.na(as.character(fs_mf_mg$group)[1L]))
+  expect_true(all(is.na(unname(attr(fs_mf_mg, "fsT")[[1L]]))))
+  # group A carries all of its NMF rows except that one
+  nA <- sum(!is.na(as.character(fs_mf_mg$group)) &
+            as.character(fs_mf_mg$group) == "A")
+  expect_identical(nA, NMF - 1L)
+  fit <- suppressWarnings(
+    tspa("F2 ~ F1", data = fs_mf_mg, group = "group",
+         fsT = attr(fs_mf_mg, "fsT"), fsL = attr(fs_mf_mg, "fsL")))
+  expect_true(all(is.finite(unname(attr(fit, "fsT")[["A"]]))))
+})
+
+test_that("tspa(): mirt multi-factor (SG) -- reduce = 'median' runs (PLAN 11)", {
+  fit <- suppressWarnings(suppressMessages(
+    tspa("F2 ~ F1", data = fs_mf_sg,
+         fsT = attr(fs_mf_sg, "fsT"), fsL = attr(fs_mf_sg, "fsL"),
+         reduce = "median")))
+  expect_identical(dim(attr(fit, "fsT")), c(2L, 2L))
 })
