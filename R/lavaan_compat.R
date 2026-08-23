@@ -82,7 +82,7 @@
 #   - lavaan::lav_func_jacobian_complex    R/get_fscore_math.R (correct_evfs,
 #     compute_grad_ld_evfs, compute_fsrel — purely algebraic closures, no
 #     optimizer boundary => complex steps valid),
-#     .quarantine/R/grandStandardizedSolution.R (quarantined, same shape).
+#     R/grandStandardizedSolution.R (re-integrated, same shape).
 #     NOT used by the corrected-SE path: .quarantine/R/tspa_corrected_se.R
 #     computes its stage-2 Jacobian by explicit central differences (stepped
 #     refits through the optimizer silently degrade; complex literals die in
