@@ -14,6 +14,8 @@ export(fs_to_group_list)
 export(get_fs)
 export(get_fs_lavaan)
 export(get_fs_lmer)
+export(grandStandardizedSolution)
+export(grand_standardized_solution)
 export(tspa)
 export(tspa_mx_model)
 importFrom(OpenMx,
@@ -28,7 +30,13 @@ importFrom(lavaan,
   coef,
   lavInspect,
   lavTech,
+  lav_func_jacobian_complex,
   sem,
   vcov
 )
-importFrom(stats,setNames)
+importFrom(stats,
+  pnorm,
+  qnorm,
+  setNames
+)
+importFrom(utils,tail)

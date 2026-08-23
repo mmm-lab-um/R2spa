@@ -9,6 +9,9 @@
   trailing `group` column (the model's group levels, `NA` for
   completely-missing rows) and a per-group (\code{list}) `psi` attribute, with
   each observation using its own group's factor covariance.
+- Re-integrated `grand_standardized_solution()` / legacy alias
+  `grandStandardizedSolution()` (from `.quarantine/`): grand-standardized
+  path coefficients with delta-method SEs for (multi)group `lavaan` fit objects.
 
 ## Improvements
 - Add examples for `get_fs_int()` (#82).
