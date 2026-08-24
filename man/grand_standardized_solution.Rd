@@ -60,6 +60,15 @@ with \code{tspa(corrected_se = TRUE)}, attribute \code{tspa_corrected = TRUE}) -
 or when \code{acov_par = vcov(corrected_fit)} is supplied -- the reported
 standard errors are the first-order corrected grand-standardized
 standard errors, while the point estimates (\code{est.std}) are unchanged.
+
+Every structural (\code{~}) parameter must be free; fixed structural paths
+are rejected with an error. The delta-method SEs are propagated over
+the free \code{beta}/\code{psi} (and \code{alpha}, single group) elements as marked by
+the lavaan free-position matrices; a free parameter whose block matrix
+carries no mark contributes no first-order term (in lavaan 0.7-x the
+free-position matrices do not mark, e.g., some observed-variable
+intercept blocks, whose omission only matters when their sampling
+uncertainty affects the group means pooled into the grand covariance).
 }
 \examples{
 library(lavaan)

@@ -229,6 +229,119 @@ test_that("grand_standardized_solution output is unchanged by the wrapper", {
   expect_true(all(is.finite(mg$se)))
 })
 
+## Row assignment: partable row order, not column-major beta order --------
+##
+## The standardized estimates live in the per-group beta matrices in
+## column-major order; partable rows follow model-statement order. They
+## coincide only by accident (single-predictor / single-endogenous models
+## -- all fixtures above), so a model with >= 2 endogenous variables and
+## interleaved predictors is needed to pin the row <-> value mapping.
+
+mod5 <- '
+  # latent variables
+    ind60 =~ x1 + x2 + x3
+    dem60 =~ y1 + y2 + y3 + y4
+    dem65 =~ y5 + y6 + y7 + y8
+  # regressions (statement order deliberately differs from the beta
+  # matrix column-major free order: dem60 ~ ind60 sorts first in
+  # column-major but last here)
+    dem65 ~ dem60 + ind60
+    dem60 ~ ind60
+'
+fit5 <- sem(mod5, data = PoliticalDemocracy)
+s5_std_beta <- suppressMessages(grandStandardizedSolution(fit5))
+s5_std_beta_lav <- subset(standardizedSolution(fit5), op == "~")
+
+test_that("SG row assignment follows partable order (column-major swap guard)", {
+  expect_identical(
+    paste(s5_std_beta$lhs, s5_std_beta$rhs),
+    paste(s5_std_beta_lav$lhs, s5_std_beta_lav$rhs)
+  )
+  expect_equal(s5_std_beta$est.std, s5_std_beta_lav$est.std)
+  expect_equal(s5_std_beta$se, s5_std_beta_lav$se, tolerance = 1e-7)
+})
+
+## MG 2S-PA, two endogenous scores per group (vignette shape): the
+## independent per-row check of the same mapping on a stage-2 fit. The
+## hand calculation uses only partable estimates + nobs (no veta_grand):
+## build the per-group implied moments from the structural equations and
+## pool them into the grand covariance, then standardize each slope by
+## the matching grand SDs.
+mod6 <- "visual =~ x1 + x2 + x3
+         textual =~ x4 + x5 + x6
+         speed =~ x7 + x8 + x9"
+cfa6 <- cfa(mod6, data = HolzingerSwineford1939, std.lv = TRUE,
+            group = "school",
+            group.equal = c("loadings", "intercepts"),
+            group.partial = c("visual=~x2", "x7~1"))
+fs6 <- get_fs_lavaan(cfa6)
+fit6 <- tspa("textual ~ visual + speed
+              visual ~ speed", data = fs6, group = "school",
+             fsL = attr(fs6, "fsL"), fsT = attr(fs6, "fsT"))
+g6_std_beta <- suppressMessages(grandStandardizedSolution(fit6))
+
+pt6 <- lavaan::partable(fit6)
+ns6 <- lavInspect(fit6, what = "nobs")
+e6 <- function(lhs, op, rhs = NULL, g) {
+  i <- pt6$lhs == lhs & pt6$op == op & pt6$group == g
+  if (!is.null(rhs)) i <- i & pt6$rhs == rhs
+  as.numeric(pt6$est[i])
+}
+mom6 <- function(g) {
+  # (t = textual, v = visual, s = speed); s is exogenous, t/v endogenous
+  btv <- e6("textual", "~", "visual", g)
+  cts <- e6("textual", "~", "speed", g)
+  cvs <- e6("visual",  "~", "speed", g)
+  pv <- e6("visual",  "~~", NULL, g)
+  pt_ <- e6("textual", "~~", NULL, g)
+  ps <- e6("speed",   "~~", NULL, g)
+  at <- e6("textual", "~1", NULL, g)
+  av <- e6("visual",  "~1", NULL, g)
+  as_ <- e6("speed",   "~1", NULL, g)
+  var_s <- ps
+  var_v <- pv + cvs^2 * var_s
+  var_t <- pt_ + cts^2 * var_s + btv^2 * var_v +
+    2 * btv * cts * cvs * var_s
+  cov_tv <- btv * var_v + cts * cvs * var_s
+  cov_ts <- (cts + btv * cvs) * var_s
+  cov_vs <- cvs * var_s
+  cov <- rbind(
+    c(var_t, cov_tv, cov_ts),
+    c(cov_tv, var_v, cov_vs),
+    c(cov_ts, cov_vs, var_s)
+  )
+  mu <- c(at + cts * as_ + btv * (av + cvs * as_),
+          av + cvs * as_,
+          as_)
+  list(cov = cov, mu = mu)
+}
+m6 <- lapply(seq_along(ns6), mom6)
+mu_grand <- Reduce(`+`, mapply(function(m, n) m * n,
+                                lapply(m6, `[[`, "mu"), ns6)) / sum(ns6)
+grand_cov6 <- Reduce(
+  `+`,
+  mapply(function(v, m, n) n * (v + tcrossprod(m - mu_grand)),
+         v = lapply(m6, `[[`, "cov"), m = lapply(m6, `[[`, "mu"),
+         n = ns6, SIMPLIFY = FALSE)
+) / sum(ns6)
+sd_grand6 <- sqrt(diag(grand_cov6))
+var_ord6 <- c("textual", "visual", "speed")
+std6_hand <- vapply(seq_len(nrow(g6_std_beta)), function(i) {
+  raw <- e6(g6_std_beta$lhs[i], "~", g6_std_beta$rhs[i],
+            g6_std_beta$group[i])
+  # standardized coefficient = raw * sd(predictor) / sd(outcome)
+  raw * sd_grand6[match(g6_std_beta$rhs[i], var_ord6)] /
+    sd_grand6[match(g6_std_beta$lhs[i], var_ord6)]
+}, numeric(1))
+
+test_that("MG 2S-PA est.std rows match the independent grand-std hand calc", {
+  # row identities first (the table must stay in partable order)
+  expect_identical(g6_std_beta[["lhs"]], pt6$lhs[pt6$op == "~"])
+  expect_identical(g6_std_beta[["rhs"]], pt6$rhs[pt6$op == "~"])
+  expect_identical(g6_std_beta[["group"]], pt6$group[pt6$op == "~"])
+  expect_equal(g6_std_beta$est.std, std6_hand, tolerance = 1e-10)
+})
+
 ## MG 2S-PA: corrected grand-standardized SEs (SE-only correction) ------
 ## A distinct model from fit3 above (`visual ~ speed` free in both
 ## `school` groups, no group.equal constraints): fit by two-stage path

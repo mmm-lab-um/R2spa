@@ -39,6 +39,11 @@
 #     - start       fixed value for fixed rows; for free rows 0.7-2 fills
 #                   the final estimate (data-dependent — not goldenable)
 #     - est/se      point estimate / SE (excluded from the canonical df)
+#   raw `free` column of that same view
+#     per-row 1-based position of the parameter in the free estimate vector
+#     (0 = fixed); consumed via tsp_partable_positions() by
+#     R/grandStandardizedSolution.R (partable-row <-> matrix-position
+#     mapping), canary-covered in test-lavaan_compat.R
 #   fit@Data@nobs / @Data@ngroups / @Data@norig
 #                                          per-group nobs list / group count /
 #                                          per-group norig list (`lavaanData`
@@ -233,6 +238,40 @@ tsp_partable_read <- function(fit) {
   out$ustart <- if (!is.null(lo$ustart_col)) pt[[lo$ustart_col]] else NA
   out$exo <- if (!is.null(lo$exo_col)) pt[[lo$exo_col]] else NA
   out
+}
+
+# Global position of each partable row in the free-estimate vector, 1-based
+# (0 for fixed rows). On the 0.7-x line the raw partable `free` column
+# carries exactly these positions; this is the row <-> matrix-position
+# anchor grand_standardized_solution() uses to assign standardized
+# estimates to partable rows: free-position matrices alone do not order the
+# partable rows, because a matrix block is traversed column-major while
+# partable rows follow model-statement order (they coincide only by
+# accident, e.g. single-predictor models). A layout where `free` is a bare
+# 0/1 flag (0.6.x) fails the permutation check below and errors loudly
+# rather than silently mislabeling rows downstream.
+tsp_partable_positions <- function(fit) {
+  pt <- tsp_partable_raw(fit)
+  if (!"free" %in% names(pt)) tsp_unsupported_layout()
+  p <- suppressWarnings(as.numeric(pt$free))
+  tsp_check_free_positions(p)
+  p
+}
+
+# Guard for the 0.7-x `free`-column semantics (see tsp_partable_positions):
+# the per-row positions must be a 0-extended 1..npars permutation. A bare
+# 0/1 flag layout (0.6.x) fails this and errors loudly rather than
+# silently mislabeling standardized-solution rows downstream.
+tsp_check_free_positions <- function(p) {
+  nfree <- sum(p > 0)
+  if (nfree > 0 && !all(sort(p[p > 0]) == seq_len(nfree))) {
+    stop(
+      "lavaan ", as.character(utils::packageVersion("lavaan")),
+      " partable `free` column does not carry 1..npars positions; R2spa is ",
+      "tested up to lavaan ", tsp_lavaan_tested_up_to, call. = FALSE
+    )
+  }
+  invisible(TRUE)
 }
 
 # Per-group block matrices (`lambda`, `theta`, `psi`, `beta`, `nu`,

@@ -20,7 +20,7 @@ knitr::opts_chunk$set(
 
 This vignette shows how to obtain Taylor-series corrected standard errors in 2S-PA, accounting for the uncertainty in the weights for obtaining the factor scores. It is described in [this paper](https://doi.org/10.1007/s00181-020-01942-z).
 
-The second-stage estimation treats as known the loading matrix and the error covariance matrix of the factor scores as indicators of the true latent latent variables. However, those are estimates based on the first-stage measurement model. When the sample size is large and/or the reliability of the factor scores are high, the uncertainty in the estimated loading and error covariance matrix is generally negligible. Otherwise, a first-order correction on the standard errors of the second-stage estimation is possible, as illustrated below.
+The second-stage estimation treats as known the loading matrix and the error covariance matrix of the factor scores as indicators of the true latent variables. However, those are estimates based on the first-stage measurement model. When the sample size is large and/or the reliability of the factor scores is high, the uncertainty in the estimated loading and error covariance matrix is generally negligible. Otherwise, a first-order correction on the standard errors of the second-stage estimation is possible, as illustrated below.
 
 ## First-order correction for SE
 
@@ -30,7 +30,7 @@ where $\boldsymbol{J}_\boldsymbol{\gamma}$ is the Jacobian matrix of $\hat{\bold
 
 $$\hat V_{\gamma, c} = \hat V_{\gamma} + (\boldsymbol{H}_\gamma)^{-1} \left(\frac{\partial^2 \ell}{\partial \theta \partial \gamma^\top}\right) \hat V_{\theta} \left(\frac{\partial^2 \ell}{\partial \theta \partial \gamma^\top}\right)^\top (\boldsymbol{H}_\gamma)^{-1},$$
 
-where $V_{\gamma}$ is the naive covariance matrix of the structural parameter estimates $\hat{\boldsymbol{\gamma}}$ assuming the measurement error variance parameter, $\boldsymbol{\theta}$, is known, $\boldsymbol{H}_\gamma$ is the Hessian matrix of the log-likelihood $\ell$ with respect to $\hat{\boldsymbol{\gamma}}$, and $V_{\theta}$ can be obtained in the first-stage measurement model analysis.
+where $V_{\gamma}$ is the naive covariance matrix of the structural parameter estimates $\hat{\boldsymbol{\gamma}}$ assuming the measurement model parameters $\boldsymbol{\theta}$ (the score loadings and error variances) are known, $\boldsymbol{H}_\gamma$ is the Hessian matrix of the log-likelihood $\ell$ with respect to $\hat{\boldsymbol{\gamma}}$, and $V_{\theta}$ can be obtained in the first-stage measurement model analysis.
 
 ```{r load-pkg, message = FALSE}
 library(lavaan)
@@ -39,7 +39,7 @@ library(numDeriv)
 library(boot)
 ```
 
-This example is based on the Political Democracy data used in <https://lavaan.ugent.be/tutorial/sem.html> and as an example in Bollen (1989)'s book.
+This example is based on the `PoliticalDemocracy` dataset, from the lavaan tutorial (<https://lavaan.ugent.be/tutorial/sem.html>), also used as an example in Bollen (1989).
 
 ## Separate Measurement Models
 
@@ -58,13 +58,13 @@ model <- '
 cfa_ind60 <- cfa("ind60 =~ x1 + x2 + x3", data = PoliticalDemocracy)
 # Regression factor scores
 fs1 <- get_fs_lavaan(cfa_ind60, vfsLT = TRUE)
-# Delta method variance of (loading, intercept)
+# Delta method variance of (loading, error variance)
 vldev1 <- attr(fs1, which = "vfsLT")
 cfa_dem60 <- cfa("dem60 =~ y1 + y2 + y3 + y4",
                  data = PoliticalDemocracy)
 # Regression factor scores
 fs2 <- get_fs_lavaan(cfa_dem60, vfsLT = TRUE)
-# Delta method variance of (loading, intercept)
+# Delta method variance of (loading, error variance)
 vldev2 <- attr(fs2, which = "vfsLT")
 fs_dat <- data.frame(
   fs_ind60 = fs1$fs_ind60,
@@ -137,7 +137,7 @@ sc$se                   # corrected standard SE (matches the hand-derived value)
 attr(tspa_fit_corr, "tspa_corrected")   # TRUE
 ```
 
-Compare to joint structural and measurement model
+Compare to joint structural and measurement model (unstandardized solution):
 
 ```{r}
 sem_fit <- sem(model, data = PoliticalDemocracy)
@@ -297,9 +297,9 @@ vcov(tspa_fit2b)
 # Adjusted covariance matrix
 (vc2b_cor <- vcov_corrected(
     tspa_fit2b,
-    # Exclude fixed loadings and error variance
+    # With Bartlett scoring the loadings are fixed, so propagate the error
+    # variances only (positions 5 and 7)
     vfsLT = vldevb_joint[c(5, 7), c(5, 7)],
-    # Specify which elements are free (error variances only)
     which_free = c(5, 7)))
 # Corrected standard errors
 sqrt(diag(vc2b_cor))
@@ -333,10 +333,13 @@ tspa_fit <- tspa(model = "visual ~~ textual + speed
                  group = "school",
                  fsL = attr(fs_dat, which = "fsL"),
                  fsT = attr(fs_dat, which = "fsT"))
-# Unadjusted covariance
-vcov(tspa_fit)[c(1:6, 10:15), c(1:6, 10:15)]
+# Unadjusted covariance of the structural parameters (the 12 factor
+# variances/covariances, 6 per group); the 6 factor-score intercepts (fs_*~1)
+# are omitted.
+keep <- grepl("~~", rownames(vcov(tspa_fit)))
+vcov(tspa_fit)[keep, keep]
 # Adjusted covariance
-vcov_corrected(tspa_fit, vfsLT = vldev)[c(1:6, 10:15), c(1:6, 10:15)]
+vcov_corrected(tspa_fit, vfsLT = vldev)[keep, keep]
 ```
 
 The correction can be requested in place on `tspa()`, so `vcov()` (and hence the SEs derived from it) and `standardizedSolution()` on the returned fit report the corrected standard errors (the point estimates are unchanged):
@@ -376,4 +379,37 @@ round(cbind(grand_std = gr1$est.std[keep],
 # SE-only: identical point estimates, corrected SEs >= uncorrected
 all(gr1$est.std[keep] == gr0$est.std[keep])
 all(gr1$se[keep] >= gr0$se[keep])
+```
+
+
+```{r}
+keep_dem_ind <- function(std) {
+  std[std$lhs %in% c("visual", "textual", "speed") &
+    std$rhs %in% c("visual", "textual", "speed") & 
+      std$lhs != std$rhs, , drop = FALSE]
+}
+tspa_est_std <- function(ld_ev) {
+  fsL1 <- attr(fs_dat, which = "fsL")
+  fsT1 <- attr(fs_dat, which = "fsT")
+  fsL1[[1]][] <- ld_ev[1:9]
+  fsL1[[2]][] <- ld_ev[10:18]
+  fsT1[[1]][] <- ld_ev[c(19:21, 20, 22:23, 21, 23, 24)]
+  fsT1[[2]][] <- ld_ev[c(25:27, 26, 28:29, 27, 29, 30)]
+  tfit <- tspa(model = "visual ~~ textual + speed
+                          textual ~~ speed",
+               data = fs_dat,
+               group = "school",
+               fsL = fsL1,
+               fsT = fsT1) 
+  keep_dem_ind(standardizedSolution(tfit))$est.std
+}
+ld_ev0 <- c(attr(fs_dat, which = "fsL")[[1]],
+            attr(fs_dat, which = "fsL")[[2]],
+            attr(fs_dat, which = "fsT")[[1]][c(1:3, 5:6, 9)],
+            attr(fs_dat, which = "fsT")[[2]][c(1:3, 5:6, 9)])
+tspa_est_std(ld_ev0)
+jac <- numDeriv::jacobian(tspa_est_std, x = ld_ev0)
+v0 <- lavInspect(tspa_fit, "vcov.std.lv")[c(1:3, 10:12), c(1:3, 10:12)]
+sqrt(diag(jac %*% vldev %*% t(jac)) / diag(v0))
+
 ```

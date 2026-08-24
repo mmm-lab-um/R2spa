@@ -31,6 +31,12 @@
 
 ## Bug Fixes
 - Fix a bug in the `se_fs` argument in `tspa()` (#90).
+- `grandStandardizedSolution()` now assigns standardized estimates and SEs
+  to partable rows by their global free position instead of assuming the
+  structural paths follow the beta matrix column-major order; the two agree
+  only by accident (e.g. single-predictor models), so models with multiple
+  endogenous variables per group could report `est.std`/`se`/CIs on the
+  wrong rows.
 
 ## Documentation
 - Updated vignettes for:

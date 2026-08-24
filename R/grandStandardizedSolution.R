@@ -13,6 +13,15 @@
 #' standard errors are the first-order corrected grand-standardized
 #' standard errors, while the point estimates (`est.std`) are unchanged.
 #'
+#' Every structural (`~`) parameter must be free; fixed structural paths
+#' are rejected with an error. The delta-method SEs are propagated over
+#' the free `beta`/`psi` (and `alpha`, single group) elements as marked by
+#' the lavaan free-position matrices; a free parameter whose block matrix
+#' carries no mark contributes no first-order term (in lavaan 0.7-x the
+#' free-position matrices do not mark, e.g., some observed-variable
+#' intercept blocks, whose omission only matters when their sampling
+#' uncertainty affects the group means pooled into the grand covariance).
+#'
 #' @param object An object of class lavaan.
 #' @param model_list A list of string variable describing the structural path
 #'                   model, in \code{lavaan} syntax.
@@ -108,24 +117,35 @@ grand_standardized_solution <- function(object, model_list = NULL,
   if (is.null(acov_par)) acov_par <- vcov(object)
   if (is.null(free_list)) free_list <- tsp_free_matrices(object)
 
-  partable <- subset(tsp_partable_read(object), op == "~")
-  out <- partable[, c("lhs", "op", "rhs", "exo", "group",
-                      "block", "label")]
-  partable_beta <- tsp_partable_mats(object)
+  partable <- tsp_partable_read(object)
+  positions <- tsp_partable_positions(object)
+  i_struct <- which(partable$op == "~")
+  out <- partable[i_struct, c("lhs", "op", "rhs", "exo", "group",
+                              "block", "label")]
+  out_positions <- positions[i_struct]
+  if (any(out_positions == 0)) {
+    stop("grand_standardized_solution() requires every structural ('~') ",
+         "parameter to be free; fixed structural paths are not supported.")
+  }
 
   # Get standardized betas
   if (is.null(ns)) {
-    tmp_std_beta <- std_beta_est(model_list)
-    all_beta_pos <- partable_beta[[1]]$beta
+    tmp_std_beta <- unlist(std_beta_est(model_list))
   } else {
     tmp_std_beta <- unlist(grand_std_beta_est(model_list, ns))
-    group_names <- names(partable_beta)
-    all_beta_pos <- sapply(group_names, function(x) {
-      partable_beta[[x]]$beta
-    })
   }
-  beta_pos <- which(all_beta_pos != 0)
-  out$est.std <- tmp_std_beta[beta_pos]
+  # The standardized estimates live in the per-group beta matrices in
+  # column-major order, which does not in general follow the partable row
+  # order (model-statement order). Each row is matched to its matrix
+  # position through the global free position: the partable `free` column
+  # and the free-position matrix entries are the same bijection.
+  beta_free <- free_list[which(names(free_list) == "beta")]
+  size_beta <- nrow(beta_free[[1]]) * ncol(beta_free[[1]])
+  out_idx <- vapply(seq_len(nrow(out)), function(i) {
+    g <- partable$group[i_struct[i]]
+    (g - 1L) * size_beta + which(beta_free[[g]] == out_positions[i])
+  }, integer(1))
+  out$est.std <- tmp_std_beta[out_idx]
 
   # Get SEs for the standardized betas
   if (se) {
@@ -158,7 +178,7 @@ grand_standardized_solution <- function(object, model_list = NULL,
     }
     acov_par <- acov_par[pos_par, pos_par]
     tmp_acov_std_beta <- jac %*% acov_par %*% t(jac)
-    out$se <- sqrt(diag(as.matrix(tmp_acov_std_beta[beta_pos, beta_pos])))
+    out$se <- sqrt(diag(as.matrix(tmp_acov_std_beta[out_idx, out_idx])))
     out$z <- out$est.std / out$se
     out$pvalue <- 2 * (1 - pnorm(abs(out$z)))
     ci <- out$est.std +

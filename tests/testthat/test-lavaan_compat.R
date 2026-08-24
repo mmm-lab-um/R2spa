@@ -68,6 +68,33 @@ test_that("tsp_partable_read works on a multigroup fit", {
   expect_true(all(is.na(got$value[!fixed])))
 })
 
+test_that("tsp_partable_positions returns the raw free positions", {
+  for (fit in list(canon_fit, mg_fit)) {
+    li <- as.data.frame(lavInspect(fit, what = "list"))
+    expect_identical(tsp_partable_positions(fit), as.numeric(li$free))
+  }
+  # 1..npars permutation (the 0.7-x semantics the row -> matrix mapping in
+  # grand_standardized_solution relies on); a 0/1 flag layout would fail
+  # this and error loudly.
+  p <- tsp_partable_positions(mg_fit)
+  nfree <- sum(p > 0)
+  expect_equal(sort(p[p > 0]), seq_len(nfree))
+  expect_true(any(p == 0))
+})
+
+test_that("tsp_check_free_positions rejects a 0/1 flag layout", {
+  # a bare 0/1 flag column (pre-0.7 semantics) is not a 1..npars
+  # permutation and must error loudly with the tested-up-to pointer
+  expect_error(
+    tsp_check_free_positions(c(1, 1, 1, 0, 1)),
+    "does not carry 1..npars positions.*tested up to lavaan"
+  )
+  # the valid permutation (with a fixed row) passes
+  expect_invisible(tsp_check_free_positions(c(1, 2, 0, 3)))
+  # degenerate: a single free parameter is indistinguishable from a flag
+  expect_invisible(tsp_check_free_positions(c(1, 0)))
+})
+
 ## Wrapper A/B ---------------------------------------------------------------
 ## Each wrapper must return exactly what the lavaan calls used to return at
 ## the migrated call sites (Phase 1 = no behavior change).
