@@ -803,23 +803,39 @@ tspa_stmt_values <- function(st) {
   unlist(lapply(gs, function(g) st$value[st$group == g]))
 }
 
-# c(...) value string for a possibly multi-term statement; `terms` are the
+# Value string for one statement term: a bare number for a single (i.e.
+# single-group) value, `c(v1, v2, ...)` for a multigroup term. Empirically
+# verified on lavaan 0.7.2: the bare forms (loading, fixed self-variance,
+# intercept, and a negative value, e.g. `a + -0.02 * b`) parse identically
+# to the `c(...)` forms -- same row order, estimates, and vcov() -- while a
+# bare minus between terms (`a - 0.02 * b`) is rejected by lavaan. Terms are
+# therefore always joined with " + " and the sign is carried by the value.
+tspa_vals_str <- function(vals) {
+  if (length(vals) == 1L) {
+    as.character(vals[[1L]])
+  } else {
+    paste0("c(", paste0(vals, collapse = ", "), ")")
+  }
+}
+
+# Per-term value string for a possibly multi-term statement; `terms` are the
 # ordered unique rhs values (one row value per group each).
-tspa_stmt_cvals <- function(st, terms) {
+tspa_stmt_vals <- function(st, terms) {
   trm <- match(st$rhs, terms)
   paste(
     vapply(seq_along(terms), function(k) {
-      sub <- st[trm == k, , drop = FALSE]
-      paste0("c(", paste(tspa_stmt_values(sub), collapse = ", "), ")")
+      tspa_vals_str(tspa_stmt_values(st[trm == k, , drop = FALSE]))
     }, character(1)),
     collapse = " + "
   )
 }
 
 # The single renderer (PLAN 04): schema -> lavaan model syntax string.
-# Reproduces the legacy string builders character-for-character, including
-# their per-path spacing quirks, so parameter row order, estimates, and
-# vcov() are provably unchanged (Phase 2 A/B gate).
+# Every statement is emitted as `lhs <sp> op <sp> rhs` (spaces around `*`
+# kept) with the per-term values bare for single-group statements and
+# `c(v1, v2, ...)` for multigroup ones; the user model block is carried
+# verbatim. The emitted string is semantically identical to the legacy
+# c()-everywhere builder (row order, estimates, and vcov() unchanged).
 tspa_render <- function(sch, style = c("sf", "mf")) {
   style <- match.arg(style)
   user_lines <- sch$rhs[sch$kind == "user"]
@@ -829,7 +845,7 @@ tspa_render <- function(sch, style = c("sf", "mf")) {
   if (style == "sf") {
     latent_var_str <- paste(
       vapply(tspa_statements(struct, struct$lhs), function(st) {
-        paste0(st$lhs[1], "=~ ", tspa_stmt_cvals(st, st$rhs[1]),
+        paste0(st$lhs[1], " =~ ", tspa_stmt_vals(st, st$rhs[1]),
                " * ", st$rhs[1], "\n")
       }, character(1)),
       collapse = ""
@@ -838,7 +854,7 @@ tspa_render <- function(sch, style = c("sf", "mf")) {
       vapply(tspa_statements(errors, paste(errors$lhs, errors$rhs,
                                            sep = "|")),
              function(st) {
-               paste0(st$lhs[1], "~~ ", tspa_stmt_cvals(st, st$rhs[1]),
+               paste0(st$lhs[1], " ~~ ", tspa_stmt_vals(st, st$rhs[1]),
                       " * ", st$rhs[1], "\n")
              }, character(1)),
       collapse = ""
@@ -859,13 +875,12 @@ tspa_render <- function(sch, style = c("sf", "mf")) {
         loadings_c <- paste(
           vapply(terms, function(t) {
             tr <- st[st$rhs == t, , drop = FALSE]
-            paste0("c(", paste0(tspa_stmt_values(tr), collapse = ", "),
-                   ") * ", t)
+            paste0(tspa_stmt_vals(tr, t), " * ", t)
           }, character(1)),
           collapse = " + "
         )
-        paste("# latent variables (indicated by factor scores)\n",
-              st$lhs[1], "=~", loadings_c)
+        paste0("# latent variables (indicated by factor scores)\n",
+               st$lhs[1], " =~ ", loadings_c)
       },
       character(1)
     )
@@ -873,23 +888,16 @@ tspa_render <- function(sch, style = c("sf", "mf")) {
       tspa_statements(errors, paste(errors$lhs, errors$rhs, sep = "|")),
       function(st) {
         paste0("# constrain the errors\n", st$lhs[1], " ~~ ",
-               tspa_stmt_cvals(st, st$rhs[1]), " * ", st$rhs[1])
+               tspa_stmt_vals(st, st$rhs[1]), " * ", st$rhs[1])
       },
       character(1)
     )
     if (nrow(ints) > 0) {
-      ng <- length(sort(unique(ints$group)))
       intercept_constraint <- vapply(
         tspa_statements(ints, ints$lhs),
         function(st) {
-          vals <- tspa_stmt_values(st)
-          intercepts <- if (ng == 1) {
-            vals[1]
-          } else {
-            paste0("c(", paste0(vals, collapse = ", "), ")")
-          }
           paste0("# constrain the intercepts\n", st$lhs[1], " ~ ",
-                 intercepts, " * 1")
+                 tspa_stmt_vals(st, st$rhs[1]), " * 1")
         },
         character(1)
       )

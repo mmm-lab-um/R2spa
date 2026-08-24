@@ -19,6 +19,12 @@
   mirt rows are dropped from the reduction.
 
 ## Improvements
+- The stage-2 model string attached to `tspa()` fits (the `tspaModel`
+  attribute) is now rendered with normalized operator spacing (`lhs =~ rhs`,
+  `lhs ~~ rhs`) and without `c()` for single-value fixed statements (e.g.
+  `ind60 =~ 1 * fs_ind60` instead of `ind60=~ c(1) * fs_ind60`); multigroup
+  statements keep `c(v1, v2)`; fitted models, parameter tables, and covariance
+  are unchanged.
 - `tspa(corrected_se = TRUE)` now supports multigroup fits, and
   `grandStandardizedSolution()` threads `vcov(object)` (or an explicit
   `acov_par = vcov(corrected_fit)`) so a corrected fit yields corrected

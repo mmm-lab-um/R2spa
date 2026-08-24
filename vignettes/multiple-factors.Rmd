@@ -117,7 +117,7 @@ Therefore, we need to specify cross-loadings when using 2S-PA.
 
 ```{r}
 tspa_fit_3fac <- tspa(model = "dem60 ~ ind60
-              dem65 ~ ind60 + dem60",
+                               dem65 ~ ind60 + dem60",
               data = fs_dat_3fac,
               fsT = attr(fs_dat_3fac, "fsT"),
               fsL = attr(fs_dat_3fac, "fsL"))

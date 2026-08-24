@@ -41,9 +41,10 @@ that splits the problem:
 - **Stage 1 — score each construct** with an appropriate psychometric model (a
   `lavaan` CFA, an `lme4` mixed model, a `mirt` IRT model, or even an EFA) and
   record each score's measurement error / reliability.
-- **Stage 2 — regress on the scores**, correcting for each score's measurement
-  error with *definition variables* that fix the error variance to its
-  observation-specific value.
+- **Stage 2 — path-analyze the scores**, correcting for measurement
+  error by fixing the loading(s) and error variance (and covariances) to values
+  implied in Stage 1. Observation-specific values can be used via 
+  *definition variables* (currently available in *OpenMx*).
 
 Because the stages are separate, you can tune and diagnose each on its own, mix
 estimators across constructs (one construct from a CFA, another from an IRT
@@ -74,8 +75,8 @@ are stage 2.
   errors and cross-loadings) and `fsL` the implied loading of each latent on the
   score. Use this when scores are composite (several indicators per latent, or a
   score loading on several latents), and note it is the only form that carries
-  per-observation reliability, which the `mirt` (IRT) and `merMod` (mixed
-  model) paths need because reliability varies by person / cluster (see the
+  per-observation measurement properties, which the `mirt` (IRT) and `merMod` (mixed
+  model) paths need because loadings and error variances vary by person / cluster (see the
   `multiple-factors`, `tspa-vignette-mx` and `multilevel` vignettes).
 
 The examples below use `se_fs`, since each construct is a single-factor score
@@ -85,20 +86,22 @@ form.
 ## Reading the `get_fs()` output
 
 `get_fs()` returns one row per observation. For a construct called `<name>` it
-contributes these columns:
+contributes these columns, with the matching matrix-form quantities attached
+as attributes on the returned data frame:
 
-| Column(s) | Meaning |
+| Column(s) / attribute | Meaning |
 | --- | --- |
 | `fs_<name>` | the factor score |
 | `fs_<name>_se` | that score's standard error — the measurement-error term `tspa()` corrects for |
-| `ev_fs_<name>` | the score's error variance (`1 - reliability` when the construct is univariate) |
+| `ev_fs_<name>` | the score's error variance |
 | `ecov_fs_<a>_fs_<b>` | error covariance between scores `a` and `b` (only from a shared multi-factor model) |
 | `<indicator>_by_fs_<name>` | model-implied loading — the mean of the indicator on the score |
+| `attr(fs, "fsT")` | the score error variance-covariance (carries correlated errors and cross-loadings) |
+| `attr(fs, "fsL")` | the implied loading of each latent on the score |
+| `attr(fs, "fsb")` | the scoring-equation intercept, one per score (named by the score, e.g. `fs_ind60`; `0` for a complete-data single-factor CFA, varying per row when the measurement quantities do) |
 
-The same correction is also available in matrix form, attached as attributes on
-the same data frame — `attr(fs, "fsT")` (error covariance), `attr(fs, "fsL")`
-(score-loadings) and `attr(fs, "fsb")` (per-row intercept) — which is what
-`tspa_mx_model()` consumes.
+The attributes are what `tspa_mx_model()` consumes, and `tspa(fsb = ...)` uses
+`fsb` to fix the stage-2 intercept constraints.
 
 ## Single group, single factor
 
@@ -113,7 +116,7 @@ model <- '
 '
 ```
 
-To call `tspa()`, a data frame of factor scores is needed for all latent variables. To get this data frame, apply `get_fs()` to all latent variables and specify model parameter as their respective definitions. Combine factor scores for all latent variable using `cbind()` so that it can be used in `tspa()` for model building.
+To call `tspa()`, a data frame of factor scores is needed for all latent variables. To get this data frame, apply `get_fs()` to all latent variables and specify model parameters as their respective definitions. Combine factor scores for all latent variables using `cbind()` so that it can be used in `tspa()` for model building.
 
 ```{r}
 fs_dat_ind60 <- get_fs(PoliticalDemocracy, 
@@ -123,12 +126,13 @@ fs_dat_dem60 <- get_fs(PoliticalDemocracy,
 fs_dat <- cbind(fs_dat_ind60, fs_dat_dem60)
 ```
 
-To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = regressions, data = The combined factor score data frame using `get_fs()`, and specify standard error as either a list or a data frame. Values for standard error can be found at column named `fs_[variable name]_se`. For example, the standard error of latent variable ind60 can be found at column `fs_ind60_se` in the `fs_dat` data frame.
+To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = regressions, data = the combined factor score data frame using `get_fs()`, and specify standard error as either a list or a data frame. Values for standard error can be found at column named `fs_[variable name]_se`. For example, the standard error of latent variable ind60 can be found at column `fs_ind60_se` in the `fs_dat` data frame.
 
 ```{r}
 tspa_fit <- tspa(model = "dem60 ~ ind60", 
                  data = fs_dat, 
                  se_fs = list(ind60 = 0.1213615, dem60 = 0.6756472))
+summary(tspa_fit, standardized = TRUE)
 ```
 
 To view the Two-Stage Path Analysis model, use `attributes([model name])$tspaModel`. Function `cat()` can help tidy up the model output. In the output, the values of error constraints are computed by squaring standard errors from the previous section.
@@ -171,11 +175,11 @@ fs_dat_dem65 <- get_fs(PoliticalDemocracy,
 fs_dat <- cbind(fs_dat_ind60, fs_dat_dem60, fs_dat_dem65)
 ```
 
-To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = regressions (for all predictors), data = the factor score data frame created by combining results from `get_fs()`, and specify standard errors as either a list or a data frame. Values for standard errors can be found at column named `fs_[variable name]_se`.^[The text inside `[]` should be replaced with actual variable and model name.] For example, the standard error of latent variable ind60 can be found at column `fs_ind60_se` in the `fs_dat` data frame. In the output model, the values of error constraints are computed by squaring standard errors.
+To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = regressions (for all predictors), data = the factor score data frame created by combining results from `get_fs()`, and specify standard errors as either a list or a data frame. Values for standard errors can be found at column named `fs_[variable name]_se`.^[The text inside `[]` should be replaced with the actual variable name.] For example, the standard error of latent variable ind60 can be found at column `fs_ind60_se` in the `fs_dat` data frame. In the output model, the values of error constraints are computed by squaring standard errors.
 
 ```{r}
 tspa_3var_fit <- tspa(model = "dem60 ~ ind60
-                          dem65 ~ ind60 + dem60", 
+                               dem65 ~ ind60 + dem60", 
                       data = fs_dat, 
                       se_fs = list(ind60 = 0.1213615, dem60 = 0.6756472, 
                                    dem65 = 0.5724405))
@@ -195,7 +199,7 @@ model <- '
 '
 ```
 
-To call `tspa()`, a data frame of factor scores is needed for all multigroup variables. To get this data frame, apply `get_fs()` to all multigroup variables and specify model parameter as their respective definitions. Combine factor scores for all multigroup variables using `cbind()` so that it can be fed in `tspa()` for model building.
+To call `tspa()`, a data frame of factor scores is needed for all latent variables for each group. To get this data frame, apply `get_fs()` to each latent variable with the `group` argument, and specify model parameters as their respective definitions. Combine factor scores for all multigroup variables using `cbind()` so that it can be fed in `tspa()` for model building.
 
 ```{r}
 hs_mod <- '
@@ -215,7 +219,7 @@ fs_hs <- cbind(fs_dat_visual, fs_dat_speed)
 
 To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = regression relation. Specify standard error as either a list or a data frame. Values for standard error can be found at column named `fs_[variable name]_se`. For example, the standard error of the multigroup variable visual can be found at column `fs_visual_se` in the `fs_hs` data frame. To get the standard errors for each group faster, `unique()` can be called upon the standard error column. For example, in this case, `unique(fs_hs$fs_visual_se)` can be called to get the standard errors for multigroup variable visual.
 
-Function `standardizedsolution()` enables user to view a table of standard error, z score, p-value, and lower bound of confidence interval for each multigroup regression relation.
+Function `standardizedsolution()` enables user to view a table of the standardized estimate, standard error, z score, p-value, and confidence interval bounds for each multigroup regression relation.
 
 ```{r}
 # tspa model
