@@ -13,8 +13,13 @@
 #' standard errors are the first-order corrected grand-standardized
 #' standard errors, while the point estimates (`est.std`) are unchanged.
 #'
-#' Every structural (`~`) parameter must be free; fixed structural paths
-#' are rejected with an error. The delta-method SEs are propagated over
+#' Structural slopes may be free or user-fixed. A user-fixed slope is
+#' reported alongside the free ones: its `est.std` is the user value rescaled
+#' by the (grand) SD ratio, and its `se` is the first-order delta
+#' approximation, both matching `lavaan::standardizedSolution()` (which also
+#' reports a delta SE for fixed slopes). A structural regression whose outcome
+#' or predictor is not part of the beta matrix (e.g. observed-on-observed) is
+#' still rejected with an error. The delta-method SEs are propagated over
 #' the free `beta`/`psi` (and `alpha`, single group) elements as marked by
 #' the lavaan free-position matrices; a free parameter whose block matrix
 #' carries no mark contributes no first-order term (in lavaan 0.7-x the
@@ -123,10 +128,6 @@ grand_standardized_solution <- function(object, model_list = NULL,
   out <- partable[i_struct, c("lhs", "op", "rhs", "exo", "group",
                               "block", "label")]
   out_positions <- positions[i_struct]
-  if (any(out_positions == 0)) {
-    stop("grand_standardized_solution() requires every structural ('~') ",
-         "parameter to be free; fixed structural paths are not supported.")
-  }
 
   # Get standardized betas
   if (is.null(ns)) {
@@ -136,15 +137,39 @@ grand_standardized_solution <- function(object, model_list = NULL,
   }
   # The standardized estimates live in the per-group beta matrices in
   # column-major order, which does not in general follow the partable row
-  # order (model-statement order). Each row is matched to its matrix
-  # position through the global free position: the partable `free` column
-  # and the free-position matrix entries are the same bijection.
+  # order (model-statement order). Free rows are matched to their matrix
+  # position through the global free position (the partable `free` column and
+  # the free-position matrix entries are the same bijection). A user-FIXED
+  # slope has no free position, so it is anchored by (lhs, rhs) variable
+  # identity instead: the beta matrix is the full lhs x rhs grid, so the cell
+  # exists whether or not it is free. The column-major position of (lhs = row
+  # r, rhs = col c) in an nrow x ncol matrix is (c - 1) * nrow + r. The two
+  # anchors agree on every free cell, so this only changes fixed rows.
   beta_free <- free_list[which(names(free_list) == "beta")]
   size_beta <- nrow(beta_free[[1]]) * ncol(beta_free[[1]])
+  bnames <- tsp_beta_names(object)
   out_idx <- vapply(seq_len(nrow(out)), function(i) {
     g <- partable$group[i_struct[i]]
-    (g - 1L) * size_beta + which(beta_free[[g]] == out_positions[i])
+    off <- (g - 1L) * size_beta
+    fp <- which(beta_free[[g]] == out_positions[i])
+    if (length(fp) == 1L) {
+      return(off + fp)
+    }
+    rn <- bnames[[g]]$rnm
+    cm <- bnames[[g]]$clm
+    r <- match(partable$lhs[i_struct[i]], rn)
+    c <- match(partable$rhs[i_struct[i]], cm)
+    if (is.na(r) || is.na(c)) {
+      return(0L)
+    }
+    off + (c - 1L) * nrow(beta_free[[g]]) + r
   }, integer(1))
+  if (any(out_idx == 0L)) {
+    stop("grand_standardized_solution(): a structural ('~') parameter is not ",
+         "a beta-matrix slope (its outcome or predictor is not part of the ",
+         "structural regression block); only free or fixed latent-variable ",
+         "slopes are supported.")
+  }
   out$est.std <- tmp_std_beta[out_idx]
 
   # Get SEs for the standardized betas

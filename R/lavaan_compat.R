@@ -69,6 +69,11 @@
 #   lavInspect(fit, what = "est")              0.7-2 fallback for lavTech:
 #                                             lavaan.list nested per group,
 #                                             elements named `<group>.<block>`
+#   lavInspect(fit, what = "est")$beta         per-group `beta` matrix with
+#     row/col variable dimnames. SG: flat block list ($beta directly); MG:
+#     one list per group (in group order). THE fixed-slope anchor consumed by
+#     tsp_beta_names() (R/grandStandardizedSolution.R); lavTech(est) strips
+#     these names, so the dimname source stays lavInspect(est).
 #   coef(fit) / vcov(fit)                      named vector / name-indexed
 #                                             matrix — the stable name-based
 #                                             anchor for tests (no positional
@@ -290,6 +295,30 @@ tsp_free_matrices <- function(fit) {
     return(lavaan::lavTech(fit, what = "free"))
   }
   tsp_flatten_grouped_est(lavInspect(fit, what = "free"))
+}
+
+# Row/column (variable) names of the per-group `beta` matrices, aligned to the
+# dimensionless matrices returned by tsp_model_matrices(). The one lavaan view
+# that carries per-row/per-column variable names in 0.7-2 is
+# `lavInspect(what = "est")$beta` (lavTech strips dimnames), so this — not
+# lavTech — is the fixed-slope anchor: a user-fixed slope has no free position,
+# but its (row, col) in the beta matrix is its (lhs, rhs) variable identity.
+# Single group: `est` is a flat block list ($beta directly); multiple groups:
+# `est` is one list per group (in group order), so element g is group g.
+tsp_beta_names <- function(fit) {
+  ng <- tsp_ngroups(fit)
+  est <- suppressWarnings(lavInspect(fit, what = "est"))
+  lapply(seq_len(ng), function(g) {
+    b <- if (ng == 1L) est[["beta"]] else est[[g]][["beta"]]
+    rn <- rownames(b)
+    cm <- colnames(b)
+    if (is.null(rn) || is.null(cm)) {
+      stop("lavaan ", as.character(utils::packageVersion("lavaan")),
+           " est$beta carries no variable dimnames; R2spa is tested up to ",
+           "lavaan ", tsp_lavaan_tested_up_to, call. = FALSE)
+    }
+    list(rnm = rn, clm = cm)
+  })
 }
 
 # Flatten a nested per-group lavaan.list (elements named `<group>.<block>`)

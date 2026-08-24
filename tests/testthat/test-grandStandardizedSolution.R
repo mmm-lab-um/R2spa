@@ -378,3 +378,144 @@ test_that("grand standardization threads the corrected covariance (MG, 2S-PA)", 
   expect_equal(gr_gs_corr$est.std[keep], gr_gs_plain$est.std[keep],
                tolerance = 1e-8)
 })
+
+## Fixed structural slopes ----------------------------------------------------
+## A user-fixed slope (`~ k*var`, k a literal) has no free position, so the
+## global-free-position anchor (free cell <-> matrix bijection) is undefined
+## for it. grand_standardized_solution() now anchors fixed slopes by (lhs, rhs)
+## variable identity in the beta matrix and reports the user value rescaled by
+## the (grand) SD ratio plus the first-order delta SE, matching
+## lavaan::standardizedSolution() (which also reports a delta SE for fixed
+## slopes). All-free slopes still use the free-position anchor.
+
+modF <- '
+   ind60 =~ x1 + x2 + x3
+   dem60 =~ y1 + y2 + y3 + y4
+   dem60 ~ 1.5*ind60
+'
+fitF <- sem(modF, data = PoliticalDemocracy)
+sF <- suppressMessages(grandStandardizedSolution(fitF))
+sF_lav <- subset(standardizedSolution(fitF), op == "~")
+
+test_that("SG: a fixed structural slope is reported (est.std + delta se)", {
+  expect_identical(paste(sF$lhs, sF$rhs), paste(sF_lav$lhs, sF_lav$rhs))
+  expect_equal(sF$est.std, sF_lav$est.std)
+  expect_equal(sF$se, sF_lav$se, tolerance = 1e-7)
+})
+
+# Fixed + free slopes in one model; also pins the column-major row order with a
+# fixed cell interleaved among free ones. dem65 ~ 2*dem60 is the fixed slope;
+# dem60 ~ ind60 and dem65 ~ ind60 are free.
+modFM <- '
+   ind60 =~ x1 + x2 + x3
+   dem60 =~ y1 + y2 + y3 + y4
+   dem65 =~ y5 + y6 + y7 + y8
+   dem60 ~ ind60
+   dem65 ~ 2*dem60 + ind60
+'
+fitFM <- sem(modFM, data = PoliticalDemocracy)
+sFM <- suppressMessages(grandStandardizedSolution(fitFM))
+sFM_lav <- standardizedSolution(fitFM)
+sFM_lav <- sFM_lav[sFM_lav$op == "~", ]
+ordF <- order(paste(sFM$lhs, sFM$rhs))
+ordL <- order(paste(sFM_lav$lhs, sFM_lav$rhs))
+test_that("SG: mixed free + fixed slopes all match standardizedSolution", {
+  expect_identical(paste(sFM$lhs[ordF], sFM$rhs[ordF]),
+                   paste(sFM_lav$lhs[ordL], sFM_lav$rhs[ordL]))
+  expect_equal(sFM$est.std[ordF], sFM_lav$est.std[ordL])
+  expect_equal(sFM$se[ordF], sFM_lav$se[ordL], tolerance = 1e-6)
+})
+test_that("SG: a free structural slope is unchanged (regression guard)", {
+  free_r <- sFM$lhs == "dem60" & sFM$rhs == "ind60"
+  expect_true(any(free_r))
+  lav_free <- sFM_lav[sFM_lav$lhs == "dem60" & sFM_lav$rhs == "ind60", ]
+  expect_equal(sFM$est.std[free_r], lav_free$est.std)
+  expect_equal(sFM$se[free_r], lav_free$se, tolerance = 1e-7)
+})
+
+# MG: a fixed slope (equal raw value in both groups) reports the SAME grand
+# est.std and grand SE in every group (grand SD is pooled), and the point
+# estimate matches an independent hand calc from the pooled grand latent SDs.
+modMF <- '
+   visual =~ x1 + x2 + x3
+   speed  =~ x7 + x8 + x9
+   visual ~ 0.5*speed
+'
+fitMF <- sem(modMF, data = HolzingerSwineford1939, group = "school")
+sMF <- suppressMessages(grandStandardizedSolution(fitMF))
+kMF <- sMF$op == "~"
+lvcov <- lavInspect(fitMF, what = "cov.lv")
+lvmean <- lavInspect(fitMF, what = "mean.lv")
+nsg <- lavInspect(fitMF, what = "nobs")
+mu_g <- Reduce("+", mapply(function(m, n) n * m, m = lvmean, n = nsg,
+                           SIMPLIFY = FALSE)) / sum(nsg)
+grand_cov <- Reduce("+", mapply(function(v, m, n) n * (v + tcrossprod(m - mu_g)),
+                                v = lvcov, m = lvmean, n = nsg,
+                                SIMPLIFY = FALSE)) / sum(nsg)
+sd_g <- sqrt(diag(grand_cov))
+vrn <- rownames(lvcov[[1]])
+hand_stdMF <- 0.5 * sd_g[match("speed", vrn)] / sd_g[match("visual", vrn)]
+
+test_that("MG: a fixed slope is identical across groups and matches the hand calc", {
+  e <- sMF$est.std[kMF]
+  s_ <- sMF$se[kMF]
+  expect_length(e, 2)
+  expect_equal(e[1], e[2], tolerance = 1e-12)
+  expect_equal(s_[1], s_[2], tolerance = 1e-12)
+  expect_equal(unname(e[1]), unname(hand_stdMF), tolerance = 1e-8)
+})
+
+# 2S-PA corrected SG: the fixed slope's grand SE is threaded from the corrected
+# stage-2 covariance; the SG grand SE equals a plain per-group standardized
+# solution, so it must match standardizedSolution() on the corrected fit.
+mod_tspa_f <- "ind60 =~ x1 + x2 + x3
+               dem60 =~ y1 + y2 + y3 + y4"
+fs_f <- get_fs(PoliticalDemocracy, model = mod_tspa_f, std.lv = TRUE,
+               vfsLT = TRUE)
+fitF_corr <- tspa("dem60 ~ 1.5*ind60", data = fs_f,
+                  fsT = attr(fs_f, "fsT"), fsL = attr(fs_f, "fsL"),
+                  vfsLT = attr(fs_f, "vfsLT"), corrected_se = TRUE)
+sF_corr <- suppressMessages(grandStandardizedSolution(fitF_corr))
+sF_corr_lav <- standardizedSolution(fitF_corr)
+sF_corr_lav <- sF_corr_lav[sF_corr_lav$op == "~", ]
+test_that("2S-PA corrected SG: a fixed slope SE matches standardizedSolution", {
+  expect_equal(sF_corr$est.std, sF_corr_lav$est.std, tolerance = 1e-10)
+  expect_equal(sF_corr$se, sF_corr_lav$se, tolerance = 1e-6)
+})
+
+# Defensive guard: a structural row that cannot be resolved to a beta-matrix
+# cell (its lhs or rhs is not among the beta variable names) is rejected with
+# an error rather than silently producing NA rows. In lavaan 0.7-x every '~'
+# row lands in the beta block (observed-on-observed included; latent/observed
+# means are op '~1', not '~'), so the guard is a drift safeguard against a
+# future layout where a '~' row is not a beta cell. Exercised by mocking the
+# dimname anchor to drop the predictor.
+test_that("defensive guard: an unresolvable structural slope errors, not NAs", {
+  local_mocked_bindings(
+    tsp_beta_names = function(fit) list(
+      list(rnm = c("ind60", "dem60"), clm = "dem60")
+    ),
+    .package = "R2spa"
+  )
+  fitGuard <- sem("ind60 =~ x1 + x2 + x3
+                     dem60 =~ y1 + y2 + y3 + y4
+                     dem60 ~ 1.5*ind60",
+                  data = PoliticalDemocracy)
+  expect_error(grandStandardizedSolution(fitGuard), "beta-matrix slope")
+})
+
+# tsp_beta_names(): the fixed-slope dimname anchor (canary for 0.7-x format).
+test_that("tsp_beta_names: SG + MG beta dimnames resolve the fixed cell", {
+  bn <- tsp_beta_names(fitF)
+  expect_length(bn, 1)
+  expect_setequal(bn[[1]]$rnm, c("ind60", "dem60"))
+  expect_setequal(bn[[1]]$clm, c("ind60", "dem60"))
+  expect_false(is.na(match("dem60", bn[[1]]$rnm)))
+  expect_false(is.na(match("ind60", bn[[1]]$clm)))
+  bnM <- tsp_beta_names(fitMF)
+  expect_length(bnM, 2)
+  expect_setequal(bnM[[1]]$rnm, c("visual", "speed"))
+  expect_setequal(bnM[[1]]$clm, c("visual", "speed"))
+  expect_setequal(bnM[[2]]$rnm, bnM[[1]]$rnm)
+  expect_setequal(bnM[[2]]$clm, bnM[[1]]$clm)
+})

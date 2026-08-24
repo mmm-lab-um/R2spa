@@ -23,8 +23,16 @@
   `grandStandardizedSolution()` threads `vcov(object)` (or an explicit
   `acov_par = vcov(corrected_fit)`) so a corrected fit yields corrected
   grand-standardized SEs with unchanged point estimates; the
-  re-integrated `corrected-se` vignette documents the in-place single-
-  and multigroup correction.
+   re-integrated `corrected-se` vignette documents the in-place single-
+   and multigroup correction.
+- `grandStandardizedSolution()` now reports user-fixed structural slopes
+  (`~ k*var`): its `est.std` is the user value rescaled by the (grand) SD
+  ratio and its `se` is the first-order delta approximation, matching
+  `lavaan::standardizedSolution()` (which also reports a delta SE for fixed
+  slopes). Previously a single fixed structural path rejected the whole
+  solution. Free slopes are unchanged (still anchored by free position); a
+  structural regression outside the beta matrix (e.g. observed-on-observed)
+  is still rejected.
 - Add examples for `get_fs_int()` (#82).
 - Update naming for `get_fscore()` (#79)
     * Rename `vc` to `ev` (error variance-covariance) for better consistency

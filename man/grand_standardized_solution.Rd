@@ -61,8 +61,13 @@ or when \code{acov_par = vcov(corrected_fit)} is supplied -- the reported
 standard errors are the first-order corrected grand-standardized
 standard errors, while the point estimates (\code{est.std}) are unchanged.
 
-Every structural (\code{~}) parameter must be free; fixed structural paths
-are rejected with an error. The delta-method SEs are propagated over
+Structural slopes may be free or user-fixed. A user-fixed slope is
+reported alongside the free ones: its \code{est.std} is the user value rescaled
+by the (grand) SD ratio, and its \code{se} is the first-order delta
+approximation, both matching \code{lavaan::standardizedSolution()} (which also
+reports a delta SE for fixed slopes). A structural regression whose outcome
+or predictor is not part of the beta matrix (e.g. observed-on-observed) is
+still rejected with an error. The delta-method SEs are propagated over
 the free \code{beta}/\code{psi} (and \code{alpha}, single group) elements as marked by
 the lavaan free-position matrices; a free parameter whose block matrix
 carries no mark contributes no first-order term (in lavaan 0.7-x the
