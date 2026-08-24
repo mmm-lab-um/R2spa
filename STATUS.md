@@ -297,8 +297,31 @@ re-integration (`get_fs_int()` — `vcov_corrected()` re-integrated 2026-08-23, 
   plain 1×3 / 2×6 matrix). (b) `multiple-factors.Rmd` normalizes
   `standardizedSolution` → canonical `standardizedsolution` (×3; lavaan 0.7.2
   exports both casings). (c) `R2spa.Rmd` drops the unused `a/b/c` loading
-  labels from the example-1 model string so it matches the CFA the code
-  actually fits. The 3 edited vignettes re-knit clean (R 4.6.1, lavaan 0.7.2,
-  R2spa 0.0.4). Deferred (tracked for the multilevel re-integration, see
-  `archive/PLAN_QUARANTINE.md`): the dead `(multilevel.html)` cross-ref in
-  `vignettes/scoring-matrices.Rmd:35-37`.
+   labels from the example-1 model string so it matches the CFA the code
+   actually fits. The 3 edited vignettes re-knit clean (R 4.6.1, lavaan 0.7.2,
+   R2spa 0.0.4). Deferred (tracked for the multilevel re-integration, see
+   `archive/PLAN_QUARANTINE.md`): the dead `(multilevel.html)` cross-ref in
+   `vignettes/scoring-matrices.Rmd:35-37`.
+ - **`missing-data.Rmd` re-integrated from `.quarantine/vignettes/` (2026-08-24,
+   branch `rejoin/missing-data`)** — the only remaining "missing data" vignette.
+   `git mv` back, then modernized to the current **umx-free** `tspa_mx_model()`:
+   the structural model is now passed as a **string**
+   (`"dem65 ~ dem60; dem65 + dem60 ~ 1"`) with the per-row
+   `fsL`/`fsT` **definition-variable** matrices (the exact, non-pooled
+   correction) and `fsb = c(fs_dem60 = "int_fs_dem60", fs_dem65 = "int_fs_dem65")`;
+   the old `umx::umxLav2RAM(...)` wrapper, the `mat_ld =`/`mat_ev =` arguments
+   and the dead `attr(.., "ld")`/`("ev")` names are gone, and `library(umx)`
+   is replaced by `library(OpenMx)`. The
+   `fs_dat[66:75, "fs_dem65"] <- NA` line is **kept** (it is *required*: the 10
+   rows all-missing on y5-y8 carry non-identifiable per-row dem65 loadings /
+   error variances, and without dropping their dem65 score the raw-data-FIML
+   OpenMx fit goes RED, status 5 non-convex Hessian). Also fixed a
+   **pre-existing** undefined-name bug in the Bartlett section (model object
+   assigned `tspa_b_mx` but referenced as `tspab_mx`). Verified: the single-
+   factor sections are unchanged / already current; the per-row OpenMx
+   (regression **and** Bartlett) fits **converge** (`status 0`) with
+   `dem65 ~ dem60 = 0.9126`, matching the joint `lavaan::sem(missing = "fiml")`
+   baseline to 4 dp. `R CMD check` (2026-08-24, `--no-manual`): **0 / 0 / 0**
+   (new vignette builds + re-builds OK; umx no longer pulled by this vignette).
+   Remaining quarantined vignettes: `reliability.Rmd` (+ `sim_results_reliability.RDS`),
+   `categorical-interaction.Rmd`, `get_fs_int-vignette.Rmd`.

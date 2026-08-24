@@ -24,7 +24,7 @@ For illustration, we will create an artificial data set with two missing data pa
 set.seed(2225)
 library(lavaan)
 library(R2spa)
-library(umx)
+library(OpenMx)
 data(PoliticalDemocracy)
 pd2 <- PoliticalDemocracy
 # Add MCAR missing data
@@ -93,15 +93,9 @@ fs2r <- lavPredict(fit2,
 acov_r <- attr(fs2r, "acov")[[1]]
 # Obtain tidy-ed factor scores data
 fs_dat <- R2spa::augment_lav_predict(fit2)
-# Run 2spa with OpenMx
-# Build OpenMx model
-fsreg_umx <- umxLav2RAM(
-  "
-    dem65 ~ dem60
-    dem65 + dem60 ~ 1
-  ",
-  printTab = FALSE
-)
+# Per-row definition-variable matrices: each cell names the `fs_dat` column
+# carrying that case's loadings / error variances (the exact, non-pooled
+# correction rather than `tspa()`'s `reduce = ` pooling).
 cross_load <- matrix(c(
   "dem60_by_fs_dem60", "dem60_by_fs_dem65",
   "dem65_by_fs_dem60", "dem65_by_fs_dem65"
@@ -112,12 +106,15 @@ err_cov <- matrix(c(
   "ecov_fs_dem60_fs_dem65", "ev_fs_dem65"
 ), nrow = 2) |>
   `dimnames<-`(rep(list(c("fs_dem60", "fs_dem65")), 2))
-# Need to make factor scores NA when loadings/error variances
-# are inadmissible
+# The 10 rows all-missing on y5-y8 carry non-identifiable per-row dem65
+# loadings / error variances, so drop their dem65 score (OpenMx's raw-data
+# FIML then fits those rows as usual).
 fs_dat[66:75, "fs_dem65"] <- NA
-tspa_mx <- tspa_mx_model(fsreg_umx,
+tspa_mx <- tspa_mx_model(
+  "dem65 ~ dem60; dem65 + dem60 ~ 1",
   data = fs_dat,
-  mat_ld = cross_load, mat_ev = err_cov
+  fsL = cross_load, fsT = err_cov,
+  fsb = c(fs_dem60 = "int_fs_dem60", fs_dem65 = "int_fs_dem65")
 )
 # Run OpenMx
 tspa_mx_fit <- mxRun(tspa_mx)
@@ -128,12 +125,15 @@ summary(tspa_mx_fit)
 ### Bartlett scores
 
 ```{r}
-# Obtain tidy-ed factor scores data
+# Obtain tidy-ed factor scores data (Bartlett weights); the same non-
+# identifiable rows get their dem65 score dropped
 fsb_dat <- augment_lav_predict(fit2, method = "Bartlett")
-tspab_mx <- tspa_mx_model(fsreg_umx,
+fsb_dat[66:75, "fs_dem65"] <- NA
+tspab_mx <- tspa_mx_model(
+  "dem65 ~ dem60; dem65 + dem60 ~ 1",
   data = fsb_dat,
-  mat_ld = attr(fsb_dat, which = "ld"),
-  mat_ev = attr(fsb_dat, which = "ev")
+  fsL = cross_load, fsT = err_cov,
+  fsb = c(fs_dem60 = "int_fs_dem60", fs_dem65 = "int_fs_dem65")
 )
 # Run OpenMx
 tspab_mx_fit <- mxRun(tspab_mx)
