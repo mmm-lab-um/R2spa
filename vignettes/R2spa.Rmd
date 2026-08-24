@@ -79,9 +79,11 @@ are stage 2.
   model) paths need because loadings and error variances vary by person / cluster (see the
   `multiple-factors`, `tspa-vignette-mx` and `multilevel` vignettes).
 
-The examples below use `se_fs`, since each construct is a single-factor score
-from continuous items; the `multiple-factors` vignette shows the `fsT`/`fsL`
-form.
+Each construct below is a single-factor score from continuous items, so
+`se_fs` is the natural form: the single-factor example passes it explicitly,
+while the multi-factor and multigroup examples omit it, since `tspa()` reads
+those standard errors from the `get_fs()` result automatically. The
+`multiple-factors` vignette shows the `fsT`/`fsL` form.
 
 ## Reading the `get_fs()` output
 
@@ -175,14 +177,12 @@ fs_dat_dem65 <- get_fs(PoliticalDemocracy,
 fs_dat <- cbind(fs_dat_ind60, fs_dat_dem60, fs_dat_dem65)
 ```
 
-To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = regressions (for all predictors), data = the factor score data frame created by combining results from `get_fs()`, and specify standard errors as either a list or a data frame. Values for standard errors can be found at column named `fs_[variable name]_se`.^[The text inside `[]` should be replaced with the actual variable name.] For example, the standard error of latent variable ind60 can be found at column `fs_ind60_se` in the `fs_dat` data frame. In the output model, the values of error constraints are computed by squaring standard errors.
+To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = regressions (for all predictors) and data = the factor score data frame created by combining results from `get_fs()`. Each score's standard error is available in the column named `fs_[variable name]_se`.^[The text inside `[]` should be replaced with the actual variable name.] For example, the standard error of latent variable ind60 is in column `fs_ind60_se` of the `fs_dat` data frame. Because the combined frame carries each score's `fs_[variable name]_se` column from `get_fs()`, `tspa()` reads those standard errors from the columns automatically, so the `se_fs` argument can be omitted (passing it explicitly as a list or a data frame still works). In the output model, the values of error constraints are computed by squaring the standard errors.
 
 ```{r}
 tspa_3var_fit <- tspa(model = "dem60 ~ ind60
                                dem65 ~ ind60 + dem60", 
-                      data = fs_dat, 
-                      se_fs = list(ind60 = 0.1213615, dem60 = 0.6756472, 
-                                   dem65 = 0.5724405))
+                      data = fs_dat)
 cat(attributes(tspa_3var_fit)$tspaModel)
 ```
 
@@ -217,7 +217,7 @@ fs_dat_speed <- get_fs(HolzingerSwineford1939,
 fs_hs <- cbind(fs_dat_visual, fs_dat_speed)
 ```
 
-To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = regression relation. Specify standard error as either a list or a data frame. Values for standard error can be found at column named `fs_[variable name]_se`. For example, the standard error of the multigroup variable visual can be found at column `fs_visual_se` in the `fs_hs` data frame. To get the standard errors for each group faster, `unique()` can be called upon the standard error column. For example, in this case, `unique(fs_hs$fs_visual_se)` can be called to get the standard errors for multigroup variable visual.
+To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = the regression relation, data = the combined factor score data frame, and `group` = the grouping column (here `"school"`). Each score's standard error is available in the column named `fs_[variable name]_se`. For example, the standard error of the multigroup variable visual is in column `fs_visual_se` of the `fs_hs` data frame. Because `fs_hs` comes from `get_fs()`, `tspa()` reads the per-group standard errors from those columns automatically, so the `se_fs` argument can be omitted (passing it explicitly as a data frame still works). The `unique()` function is handy for inspecting the per-group standard errors: for example, `unique(fs_hs$fs_visual_se)` shows the standard error of visual in each group.
 
 Function `standardizedsolution()` enables user to view a table of the standardized estimate, standard error, z score, p-value, and confidence interval bounds for each multigroup regression relation.
 
@@ -225,8 +225,6 @@ Function `standardizedsolution()` enables user to view a table of the standardiz
 # tspa model
 tspa_fit <- tspa(model = "visual ~ speed",
                  data = fs_hs,
-                 se_fs = data.frame(visual = c(0.3391326, 0.311828),
-                                    speed = c(0.2786875, 0.2740507)),
                  group = "school"
                  # group.equal = "regressions"
                  )

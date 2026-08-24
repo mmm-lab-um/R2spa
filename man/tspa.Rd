@@ -24,7 +24,13 @@ tspa(
 \item{model}{A string variable describing the structural path model,
 in \code{lavaan} syntax.}
 
-\item{data}{A data frame containing factor scores.}
+\item{data}{A data frame containing factor scores. When \code{data} is a
+\code{\link[=get_fs]{get_fs()}} result and the corresponding arguments are
+omitted, the measurement inputs are derived from it: the
+\code{fsT}/\code{fsL}/\code{fsb} attributes for a multi-factor fit, or,
+for a \code{cbind()}'d frame whose attributes \code{cbind()} drops,
+the \verb{fs_<v>}/\verb{fs_<v>_se} score columns for a
+single-factor fit (see \code{Details}).}
 
 \item{reliability}{A numeric vector representing the reliability indexes
 of each latent factor. Currently \code{tspa()} does not
@@ -36,7 +42,12 @@ in \code{\link[lavaan:lavaan]{lavaan::lavaan()}}.}
 \item{se_fs}{A numeric vector representing the standard errors of each
 factor score variable for single-group 2S-PA. A list or data
 frame storing the standard errors of each group in each latent
-factor for multigroup 2S-PA.}
+factor for multigroup 2S-PA. An explicit \code{se_fs} always wins
+over derivation from a \code{\link[=get_fs]{get_fs()}} result and, even when
+empty (\code{list()}), suppresses the multi-factor (attribute)
+derivation; the single-factor \code{se_fs} is derived from the
+data's \verb{fs_<v>_se} columns only when this argument is
+omitted.}
 
 \item{fsT}{An error variance-covariance matrix of the factor scores, which
 can be obtained from the output of \code{\link[=get_fs]{get_fs()}} using \code{attr()}
@@ -48,7 +59,10 @@ per-cluster array; for a \code{mirt} fit it is a per-observation list
 (one matrix per row, marked \code{mirt_per_obs}). Values of these
 per-unit shapes are reduced to a single representative per-group
 matrix by \code{reduce}; the pooled (not the nested/per-cluster)
-matrix is attached to the returned fit as the \code{fsT} attribute.}
+matrix is attached to the returned fit as the \code{fsT} attribute.
+When omitted, \code{fsT} is derived from the \code{fsT} attribute of a
+\code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see \code{Details}); an
+explicit \code{fsT} always wins.}
 
 \item{fsL}{A matrix of loadings and cross-loadings from the
 latent variables to the factor scores \code{fs}, which
@@ -59,7 +73,10 @@ For details see the Multi-Factor Measurement Model vignette:
 As with \code{fsT}, per-pattern (FIML missing data), per-cluster
 (merMod), and per-observation (mirt) values are supported and
 reduced per group by \code{reduce}; the pooled (not the nested)
-matrix is attached to the returned fit as the \code{fsL} attribute.}
+matrix is attached to the returned fit as the \code{fsL} attribute.
+When omitted, \code{fsL} is derived from the \code{fsL} attribute of a
+\code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see \code{Details}); an
+explicit \code{fsL} always wins.}
 
 \item{fsb}{A vector of intercepts for the factor scores \code{fs}, which can
 be obtained from the output of \code{\link[=get_fs]{get_fs()}} using \code{attr()}
@@ -68,7 +85,10 @@ with the argument \code{which = "fsb"}. As with \code{fsT}, per-pattern
 (mirt) values are supported
 and reduced per group by \code{reduce}; the pooled (not the
 nested/per-cluster) vector is used for the stage-2 intercept
-constraints.}
+constraints. When omitted, \code{fsb} is derived from the \code{fsb}
+attribute of a \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (which may
+be absent — \code{merMod} results carry none); an explicit \code{fsb}
+always wins.}
 
 \item{reduce}{Controls how per-unit \code{fsL}/\code{fsT}/\code{fsb} from a group fitted
 with missing data (\code{missing = "fiml"}; per-pattern lists of
@@ -114,7 +134,13 @@ model syntax actually fitted; \code{tspa_call}, the matched
 \code{tspa()} call; and \code{tspa_args}, the argument list used to
 build the stage-2 model (captured at fit time as evaluated
 values), which lets the fit be re-evaluated without its original
-environment, e.g. by the \code{vcov_corrected()} SE correction. When
+environment, e.g. by the \code{vcov_corrected()} SE correction. On a
+fit whose measurement inputs were derived from \code{data} (see
+\code{Details}), \code{tspa_args} carries the \emph{resolved} values
+(post-pooling plain matrices, the derived \code{se_fs}), so a
+replay via \code{do.call(tspa, attr(fit, "tspa_args"))} re-passes
+them explicitly, skips the derivation, and cannot double-pool.
+When
 \code{fsT}/\code{fsL} are supplied (multi-factor measurement
 model), the (possibly reduced) matrices are also attached as the
 \code{fsT}/\code{fsL} attributes, and \code{pooled_fs} records the
@@ -146,6 +172,61 @@ the opt-in \code{"median"} trades that guarantee for robustness and emits a
 warning when the pooled \code{fsT} is not positive semi-definite. For
 homogeneous inputs the reduction is a no-op, so complete-data behavior is
 unchanged.
+\subsection{Derivation from a \code{\link[=get_fs]{get_fs()}} result}{
+
+\code{tspa()} silently derives its measurement inputs from a \code{\link[=get_fs]{get_fs()}}
+result passed as \code{data}, so the canonical call is
+\code{tspa(model, data = get_fs(...))}. Two derivations exist, in this
+order, and explicit arguments always win over them:
+\itemize{
+\item \emph{Multi-factor} — fires when \code{fsT}, \code{fsL}, and \code{se_fs} are all
+omitted and \code{data} carries both \code{fsT} and \code{fsL} attributes; those
+attributes (and the \code{fsb} attribute when present) become the
+measurement inputs. Derivation is provenance-gated: \code{data} must
+actually resolve as a \code{\link[=get_fs]{get_fs()}} result (it carries the
+\code{fs_pattern} attribute, or a \code{merMod} 3-D / \code{mirt} per-observation
+shape), so a hand-rolled data frame with plain matrix \code{fsT}/\code{fsL}
+attributes but no such provenance is not derived and is rejected
+with an informative error. When both forms are available and
+nothing is passed, this (attribute) form wins.
+\item \emph{Single-factor} — fires when \code{fsT} is still \code{NULL} after that and
+\code{se_fs} was omitted; \code{se_fs} is then built from the data's own
+\verb{fs_<v>} score columns that carry a matching numeric \verb{fs_<v>_se}
+column (simple names only; product-score columns
+\verb{fs_<v1>:<v2>} are not derived). This is the path taken by a
+\code{cbind()}'d \code{\link[=get_fs]{get_fs()}} result, because \code{cbind()} drops the
+attributes and leaves only the score/SE columns.
+}
+
+A supplied \code{se_fs} (even an empty \code{list()}) suppresses the
+multi-factor derivation, keeping the single-factor path.
+
+In the single-factor derivation with a group column, the derived
+\code{se_fs} carries one row per group, in the order the group column's
+values first appear in the data (lavaan's \verb{group =} order for both
+character and factor columns); a within-group-constant SE column
+keeps its constant and a varying column (FIML missing data) is
+reduced by \code{reduce}, idempotent with the FIML pooling that may run on
+the result. The group column is the data's \code{group_col} attribute (if
+that column exists), else the \verb{group =} argument (if it names a
+column of the data), else a literal \code{group} column. A \code{cbind()}'d
+multi-group frame with no such group signal (no \code{group_col} attribute
+— \code{cbind()} drops it — and no \verb{group =} argument) is silently fitted
+as single-group with row-mean SEs, so pass \verb{group =} to control the
+stage-2 grouping.
+
+The multi-factor derivation also picks up the \code{fsb} (intercept)
+attribute, so a derived fit includes the stage-2 intercept
+constraints. On \code{std.lv = TRUE} data the derived intercepts are zero
+(the default \code{regression}/\code{Bartlett} scores), so the derived fit's
+free estimates and standard errors equal the corresponding values of
+the explicit no-\code{fsb} form (the intercept rows are simply fixed); the
+differences are that its \code{tspaModel} string carries an extra intercept
+block and that, for multigroup fits (where lavaan enables a mean
+structure), the no-\code{fsb} form additionally estimates the factor-score
+intercepts freely. On data with nonzero \code{fsb} (e.g. a \code{mirt} fit) even
+the free estimates differ from the no-\code{fsb} form.
+}
 }
 \examples{
 library(lavaan)
@@ -162,6 +243,10 @@ tspa(model = "dem60 ~ ind60", data = fs_dat,
      se_fs = c(ind60 = fs_dat_ind60[1, "fs_ind60_se"],
                dem60 = fs_dat_dem60[1, "fs_dem60_se"]))
 
+# the same fit with se_fs derived from the fs_<v>_se columns of the
+# cbind()ed get_fs() results (no explicit se_fs)
+tspa(model = "dem60 ~ ind60", data = fs_dat)
+
 # single-group, three-factor example
 mod2 <- "
   # latent variables
@@ -176,6 +261,12 @@ tspa(model = "dem60 ~ ind60
      fsT = attr(fs_dat2, "fsT"),
      fsL = attr(fs_dat2, "fsL"))
 
+# the same fit with the measurement inputs derived from the get_fs()
+# result (no explicit fsT/fsL)
+tspa(model = "dem60 ~ ind60
+              dem65 ~ ind60 + dem60",
+     data = fs_dat2)
+
 # multigroup, two-factor example
 mod3 <- "
   # latent variables
@@ -188,6 +279,12 @@ tspa(model = "visual ~ speed",
      data = fs_dat3,
      fsT = attr(fs_dat3, "fsT"),
      fsL = attr(fs_dat3, "fsL"),
+     group = "school")
+
+# the same fit with the measurement inputs derived from the get_fs()
+# result (no explicit fsT/fsL)
+tspa(model = "visual ~ speed",
+     data = fs_dat3,
      group = "school")
 
 # multigroup, three-factor example

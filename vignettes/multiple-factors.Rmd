@@ -69,12 +69,14 @@ We can also use `R2spa::get_fs()`:
 (fs_dat <- get_fs(PoliticalDemocracy, model = my_cfa, std.lv = TRUE)) |> head()
 ```
 
-Therefore, we need to specify cross-loadings when using 2S-PA.
+Therefore, cross-loadings must be accounted for in stage 2. Because `fs_dat`
+comes from `get_fs()`, `tspa()` reads the implied loading matrix `fsL` (which
+here carries the cross-loadings) and the score error covariance `fsT` from the
+result's attributes, so the `fsT`/`fsL` arguments no longer need to be passed
+(they can still be passed explicitly if preferred).
 
 ```{r}
-tspa_fit <- tspa(model = "dem60 ~ ind60", data = fs_dat,
-                 fsT = attr(fs_dat, "fsT"), 
-                 fsL = attr(fs_dat, "fsL"))
+tspa_fit <- tspa(model = "dem60 ~ ind60", data = fs_dat)
 cat(attr(tspa_fit, "tspaModel"))
 parameterestimates(tspa_fit)
 ```
@@ -113,14 +115,13 @@ We can also use `R2spa::get_fs()`:
   head()
 ```
 
-Therefore, we need to specify cross-loadings when using 2S-PA.
+As before, `tspa()` reads the cross-loadings (`fsL`) and the score error
+covariance (`fsT`) from the `get_fs()` result.
 
 ```{r}
 tspa_fit_3fac <- tspa(model = "dem60 ~ ind60
                                dem65 ~ ind60 + dem60",
-              data = fs_dat_3fac,
-              fsT = attr(fs_dat_3fac, "fsT"),
-              fsL = attr(fs_dat_3fac, "fsL"))
+              data = fs_dat_3fac)
 cat(attr(tspa_fit_3fac, "tspaModel"))
 parameterestimates(tspa_fit_3fac)
 ```

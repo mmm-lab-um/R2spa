@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-24
 **Owner roles:** `r-architect` (code), `r-tester` (tests), `r-doc` (roxygen/NEWS/vignettes)
-**Status:** draft
+**Status:** implemented (2026-08-24) — decisions D1–D7 delivered as specified; see §9.
 **Blocked by / relates to:** none. Builds on PLAN 09 (per-unit pooling: `is_per_unit_fs()` /
 `pool_per_unit()`) and the self-contained `tspa_args` replay record (7f704dc).
 
@@ -225,6 +225,42 @@ All roxygen in `R/tspa.R` is owned by r-doc; r-doc runs `devtools::document()` a
 - `se_fs` derivation on the multi-factor path (the `fsT` diagonal already carries the error
   variances there; `se_fs` is SF-only by construction).
 
-## 9. Verification log
+## 9. Verification log (closed 2026-08-24)
 
-(to be filled during implementation)
+**Hook.** R/tspa.R: `se_fs_given` captured before the `se_fs` coercion (:256); derivation
+block A → B → fail-fast at :265-330; helpers `fs_group_order()` (:735) and
+`derive_sf_se_fs()` (:753) co-located after `pool_se_fs()`.
+
+**R1 — group order: first appearance, not factor levels.** Verified on lavaan 0.7-2 with a
+deliberately reversed factor level order: `fit@Data@group.label` follows first appearance for
+character **and** factor columns, and `unique()` on a factor also yields first appearance —
+so `fs_group_order() = as.character(unique(gvals))` (the plan's "factor levels" wording in
+§4.3 was wrong; the alignment in §4.5 was behaviorally a no-op and now pins the convention).
+Pinned by the reversed-levels test (derived ≡ first-appearance control, ≠ level-order control).
+
+**R2 — `fsb` is derived too (spec §4.2).** Consequences pinned: SG derived fit ≡ no-`fsb`
+explicit form in `coef()`/`vcov()` (intercept rows are fixed at 0 for `std.lv` data) but the
+`tspaModel` string carries an extra intercept block; MG no-`fsb` explicit form additionally
+estimates the `fs_*` intercepts freely under lavaan's auto mean structure, so MG equivalence
+controls use the full `fsT`/`fsL`/`fsb` triple both sides (max|Δcoef| = 0 on shared params).
+Nonzero-`fsb` data (mirt): even free estimates differ from the no-`fsb` form — documented.
+
+**R3 — `group =` argument consulted by derivation B.** One extension beyond the literal
+:345-348 logic, required for the cbind'd MG vignette flow (no `group_col` attribute — cbind
+drops it — and the column is named `school`): resolution chain `group_col` attr → `group =`
+argument → literal `"group"` column.
+
+**Smoke/edge matrix (all ≡ explicit-args controls).** SG SF cbind'd; SG MF unified + list;
+MG MF unified + list; MG SF cbind'd (per-group values = vignette's `unique()` values); FIML
+SG + MG (`pooled_fs = "mean"`, replay via `tspa_args` reproduces estimates/vcov without
+re-attaching `pooled_fs`); merMod (no `fsb`); mirt SG + MG; D2 precedence (scaled explicit
+`fsT` wins); D3 (`se_fs`-given suppression ⇒ SF path byte-identical to attr-stripped control);
+D4 (attrs beat columns); `model = ""`; hand-rolled-attrs provenance error; plain-df fail-fast;
+`se_fs = list()` fail-fast; `corrected_se = TRUE` on derived attrs (SG + MG) ≡ explicit-triple
+corrected fits.
+
+**Tests.** `test-tspa_derived.R`: 14 blocks / 80 expectations, ~17 s (heaviest: mirt MG fit,
+FIML builds, corrected_se builds). Full suite **3607 pass / 0 fail** (3527 baseline + 80;
+1 pre-existing warn in `test-tspa_mx.R`). `R CMD check` **0 / 0 / 0** (vignettes re-knit;
+derived-form examples numerically identical to the old hardcoded-SE examples — the old values
+were 7-dp roundings, max|Δcoef| 4.6e-8).

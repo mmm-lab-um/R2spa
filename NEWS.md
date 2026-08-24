@@ -17,6 +17,11 @@
   reducing them to one representative set per group via `reduce` (default
   `"mean"`), the same per-unit pooling path as FIML/merMod; completely-missing
   mirt rows are dropped from the reduction.
+- `tspa()` now accepts a `get_fs()` result as `data` directly: when
+  `fsT`/`fsL` (multi-factor) or `se_fs` (single-factor) are omitted they are
+  derived from the result's `fsT`/`fsL`/`fsb` attributes or its
+  `fs_<v>`/`fs_<v>_se` score columns; explicit arguments always take
+  precedence.
 
 ## Improvements
 - The stage-2 model string attached to `tspa()` fits (the `tspaModel`

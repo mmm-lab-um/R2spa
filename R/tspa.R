@@ -21,9 +21,69 @@
 #' homogeneous inputs the reduction is a no-op, so complete-data behavior is
 #' unchanged.
 #'
+#' ## Derivation from a [get_fs()] result
+#'
+#' `tspa()` silently derives its measurement inputs from a [get_fs()]
+#' result passed as `data`, so the canonical call is
+#' `tspa(model, data = get_fs(...))`. Two derivations exist, in this
+#' order, and explicit arguments always win over them:
+#'
+#' - *Multi-factor* — fires when `fsT`, `fsL`, and `se_fs` are all
+#'   omitted and `data` carries both `fsT` and `fsL` attributes; those
+#'   attributes (and the `fsb` attribute when present) become the
+#'   measurement inputs. Derivation is provenance-gated: `data` must
+#'   actually resolve as a [get_fs()] result (it carries the
+#'   `fs_pattern` attribute, or a `merMod` 3-D / `mirt` per-observation
+#'   shape), so a hand-rolled data frame with plain matrix `fsT`/`fsL`
+#'   attributes but no such provenance is not derived and is rejected
+#'   with an informative error. When both forms are available and
+#'   nothing is passed, this (attribute) form wins.
+#' - *Single-factor* — fires when `fsT` is still `NULL` after that and
+#'   `se_fs` was omitted; `se_fs` is then built from the data's own
+#'   `fs_<v>` score columns that carry a matching numeric `fs_<v>_se`
+#'   column (simple names only; product-score columns
+#'   `fs_<v1>:<v2>` are not derived). This is the path taken by a
+#'   `cbind()`'d [get_fs()] result, because `cbind()` drops the
+#'   attributes and leaves only the score/SE columns.
+#'
+#' A supplied `se_fs` (even an empty `list()`) suppresses the
+#' multi-factor derivation, keeping the single-factor path.
+#'
+#' In the single-factor derivation with a group column, the derived
+#' `se_fs` carries one row per group, in the order the group column's
+#' values first appear in the data (lavaan's `group =` order for both
+#' character and factor columns); a within-group-constant SE column
+#' keeps its constant and a varying column (FIML missing data) is
+#' reduced by `reduce`, idempotent with the FIML pooling that may run on
+#' the result. The group column is the data's `group_col` attribute (if
+#' that column exists), else the `group =` argument (if it names a
+#' column of the data), else a literal `group` column. A `cbind()`'d
+#' multi-group frame with no such group signal (no `group_col` attribute
+#' — `cbind()` drops it — and no `group =` argument) is silently fitted
+#' as single-group with row-mean SEs, so pass `group =` to control the
+#' stage-2 grouping.
+#'
+#' The multi-factor derivation also picks up the `fsb` (intercept)
+#' attribute, so a derived fit includes the stage-2 intercept
+#' constraints. On `std.lv = TRUE` data the derived intercepts are zero
+#' (the default `regression`/`Bartlett` scores), so the derived fit's
+#' free estimates and standard errors equal the corresponding values of
+#' the explicit no-`fsb` form (the intercept rows are simply fixed); the
+#' differences are that its `tspaModel` string carries an extra intercept
+#' block and that, for multigroup fits (where lavaan enables a mean
+#' structure), the no-`fsb` form additionally estimates the factor-score
+#' intercepts freely. On data with nonzero `fsb` (e.g. a `mirt` fit) even
+#' the free estimates differ from the no-`fsb` form.
+#'
 #' @param model A string variable describing the structural path model,
 #'              in \code{lavaan} syntax.
-#' @param data A data frame containing factor scores.
+#' @param data A data frame containing factor scores. When `data` is a
+#'              [get_fs()] result and the corresponding arguments are
+#'              omitted, the measurement inputs are derived from it: the
+#'              `fsT`/`fsL`/`fsb` attributes for a multi-factor fit, or,
+#'              for a `cbind()`'d frame whose attributes `cbind()` drops,
+#'              the `fs_<v>`/`fs_<v>_se` score columns for a
+#'              single-factor fit (see `Details`).
 #' @param reliability A numeric vector representing the reliability indexes
 #'                    of each latent factor. Currently \code{tspa()} does not
 #'                    support the reliability argument. Please use \code{se}.
@@ -32,7 +92,12 @@
 #' @param se_fs A numeric vector representing the standard errors of each
 #'              factor score variable for single-group 2S-PA. A list or data
 #'              frame storing the standard errors of each group in each latent
-#'              factor for multigroup 2S-PA.
+#'              factor for multigroup 2S-PA. An explicit `se_fs` always wins
+#'              over derivation from a [get_fs()] result and, even when
+#'              empty (`list()`), suppresses the multi-factor (attribute)
+#'              derivation; the single-factor `se_fs` is derived from the
+#'              data's `fs_<v>_se` columns only when this argument is
+#'              omitted.
 #' @param fsT An error variance-covariance matrix of the factor scores, which
 #'            can be obtained from the output of [get_fs()] using `attr()`
 #'            with the argument `which = "fsT"`. When a group was fitted with
@@ -44,6 +109,9 @@
 #'            per-unit shapes are reduced to a single representative per-group
 #'            matrix by `reduce`; the pooled (not the nested/per-cluster)
 #'            matrix is attached to the returned fit as the `fsT` attribute.
+#'            When omitted, `fsT` is derived from the `fsT` attribute of a
+#'            [get_fs()] result passed as `data` (see `Details`); an
+#'            explicit `fsT` always wins.
 #' @param fsL A matrix of loadings and cross-loadings from the
 #'            latent variables to the factor scores `fs`, which
 #'            can be obtained from the output of [get_fs()] using
@@ -54,6 +122,9 @@
 #'            (merMod), and per-observation (mirt) values are supported and
 #'            reduced per group by `reduce`; the pooled (not the nested)
 #'            matrix is attached to the returned fit as the `fsL` attribute.
+#'            When omitted, `fsL` is derived from the `fsL` attribute of a
+#'            [get_fs()] result passed as `data` (see `Details`); an
+#'            explicit `fsL` always wins.
 #' @param fsb A vector of intercepts for the factor scores `fs`, which can
 #'            be obtained from the output of [get_fs()] using `attr()`
 #'            with the argument `which = "fsb"`. As with `fsT`, per-pattern
@@ -61,7 +132,10 @@
 #'            (mirt) values are supported
 #'            and reduced per group by `reduce`; the pooled (not the
 #'            nested/per-cluster) vector is used for the stage-2 intercept
-#'            constraints.
+#'            constraints. When omitted, `fsb` is derived from the `fsb`
+#'            attribute of a [get_fs()] result passed as `data` (which may
+#'            be absent — `merMod` results carry none); an explicit `fsb`
+#'            always wins.
 #' @param reduce Controls how per-unit `fsL`/`fsT`/`fsb` from a group fitted
 #'            with missing data (`missing = "fiml"`; per-pattern lists of
 #'            matrices), per-cluster values from a `merMod` fit (3-D arrays),
@@ -100,7 +174,13 @@
 #'         `tspa()` call; and \code{tspa_args}, the argument list used to
 #'         build the stage-2 model (captured at fit time as evaluated
 #'         values), which lets the fit be re-evaluated without its original
-#'         environment, e.g. by the `vcov_corrected()` SE correction. When
+#'         environment, e.g. by the `vcov_corrected()` SE correction. On a
+#'         fit whose measurement inputs were derived from `data` (see
+#'         `Details`), \code{tspa_args} carries the *resolved* values
+#'         (post-pooling plain matrices, the derived `se_fs`), so a
+#'         replay via `do.call(tspa, attr(fit, "tspa_args"))` re-passes
+#'         them explicitly, skips the derivation, and cannot double-pool.
+#'         When
 #'         \code{fsT}/\code{fsL} are supplied (multi-factor measurement
 #'         model), the (possibly reduced) matrices are also attached as the
 #'         \code{fsT}/\code{fsL} attributes, and \code{pooled_fs} records the
@@ -128,6 +208,10 @@
 #'      se_fs = c(ind60 = fs_dat_ind60[1, "fs_ind60_se"],
 #'                dem60 = fs_dat_dem60[1, "fs_dem60_se"]))
 #'
+#' # the same fit with se_fs derived from the fs_<v>_se columns of the
+#' # cbind()ed get_fs() results (no explicit se_fs)
+#' tspa(model = "dem60 ~ ind60", data = fs_dat)
+#'
 #' # single-group, three-factor example
 #' mod2 <- "
 #'   # latent variables
@@ -142,6 +226,12 @@
 #'      fsT = attr(fs_dat2, "fsT"),
 #'      fsL = attr(fs_dat2, "fsL"))
 #'
+#' # the same fit with the measurement inputs derived from the get_fs()
+#' # result (no explicit fsT/fsL)
+#' tspa(model = "dem60 ~ ind60
+#'               dem65 ~ ind60 + dem60",
+#'      data = fs_dat2)
+#'
 #' # multigroup, two-factor example
 #' mod3 <- "
 #'   # latent variables
@@ -154,6 +244,12 @@
 #'      data = fs_dat3,
 #'      fsT = attr(fs_dat3, "fsT"),
 #'      fsL = attr(fs_dat3, "fsL"),
+#'      group = "school")
+#'
+#' # the same fit with the measurement inputs derived from the get_fs()
+#' # result (no explicit fsT/fsL)
+#' tspa(model = "visual ~ speed",
+#'      data = fs_dat3,
 #'      group = "school")
 #'
 #' # multigroup, three-factor example
@@ -250,11 +346,83 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
             "use `se_fs` instead.")
   }
 
+  # PLAN 13: capture before the coercion below (a missing `se_fs` becomes a
+  # 0 x 0 data frame there, so NULL-ness is the "the user supplied se_fs"
+  # signal the measurement-input derivations gate on).
+  se_fs_given <- !is.null(se_fs)
+
   if (!is.data.frame(se_fs)) {
     se_fs <- as.data.frame(as.list(se_fs))
   }
   if (xor(is.null(fsT), is.null(fsL))) {
     stop("Please provide both or none of fsT and fsL.")
+  }
+
+  # PLAN 13: derive the measurement inputs from a get_fs() result when the
+  # caller omitted them. Explicit arguments always win (D2); a supplied
+  # se_fs suppresses the multi-factor derivation (D3); with both forms
+  # available and nothing passed, the multi-factor (attribute) form wins
+  # (D4). Derivation fires only for argument values that are NULL, and every
+  # such call errors today (no measurement inputs reach stage 2), so no
+  # currently-working call changes behavior.
+  derived_prov_err <- NULL
+  if (is.null(fsT) && is.null(fsL) && !se_fs_given) {
+    # Multi-factor derivation: the data's own fsT/fsL (and fsb) attributes
+    # (unified or list format; per-unit shapes -- FIML per-pattern, merMod
+    # per-cluster, mirt per-obs -- are reduced by the pooling below).
+    attr_T <- attr(data, "fsT")
+    attr_L <- attr(data, "fsL")
+    if (!is.null(attr_T) && !is.null(attr_L)) {
+      # Provenance gate: derive only from attributes that resolve as a
+      # get_fs() result, reusing resolve_fs_per_row()'s informative errors
+      # instead of duplicating its shape rules. A hand-rolled frame with
+      # plain matrix attributes but no get_fs() provenance is NOT derived;
+      # it falls through to the fail-fast error below, which carries the
+      # gate's message.
+      prov <- tryCatch(
+        {
+          resolve_fs_per_row(data)
+          TRUE
+        },
+        error = function(e) conditionMessage(e)
+      )
+      if (isTRUE(prov)) {
+        fsT <- attr_T
+        fsL <- attr_L
+        fsb <- attr(data, "fsb") # may be NULL (merMod has none)
+      } else {
+        derived_prov_err <- prov
+      }
+    }
+    # Single-factor derivation: the data's own fs_<v>/fs_<v>_se columns
+    # (a cbind'd get_fs() result carries no attributes, so its se_fs is
+    # derived from the columns).
+    if (is.null(fsT)) {
+      derived_se <- derive_sf_se_fs(data, list(...)[["group"]], reduce)
+      if (!is.null(derived_se)) {
+        se_fs <- derived_se
+      }
+    }
+  }
+  # Fail fast with an actionable message instead of lavaan's "model is NULL
+  # or not a valid type for it!" when no measurement inputs exist.
+  if (is.null(fsT) && nrow(se_fs) == 0) {
+    stop(
+      "No measurement inputs found for the factor scores in 'data'. ",
+      "Please supply one of: (1) 'se_fs' (single-factor), (2) 'fsT' and ",
+      "'fsL' (multi-factor), or (3) a get_fs() result as 'data' (its ",
+      "attributes, or its fs_<v>/fs_<v>_se columns, carry the inputs).",
+      if (is.null(derived_prov_err)) {
+        ""
+      } else {
+        paste0(
+          " The 'fsT'/'fsL' attributes on 'data' were detected but not ",
+          "used because the data does not look like a get_fs() result: ",
+          derived_prov_err
+        )
+      },
+      call. = FALSE
+    )
   }
 
   # A plain matrix stands for a single group, so a length-1 list may be mixed
@@ -640,7 +808,7 @@ pool_se_fs <- function(data, se_names, reduce, group_col) {
     }, numeric(1)))
   }
   gvals <- data[[group_col]]
-  gnames <- as.character(unique(gvals))
+  gnames <- fs_group_order(gvals)
   out <- do.call(rbind, lapply(gnames, function(g) {
     rows_g <- gvals == g
     vals <- vapply(se_names, function(v) {
@@ -651,6 +819,69 @@ pool_se_fs <- function(data, se_names, reduce, group_col) {
   colnames(out) <- se_names
   rownames(out) <- gnames
   out
+}
+
+# Stage-2 group order (PLAN 13): the unique values of the group column in
+# first-appearance order -- verified on lavaan 0.7-2 to be lavaan's own
+# `group =` order for BOTH character and factor columns (lavaan does not
+# use a factor's level order; `unique()` on a factor also yields
+# first-appearance, not level, order). The same convention the stage-1
+# attribute list order and pool_per_unit() follow. Shared by pool_se_fs()
+# and the derived se_fs, which must be row-aligned with the stage-2 groups.
+fs_group_order <- function(gvals) {
+  as.character(unique(gvals))
+}
+
+# Single-factor derivation (PLAN 13): build the `se_fs` an attribute-less
+# get_fs() result (e.g. a cbind'd one) implies from its own columns. The
+# latent set is every simple score column `fs_<v>` that carries a matching
+# numeric `fs_<v>_se` column (product-score columns `fs_a:fs_b` are out of
+# scope, D7), in first-appearance order of the score columns (the cbind
+# order of the canonical vignette flows). With no group column a single
+# row is returned; with one, one row per group in the stage-2 group order
+# with the within-group se reduced by `reduce` (a no-op for the constant
+# columns of complete data, idempotent with the FIML se pooling that may
+# run on the result downstream). The group column is the data's `group_col`
+# attribute, else the user's `group` argument (a cbind'd frame has no
+# attribute, so the argument is the only stage-2 group signal), else a
+# literal "group" column. Returns NULL when no latent pair exists (the
+# caller keeps the empty se_fs).
+derive_sf_se_fs <- function(data, group_arg, reduce) {
+  dnames <- names(data)
+  if (is.null(dnames)) {
+    return(NULL)
+  }
+  score_cols <- dnames[startsWith(dnames, "fs_") & !grepl(":", dnames)]
+  latents <- character()
+  for (cl in score_cols) {
+    v <- substr(cl, 4L, nchar(cl))
+    se_cl <- paste0("fs_", v, "_se")
+    if (nzchar(v) && se_cl %in% dnames && is.numeric(data[[se_cl]])) {
+      latents <- c(latents, v)
+    }
+  }
+  if (length(latents) == 0L) {
+    return(NULL)
+  }
+  grp_col <- attr(data, "group_col")
+  if (!is.null(grp_col) && !(grp_col %in% dnames)) {
+    grp_col <- NULL
+  }
+  if (is.null(grp_col)) {
+    if (is.character(group_arg) && length(group_arg) == 1L &&
+        group_arg %in% dnames) {
+      grp_col <- group_arg
+    } else if ("group" %in% dnames) {
+      grp_col <- "group"
+    }
+  }
+  pooled <- pool_se_fs(data, latents, reduce, grp_col)
+  if (is.data.frame(pooled)) {
+    return(pooled)
+  }
+  # No group column: pool_se_fs() returned a named numeric vector; shape
+  # it the way the se_fs coercion does (one row, one column per latent).
+  as.data.frame(as.list(pooled))
 }
 
 # ---------------------------------------------------------------------------
