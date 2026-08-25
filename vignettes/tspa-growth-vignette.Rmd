@@ -166,12 +166,21 @@ i ~~ start(0) * s
 i ~ 1
 s ~ 1
 "
+```
+
+```r
 # Fit the growth model
 tspa_growth_fit <- tspa(tspa_growth_mod, fs_dat,
                         fsT = attr(fs_dat, "fsT"),
                         fsL = attr(fs_dat, "fsL"),
                         fsb = attr(fs_dat, "fsb"),
                         estimator = "ML")
+```
+
+For objects extracted from `get_fs()`, one can omit the `fsT`, `fsL`, and `fsb` arguments, as the `tspa()` function will automatically extract the necessary information from the `fs_dat` object.
+
+```{r}
+tspa_growth_fit <- tspa(tspa_growth_mod, fs_dat, estimator = "ML")
 ```
 
 ## Comparison
