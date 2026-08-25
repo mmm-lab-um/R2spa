@@ -155,3 +155,59 @@ samples and with unreliable or categorical items (Lai & Hsiao, 2022; Lai et
 al., 2023). `PoliticalDemocracy` is a real data set, so there is no "true value"
 to compare against here; the point of putting the two side by side is that they
 target the same structural model.
+
+## Local vs joint scores
+
+The `get_fs()` calls above all score from a *joint* multi-factor measurement
+model: one fit with all the latents estimated together. With freely correlated
+factors, each score is a weighted composite of **all** the indicators (the
+off-diagonals of the `alambda` matrices above), so the stage-2 model has to
+account for the cross-loadings explicitly. The canonical 2S-PA setup (Lai &
+Hsiao, 2022) instead scores each latent from its **own** local measurement
+model. `get_fs(..., local = TRUE)` does this in one call and merges the
+per-construct results into the usual multi-factor layout:
+
+```{r}
+(fs_local <- get_fs(PoliticalDemocracy,
+                    model = cfa_3fac,
+                    std.lv = TRUE,
+                    local = TRUE)) |> head()
+```
+
+The merged result has the same layout as the joint output, with the cross
+terms *exactly* zero: the `fsT` and `fsL` attributes are block-diagonal, the
+`psi` attribute is diagonal, and the off-diagonal `_by_` loading columns and
+all `ecov_*` columns are zero. Each score is a *pure* per-construct score —
+the cross-factor structure is not estimated by design:
+
+```{r}
+attr(fs_local, "fsL")[[1]]
+sapply(c("fs_ind60", "fs_dem60", "fs_dem65"),
+       function(col) max(abs(fs_local[[col]] - fs_dat_3fac[[col]])))
+```
+
+So local scores are not the same as joint scores: with freely correlated
+factors they differ (the maximum score differences above), because the joint
+fit scores every latent from all the indicators — even the joint fit's own
+per-factor estimates shift under free correlation. With the factors
+constrained uncorrelated (e.g. `ind60 ~~ 0 * dem60` in the joint model), the
+likelihood factorizes and the two agree to optimizer tolerance.
+
+Because the merged result carries the usual `fsT`/`fsL` attributes (with the
+zero cross terms), it feeds `tspa()` directly with no explicit `fsT`/`fsL`
+arguments — the stage-2 model picks up the zero cross-loadings and score
+error covariances from the attributes:
+
+```{r}
+tspa_fit_local <- tspa(model = "dem60 ~ ind60
+                        dem65 ~ ind60 + dem60",
+                       data = fs_local)
+parameterestimates(tspa_fit_local)
+```
+
+`model` may also be a character vector (or a named list) of complete
+single-factor model strings, each element fit verbatim — the escape hatch for
+anything the strict string grammar rejects, e.g. a within-factor residual
+covariance (`y1 ~~ y4`). `vfsLT` (and hence `tspa(corrected_se = TRUE)`),
+`prior_cov`, and `reliability` are not supported in `local` mode (v1); see
+`?get_fs` (Details) for the full contract.

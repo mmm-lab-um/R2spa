@@ -100,6 +100,7 @@ get_fs.data.frame <- function(
   object,
   model = NULL,
   group = NULL,
+  local = FALSE,
   method = c("regression", "Bartlett", "ML", "EB", "mean"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
@@ -110,12 +111,60 @@ get_fs.data.frame <- function(
   sum_items = NULL,
   ...
 ) {
+  # `local` is a named formal placed before `...` so it is never forwarded
+  # to cfa(). It only applies to explicitly supplied multi-statement models:
+  # with `model = NULL` the auto single-factor model is trivially local and
+  # the normal single-fit path runs unchanged (a no-op).
+  model_given <- !is.null(model)
   if (is.null(model)) {
     ind_names <- colnames(object)
     if (!is.null(group)) {
       ind_names <- setdiff(ind_names, group)
     }
     model <- paste("f1 =~", paste(ind_names, collapse = " + "))
+  }
+  if (isTRUE(local) && model_given) {
+    # v1 rejections (PLAN 14, D4): these quantities need cross-latent
+    # information that separate local fits do not provide.
+    if (vfsLT) {
+      stop(
+        "'vfsLT = TRUE' is not supported with 'local = TRUE': the latents ",
+        "are scored from separate local fits, so the cross-latent sampling ",
+        "covariances that 'vfsLT' requires do not exist (a block-diagonal ",
+        "assembly of the per-local 'vfsLT' values would be wrong, not just ",
+        "incomplete). 'tspa(corrected_se = TRUE)' is therefore not available ",
+        "from a local stage 1.",
+        call. = FALSE
+      )
+    }
+    if (!is.null(prior_cov)) {
+      stop(
+        "'prior_cov' is not supported with 'local = TRUE' (v1): a q x q ",
+        "prior covariance cannot be reduced to the per-latent 1 x 1 priors ",
+        "used by the separate local fits without silently dropping its ",
+        "off-diagonals.",
+        call. = FALSE
+      )
+    }
+    if (reliability) {
+      stop(
+        "'reliability = TRUE' is not supported with 'local = TRUE' (v1): ",
+        "the per-latent 'reliability' attribute would introduce a new ",
+        "attribute shape for an attribute 'tspa()' already deprecates.",
+        call. = FALSE
+      )
+    }
+    return(get_fs_local(
+      object,
+      model = model,
+      group = group,
+      method = method,
+      corrected_fsT = corrected_fsT,
+      format = format,
+      prior_mean = prior_mean,
+      sum_items = sum_items,
+      ...
+    ))
   }
   fit <- cfa(model, data = object, group = group, ...)
   get_fs(
@@ -129,6 +178,711 @@ get_fs.data.frame <- function(
     prior_cov = prior_cov,
     sum_items = sum_items
   )
+}
+
+# ---------------------------------------------------------------------------
+# Per-construct ("local") stage-1 scoring (PLAN 14): `get_fs(..., local = TRUE)`.
+#
+# Each latent is scored from its own local measurement model (the canonical
+# two-stage path analysis setup) instead of one joint multi-factor model.
+# The merged output reproduces the joint layout (columns and attribute
+# shapes) exactly, with exactly-zero cross terms (off-diagonal `_by_`
+# columns, `ecov_*` columns, and `fsT`/`fsL`/`psi` off-diagonals) encoding
+# "no shared measurement model" (D2/D6).
+# ---------------------------------------------------------------------------
+
+# Strict-grammar parser for the local-mode string form: splits a measurement
+# model string into per-latent model strings. Only statements of the form
+# `<latent> =~ <item1> + <item2> + ...` (bare identifiers) are accepted;
+# `#` comments are stripped, `;` separates statements, and a line ending in
+# `+` continues onto the next line. Anything else is an error naming the
+# offending line and pointing to the alternatives (joint mode, `local = FALSE`,
+# or the vector/list form). Returns the per-latent model strings in statement
+# order, named by latent.
+split_local_models <- function(model) {
+  if (!is.character(model) || length(model) != 1L || is.na(model)) {
+    stop(
+      "get_fs(local = TRUE): 'model' must be a single string, a character ",
+      "vector, or a list of strings.",
+      call. = FALSE
+    )
+  }
+  raw_lines <- strsplit(model, "\n", fixed = TRUE)[[1L]]
+  # Per physical line: strip the `#` comment, split on `;`, and record
+  # whether the (trimmed, comment-free) line ends in `+` (continuation).
+  line_segs <- vector("list", length(raw_lines))
+  for (i in seq_along(raw_lines)) {
+    lc <- sub("#.*$", "", raw_lines[i])
+    segs <- trimws(strsplit(lc, ";", fixed = TRUE)[[1L]])
+    line_segs[[i]] <- list(
+      segs = segs[segs != ""],
+      cont = endsWith(trimws(lc), "+")
+    )
+  }
+  # Assemble statements: a segment starts a statement; a `;` or line end
+  # closes it; a trailing `+` at a line end keeps it open for the next line
+  # (a duplicated leading `+` on the continuation line is dropped).
+  stmts <- list()
+  cur <- NULL
+  for (i in seq_along(raw_lines)) {
+    l <- line_segs[[i]]
+    for (s in l$segs) {
+      if (is.null(cur)) {
+        cur <- list(txt = s, line = i)
+      } else if (endsWith(cur$txt, "+") && cur$line < i) {
+        cur$txt <- if (startsWith(s, "+")) {
+          paste0(cur$txt, " ", substr(s, 2L, nchar(s)))
+        } else {
+          paste0(cur$txt, " ", s)
+        }
+      } else {
+        # A `;` (or a same-line dangling `+`) closes the open statement.
+        stmts[[length(stmts) + 1L]] <- cur
+        cur <- list(txt = s, line = i)
+      }
+    }
+    if (!is.null(cur) && !(l$cont && endsWith(cur$txt, "+"))) {
+      stmts[[length(stmts) + 1L]] <- cur
+      cur <- NULL
+    }
+  }
+  if (!is.null(cur)) {
+    if (endsWith(cur$txt, "+")) {
+      local_model_syntax_error(
+        cur$line,
+        cur$txt,
+        "a trailing '+' with no items on the following line"
+      )
+    }
+    stmts[[length(stmts) + 1L]] <- cur
+  }
+  if (length(stmts) == 0L) {
+    stop(
+      "get_fs(local = TRUE): 'model' contains no statements of the form ",
+      "'<latent> =~ <items>'.",
+      call. = FALSE
+    )
+  }
+  parsed <- lapply(seq_along(stmts), function(i) {
+    parse_local_statement(stmts[[i]]$txt, stmts[[i]]$line)
+  })
+  latents <- vapply(parsed, `[[`, character(1L), "lhs")
+  dup_lv <- latents[duplicated(latents)]
+  if (length(dup_lv) > 0L) {
+    stop(
+      "get_fs(local = TRUE): the latent variable '", dup_lv[1L], "' is ",
+      "defined more than once; every latent must be defined by exactly one ",
+      "statement.",
+      call. = FALSE
+    )
+  }
+  items <- unlist(lapply(parsed, `[[`, "rhs"), use.names = FALSE)
+  dup_items <- items[duplicated(items)]
+  if (length(dup_items) > 0L) {
+    stop(
+      "get_fs(local = TRUE): item(s) ",
+      paste(dup_items, collapse = ", "),
+      " are used in more than one statement; each item may load on exactly ",
+      "one latent.",
+      call. = FALSE
+    )
+  }
+  setNames(
+    vapply(
+      parsed,
+      function(st) paste0(st$lhs, " =~ ", paste(st$rhs, collapse = " + ")),
+      character(1L)
+    ),
+    latents
+  )
+}
+
+# Parse one local-mode statement (`lhs =~ i1 + i2 + ...`), erroring (via
+# local_model_syntax_error()) with a class-specific detail on anything else.
+parse_local_statement <- function(txt, line) {
+  if (grepl("~~", txt, fixed = TRUE)) {
+    local_model_syntax_error(
+      line,
+      txt,
+      "'~~' (latent-latent covariance/correlation, or residual covariance ",
+      "between indicators) is not supported in the local-mode string form; ",
+      "the vector form accepts it when it stays within one factor's items"
+    )
+  }
+  if (grepl("|~", txt, fixed = TRUE)) {
+    local_model_syntax_error(
+      line,
+      txt,
+      "an ordered-response statement ('|~') is not supported in local mode"
+    )
+  }
+  if (grepl("$", txt, fixed = TRUE)) {
+    local_model_syntax_error(
+      line,
+      txt,
+      "thresholds ('$') are not supported in local mode"
+    )
+  }
+  if (!grepl("=~", txt, fixed = TRUE)) {
+    if (grepl("~", txt, fixed = TRUE)) {
+      local_model_syntax_error(
+        line,
+        txt,
+        "a structural path ('~') is not supported in local mode (measurement ",
+        "statements only)"
+      )
+    }
+    local_model_syntax_error(line, txt, "no '=~' operator")
+  }
+  n_op <- (nchar(txt) - nchar(gsub("=~", "", txt, fixed = TRUE))) / 2L
+  if (n_op > 1L) {
+    local_model_syntax_error(line, txt, "more than one '=~' operator")
+  }
+  parts <- strsplit(txt, "=~", fixed = TRUE)[[1L]]
+  lhs <- trimws(parts[1L])
+  rhs <- trimws(parts[2L])
+  if (grepl("\\s", lhs)) {
+    local_model_syntax_error(
+      line,
+      txt,
+      "multiple latent names on the left-hand side (only one latent per ",
+      "statement)"
+    )
+  }
+  if (!grepl("^[A-Za-z._][A-Za-z0-9._]*$", lhs)) {
+    local_model_syntax_error(
+      line,
+      txt,
+      "the left-hand side must be a single bare identifier (labels and fixed ",
+      "values are not allowed)"
+    )
+  }
+  # strsplit() drops a trailing empty field, so "a =~" yields a one-element
+  # split and parts[2L] is NA (not ""); treat missing/NA/zero-length RHS as
+  # the empty-RHS case rather than letting `rhs == ""` hit a missing value.
+  if (length(rhs) == 0L || is.na(rhs) || rhs == "") {
+    local_model_syntax_error(line, txt, "an empty right-hand side")
+  }
+  if (grepl("~", rhs, fixed = TRUE)) {
+    local_model_syntax_error(
+      line,
+      txt,
+      "'~' is not allowed on the right-hand side"
+    )
+  }
+  if (grepl("*", rhs, fixed = TRUE)) {
+    local_model_syntax_error(
+      line,
+      txt,
+      "labels and fixed values ('*') are not allowed on the right-hand side"
+    )
+  }
+  if (grepl("(", rhs, fixed = TRUE) || grepl(")", rhs, fixed = TRUE)) {
+    local_model_syntax_error(line, txt, "'c(...)' calls are not allowed")
+  }
+  toks <- trimws(strsplit(rhs, "+", fixed = TRUE)[[1L]])
+  bad <- toks[!grepl("^[A-Za-z._][A-Za-z0-9._]*$", toks)]
+  if (length(bad) > 0L) {
+    local_model_syntax_error(
+      line,
+      txt,
+      "right-hand side items must be bare identifiers (got: ",
+      paste(bad, collapse = ", "), ")"
+    )
+  }
+  list(lhs = lhs, rhs = toks, line = line)
+}
+
+# The shared local-mode string-form error: names the offending line and
+# points to the alternatives (joint mode or the vector/list form). The call
+# sites pass a possibly multi-line detail as separate string arguments (a
+# single sentence wrapped across source lines); `...` reassembles them
+# verbatim (collapse = "", the fragments carry their own spacing) so the
+# message keeps its exact wording.
+local_model_syntax_error <- function(line, txt, detail, ...) {
+  detail <- paste0(c(detail, ...), collapse = "")
+  stop(
+    "get_fs(local = TRUE): unsupported model syntax on line ", line,
+    " ('", txt, "'): ", detail,
+    ". The local-mode string form only accepts statements of the form ",
+    "'<latent> =~ <item1> + <item2> + ...'. Fit the joint model instead ",
+    "(local = FALSE) or pass one complete single-factor model string per ",
+    "latent as a character vector or list.",
+    call. = FALSE
+  )
+}
+
+# Orchestrate local per-construct scoring: resolve the per-latent models,
+# fit each with cfa() (all `...` forwarded), score each with the existing
+# get_fs.lavaan() path (format = "list" internally), and merge.
+get_fs_local <- function(
+  object,
+  model,
+  group = NULL,
+  method = c("regression", "Bartlett", "ML", "EB", "mean"),
+  corrected_fsT = FALSE,
+  format = c("unified", "list"),
+  prior_mean = NULL,
+  sum_items = NULL,
+  ...
+) {
+  # -- Resolve the per-latent model strings (named in latent order). --
+  if (is.list(model)) {
+    if (!all(vapply(
+      model,
+      function(e) is.character(e) && length(e) >= 1L,
+      logical(1L)
+    ))) {
+      stop(
+        "get_fs(local = TRUE): the list form of 'model' must contain ",
+        "character strings only (one complete single-factor model per ",
+        "element).",
+        call. = FALSE
+      )
+    }
+    models <- setNames(
+      as.list(unlist(lapply(model, paste, collapse = "\n"))),
+      names(model)
+    )
+  } else if (length(model) > 1L) {
+    models <- as.list(model)
+  } else {
+    models <- as.list(split_local_models(model))
+  }
+  q <- length(models)
+
+  # -- Fit each latent's local model (a vector/list element is fit verbatim;
+  #    a parsed statement is a canonical `<latent> =~ <items>` string). --
+  fits <- lapply(models, function(mk) cfa(mk, data = object, group = group, ...))
+
+  # -- Validate: each fit defines exactly one latent; names are unique. --
+  ests <- lapply(fits, function(fk) lavInspect(fk, what = "est"))
+  est1s <- lapply(ests, function(e) if (!is.null(e$psi)) e else e[[1L]])
+  n_lv <- vapply(est1s, function(e) nrow(e$psi), integer(1L))
+  bad_k <- which(n_lv != 1L)
+  if (length(bad_k) > 0L) {
+    stop(
+      "get_fs(local = TRUE): model element(s) ",
+      paste(bad_k, collapse = ", "),
+      " define ",
+      paste(n_lv[bad_k], collapse = " / "),
+      " latent variable(s); every element must define exactly one latent.",
+      call. = FALSE
+    )
+  }
+  lv_names <- vapply(
+    est1s,
+    function(e) colnames(e$lambda)[1L],
+    character(1L)
+  )
+  dup_lv <- lv_names[duplicated(lv_names)]
+  if (length(dup_lv) > 0L) {
+    stop(
+      "get_fs(local = TRUE): latent variable name(s) ",
+      paste(dup_lv, collapse = ", "),
+      " occur in more than one model element; latent names must be unique.",
+      call. = FALSE
+    )
+  }
+  if (!is.null(names(models)) && !all(names(models) == lv_names)) {
+    mismatch <- which(names(models) != lv_names)
+    stop(
+      "get_fs(local = TRUE): model element(s) ",
+      paste(mismatch, collapse = ", "),
+      " are named ",
+      paste(names(models)[mismatch], collapse = " / "),
+      " but their fitted latent(s) are ",
+      paste(lv_names[mismatch], collapse = " / "), ".",
+      call. = FALSE
+    )
+  }
+
+  # -- prior_mean: validated once against all latent names, then sliced. --
+  pm_all <- if (is.null(prior_mean)) {
+    NULL
+  } else {
+    validate_fs_priors(prior_mean, NULL, lv_names)$mean
+  }
+
+  # -- sum_items: user-supplied list sliced per latent (auto-derivation is
+  #    trivially satisfied per single-factor local model). --
+  if (!is.null(sum_items)) {
+    if (!is.list(sum_items) || is.null(names(sum_items))) {
+      stop(
+        "'sum_items' must be a named list mapping factor names to item names.",
+        call. = FALSE
+      )
+    }
+    unknown_lv <- setdiff(names(sum_items), lv_names)
+    if (length(unknown_lv) > 0L) {
+      stop(
+        "Unknown factor name(s) in 'sum_items': ",
+        paste(deparse(unknown_lv), collapse = ", "),
+        ". Local model factors are: ",
+        paste(deparse(lv_names), collapse = ", "), ".",
+        call. = FALSE
+      )
+    }
+    missing_lv <- setdiff(lv_names, names(sum_items))
+    if (length(missing_lv) > 0L) {
+      stop(
+        "'sum_items' must cover all model factors; no items given for: ",
+        paste(deparse(missing_lv), collapse = ", "), ".",
+        call. = FALSE
+      )
+    }
+  }
+
+  # -- Score each local fit through the existing (unchanged) method. --
+  fs_list <- lapply(seq_len(q), function(k) {
+    get_fs(
+      fits[[k]],
+      method = method,
+      corrected_fsT = corrected_fsT,
+      format = "list",
+      prior_mean = if (is.null(pm_all)) NULL else pm_all[lv_names[k]],
+      sum_items = if (is.null(sum_items)) {
+        NULL
+      } else {
+        setNames(list(sum_items[[lv_names[k]]]), lv_names[k])
+      }
+    )
+  })
+  names(fs_list) <- lv_names
+
+  merge_local_fs(
+    fs_list,
+    latent_names = lv_names,
+    format = format,
+    group_col = group
+  )
+}
+
+# Merge per-latent get_fs() results (each format = "list") into the joint
+# multi-factor layout. Every row of the data carries one block-diagonal
+# (fsL, fsT, fsb) tuple across the latents (an all-NA 1 x 1 block where a
+# latent could not score the row); when every row of every group carries an
+# identical tuple (complete data) the compact per-group matrix/vector
+# attributes are materialized (via assemble_fs_blocks()); otherwise (FIML)
+# the flat per-row attribute lists and the `per_obs` marker are attached
+# (the mirt per-obs convention). Column order, attribute shapes, and the
+# group-column/group_col handling are exactly the joint ones.
+merge_local_fs <- function(
+  fs_list,
+  latent_names,
+  format = c("unified", "list"),
+  group_col = NULL
+) {
+  format <- match.arg(format)
+  q <- length(fs_list)
+  fs_names <- paste0("fs_", latent_names)
+
+  # -- Group structure (shared by all per-latent results: same data/group).
+  first <- fs_list[[1L]]
+  mg <- is.list(first) && !is.data.frame(first)
+  group_labels <- if (mg) names(first) else ""
+  ngroups <- length(group_labels)
+  df_kg <- function(k, g) if (mg) fs_list[[k]][[g]] else fs_list[[k]]
+
+  n_g <- if (mg) vapply(first, nrow, integer(1L)) else nrow(first)
+  for (k in seq_len(q)) {
+    f <- fs_list[[k]]
+    if (mg) {
+      if (!identical(names(f), group_labels) ||
+          !identical(vapply(f, nrow, integer(1L)), n_g)) {
+        stop(
+          "get_fs(local = TRUE): the per-latent fits have different group ",
+          "labels or per-group row counts; the per-row merge needs every ",
+          "local fit to keep the same rows in every group. This happens with ",
+          "listwise missing-data handling (the cfa() default), which drops ",
+          "different rows in each local fit. Re-run with a FIML method ",
+          "(e.g. missing = 'fiml') so all local fits keep every row.",
+          call. = FALSE
+        )
+      }
+    } else if (nrow(f) != n_g) {
+      stop(
+        "get_fs(local = TRUE): the per-latent fits have different row counts ",
+        "(", paste(vapply(fs_list, nrow, integer(1L)), collapse = ", "),
+        "); the per-row merge needs every local fit to keep the same rows. ",
+        "This happens with listwise missing-data handling (the cfa() ",
+        "default), which drops different rows in each local fit. Re-run with ",
+        "a FIML method (e.g. missing = 'fiml') so all local fits keep every ",
+        "row.",
+        call. = FALSE
+      )
+    }
+  }
+  n <- if (mg) sum(n_g) else n_g
+
+  # -- Resolve each per-latent result to per-row (fsL, fsT, fsb) blocks. --
+  res <- lapply(fs_list, resolve_fs_per_row)
+  pidx <- lapply(res, `[[`, "pattern_idx")
+  blks <- lapply(res, `[[`, "blocks")
+  group_vals <- if (mg) res[[1L]]$group_vals else NULL
+  if (mg) {
+    for (k in seq_len(q)) {
+      if (!identical(res[[k]]$group_vals, group_vals)) {
+        stop(
+          "internal error: per-latent group values differ (local merge).",
+          call. = FALSE
+        )
+      }
+    }
+  }
+  rows_of_group <- if (mg) {
+    lapply(group_labels, function(g) which(group_vals == g))
+  } else {
+    list(seq_len(n))
+  }
+
+  # -- Item order: first appearance across the local models (per-latent
+  #    indicator names from the per-group pattern attributes). --
+  items_by_latent <- vector("list", q)
+  for (k in seq_len(q)) {
+    fp <- attr(df_kg(k, 1L), "fs_pattern")
+    if (is.null(fp) || is.null(fp$pat) || is.null(rownames(fp$pat))) {
+      stop(
+        "internal error: local merge requires the per-group 'fs_pattern' ",
+        "attributes with indicator names.",
+        call. = FALSE
+      )
+    }
+    items_by_latent[[k]] <- rownames(fp$pat)
+  }
+  item_names <- character(0)
+  for (k in seq_len(q)) {
+    item_names <- c(item_names, setdiff(items_by_latent[[k]], item_names))
+  }
+  p_all <- length(item_names)
+  item_pos <- lapply(items_by_latent, match, item_names)
+
+  # -- Per-row scores (one column per latent, in latent order). --
+  score_mx <- matrix(NA_real_, nrow = n, ncol = q)
+  for (k in seq_len(q)) {
+    score_mx[, k] <- unname(as.matrix(res[[k]]$scores))
+  }
+  colnames(score_mx) <- latent_names
+
+  # -- Per-row merged (block-diagonal) blocks. --
+  b_of <- function(k, r) {
+    b <- blks[[k]][[pidx[[k]][r]]]$fsb
+    if (is.null(b)) NA_real_ else as.numeric(b)[1L]
+  }
+  L_row_list <- vector("list", n)
+  T_row_list <- vector("list", n)
+  B_row_list <- vector("list", n)
+  for (r in seq_len(n)) {
+    L_row_list[[r]] <- block_diag(lapply(
+      seq_len(q), function(k) blks[[k]][[pidx[[k]][r]]]$fsL
+    ))
+    T_row_list[[r]] <- block_diag(lapply(
+      seq_len(q), function(k) blks[[k]][[pidx[[k]][r]]]$fsT
+    ))
+    B_row_list[[r]] <- setNames(
+      vapply(seq_len(q), function(k) b_of(k, r), numeric(1L)),
+      fs_names
+    )
+  }
+
+  # -- Per-row scoring matrices (row k = local fit k's a_k, zero-padded to
+  #    all items; all-NA row where that latent could not score the row;
+  #    colnames NULL per the joint-path dimname quirk). --
+  g_of_row <- if (mg) match(group_vals, group_labels) else rep(1L, n)
+  li_of_row <- integer(n)
+  if (mg) {
+    for (g in seq_len(ngroups)) {
+      li_of_row[rows_of_group[[g]]] <-
+        seq_len(length(rows_of_group[[g]]))
+    }
+  } else {
+    li_of_row <- seq_len(n)
+  }
+  sm_kg <- vector("list", q * ngroups)
+  lab_kg <- vector("list", q * ngroups)
+  pat_kg <- vector("list", q * ngroups)
+  for (k in seq_len(q)) {
+    for (g in seq_len(ngroups)) {
+      d <- df_kg(k, g)
+      sm_kg[[(k - 1L) * ngroups + g]] <- attr(d, "scoring_matrix")
+      fp <- attr(d, "fs_pattern")
+      lab_kg[[(k - 1L) * ngroups + g]] <- fp$label
+      pat_kg[[(k - 1L) * ngroups + g]] <- fp$pat
+    }
+  }
+  S_row_list <- vector("list", n)
+  for (r in seq_len(n)) {
+    # Each latent's own items carry its a-matrix; every other latent's items
+    # are 0. Compact: a_k spans all of latent k's items. FIML: a_k spans only
+    # the pattern's observed items (placed there, NA at the latent's missing
+    # items). An unscorable latent (all-NA block) is NA across its items.
+    S_row <- matrix(
+      0, nrow = q, ncol = p_all, dimnames = list(latent_names, NULL)
+    )
+    for (k in seq_len(q)) {
+      idx_kg <- (k - 1L) * ngroups + g_of_row[r]
+      if (all(is.na(blks[[k]][[pidx[[k]][r]]]$fsT))) {
+        S_row[k, item_pos[[k]]] <- NA_real_
+        next
+      }
+      sm <- sm_kg[[idx_kg]]
+      if (is.matrix(sm)) {
+        S_row[k, item_pos[[k]]] <- as.numeric(sm)
+      } else {
+        label_r <- lab_kg[[idx_kg]][li_of_row[r]]
+        pk <- pat_kg[[idx_kg]]
+        m_col <- match(label_r, colnames(pk))
+        obs <- rownames(pk)[as.logical(pk[, m_col, drop = FALSE])]
+        S_row[k, match(obs, item_names)] <- as.numeric(sm[[label_r]])
+        miss_k <- setdiff(items_by_latent[[k]], obs)
+        if (length(miss_k) > 0L) S_row[k, match(miss_k, item_names)] <- NA_real_
+      }
+    }
+    S_row_list[[r]] <- S_row
+  }
+
+  # -- Group-level latent moments (block-diagonal psi, concatenated alpha).
+  psi_g <- vector("list", ngroups)
+  alpha_g <- vector("list", ngroups)
+  names(psi_g) <- names(alpha_g) <- group_labels
+  for (g in seq_len(ngroups)) {
+    psi_g[[g]] <- block_diag(lapply(seq_len(q), function(k) {
+      as.matrix(attr(df_kg(k, g), "psi"))
+    }))
+    alpha_g[[g]] <- do.call(
+      c,
+      lapply(seq_len(q), function(k) as.numeric(attr(df_kg(k, g), "alpha")))
+    )
+  }
+
+  # -- Compact (complete-data) detection: every row of a group carries an
+  #    identical per-latent pattern block (across all latents). --
+  group_compact <- vapply(seq_len(ngroups), function(g) {
+    rows_g <- rows_of_group[[g]]
+    all(vapply(seq_len(q), function(k) {
+      length(unique(pidx[[k]][rows_g])) == 1L
+    }, logical(1L)))
+  }, logical(1L))
+  per_row_mode <- !all(group_compact)
+
+  if (!per_row_mode) {
+    # Compact form: one block per group through the existing assembler
+    # (columns, pattern bookkeeping, and group-column handling included).
+    blocks_by_group <- setNames(vector("list", ngroups), group_labels)
+    for (g in seq_len(ngroups)) {
+      rows_g <- rows_of_group[[g]]
+      r1 <- rows_g[1L]
+      L_g <- L_row_list[[r1]]
+      T_g <- T_row_list[[r1]]
+      # Per-latent observed-indicator patterns (a single pattern per
+      # compact group), merged over all items in first-appearance order.
+      pat_merged <- rep(FALSE, p_all)
+      for (k in seq_len(q)) {
+        fp <- attr(df_kg(k, g), "fs_pattern")
+        pat_merged[item_pos[[k]]] <- as.logical(fp$pat[, 1L, drop = TRUE])
+      }
+      names(pat_merged) <- item_names
+      label_g <- paste(item_names[pat_merged], collapse = "+")
+      S_g <- matrix(0, nrow = q, ncol = p_all, dimnames = list(latent_names, NULL))
+      for (k in seq_len(q)) {
+        sm <- attr(df_kg(k, g), "scoring_matrix")
+        S_g[k, item_pos[[k]]] <- if (is.matrix(sm)) {
+          as.numeric(sm)
+        } else {
+          as.numeric(sm[[1L]])
+        }
+      }
+      fs_g <- as.data.frame(score_mx[rows_g, , drop = FALSE])
+      attr(fs_g, "fsL") <- L_g
+      blocks_by_group[[g]] <- list(
+        list(
+          case_idx = seq_len(length(rows_g)),
+          fs = fs_g,
+          fsT = T_g,
+          fsL = L_g,
+          fsb = B_row_list[[r1]],
+          scoring_matrix = S_g,
+          pat_label = label_g,
+          pat = pat_merged
+        )
+      )
+    }
+    out <- assemble_fs_blocks(
+      blocks_by_group,
+      format = format,
+      group_col = if (mg) group_col else NULL
+    )
+  } else {
+    # Per-row (FIML) form: flat per-row attribute lists + the `per_obs`
+    # marker (the mirt per-obs convention). The output is always a single
+    # data frame (a trailing group column + group_col attribute for MG).
+    k3 <- q + q * q + q * (q + 1L) / 2L
+    vals <- matrix(NA_real_, nrow = n, ncol = k3)
+    for (r in seq_len(n)) {
+      vals[r, ] <- fs_row_cols(
+        data.frame(x = 0L),
+        L_row_list[[r]],
+        T_row_list[[r]],
+        B_row_list[[r]]
+      )[1L, seq_len(k3), drop = FALSE]
+    }
+    se_nm <- paste0(fs_names, "_se")
+    ld_nm <- c(create_fsL_names(latent_names, fs_names))
+    ev_nm <- character(q * (q + 1L) / 2L)
+    count <- 1L
+    for (i in seq_len(q)) {
+      for (j in seq_len(i)) {
+        ev_nm[count] <- if (i == j) {
+          paste0("ev_", fs_names[i])
+        } else {
+          paste0("ecov_", fs_names[i], "_", fs_names[j])
+        }
+        count <- count + 1L
+      }
+    }
+    out <- as.data.frame(
+      cbind(as.matrix(score_mx), vals),
+      check.names = FALSE
+    )
+    colnames(out) <- c(fs_names, se_nm, ld_nm, ev_nm)
+    rownames(out) <- NULL
+    if (mg) {
+      out[[group_col]] <- group_vals
+      attr(out, "group_col") <- group_col
+    }
+    attr(out, "fsT") <- T_row_list
+    attr(out, "fsL") <- L_row_list
+    attr(out, "fsb") <- B_row_list
+    attr(out, "scoring_matrix") <- S_row_list
+    if (mg) {
+      attr(out, "fs_pattern") <- setNames(
+        lapply(n_g, function(m) list(label = seq_len(m), pat = NULL)),
+        group_labels
+      )
+    } else {
+      attr(out, "fs_pattern") <- list(label = seq_len(n), pat = NULL)
+    }
+    attr(out, "per_obs") <- TRUE
+  }
+
+  # Group-level latent moments mirror the fsT shape (see get_fs.lavaan());
+  # per-row (FIML) results are always the single-data-frame ("unified")
+  # shape, so their psi/alpha are list-valued (SG: length-1 list named "").
+  if (format == "unified" || per_row_mode) {
+    attr(out, "psi") <- psi_g
+    attr(out, "alpha") <- alpha_g
+  } else if (ngroups == 1L) {
+    attr(out, "psi") <- psi_g[[1L]]
+    attr(out, "alpha") <- alpha_g[[1L]]
+  } else {
+    for (g in seq_len(ngroups)) {
+      attr(out[[g]], "psi") <- psi_g[[g]]
+      attr(out[[g]], "alpha") <- alpha_g[[g]]
+    }
+    attr(out, "psi") <- psi_g
+    attr(out, "alpha") <- alpha_g
+  }
+  out
 }
 
 get_fs_blocks.lavaan <- function(

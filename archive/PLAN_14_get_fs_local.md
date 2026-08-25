@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-24
 **Owner roles:** `r-architect` (code), `r-tester` (tests), `r-doc` (roxygen/NEWS/vignettes)
-**Status:** draft
+**Status:** implemented (2026-08-24) — decisions D1–D6 delivered as specified; see §9.
 **Blocked by / relates to:** none (benefits from PLAN 13: a local-mode result feeds
 `tspa(model, fs)` directly with no explicit arguments once the `per_obs` marker OR-checks
 land).
@@ -258,6 +258,53 @@ New `tests/testthat/test-get_fs_local.R` (~15-25 `test_that` units; house conven
   operates on single-factor `get_fs()` results via the same column conventions the merged
   object preserves per-factor; its re-integration is unaffected.
 
-## 9. Verification log
+## 9. Verification log (closed 2026-08-24)
 
-(to be filled during implementation)
+**Hook.** `local = FALSE` formal on `get_fs.data.frame()` (R/get_fs_methods.R, before
+`...`); fitted-object guard in the generic (R/get_fscore.R); new internals in
+R/get_fs_methods.R: `get_fs_local()`, `split_local_models()`, `parse_local_statement()`,
+`local_model_syntax_error()`, `merge_local_fs()`; marker OR-checks in R/fs_indiv.R
+(`resolve_fs_per_row` dispatch + `resolve_per_obs()` group-col recovery) and R/tspa.R
+(`is_per_unit_fs` call site, `pool_per_unit` mirt_mg).
+
+**R1 — FIML `scoring_matrix` placement (found in implementation).** Each local latent's
+per-pattern `a`-matrix spans only the pattern's *observed* items; placed at observed-item
+positions, `NA` at that latent's missing items, `0` at other latents' items. Verified on
+empty-pattern and partial-missing edge cases.
+
+**R2 — pre-existing `resolve_group_blocks` bug (found in implementation, fixed at root).**
+The single-pattern (plain-matrix) branch in R/fs_indiv.R routed fully-NA/empty-pattern rows
+to the value block instead of an all-NA block (the multi-pattern branch already handled
+it). Required for local FIML; benefits `fs_indiv()` for all inputs. Full suite: zero
+regressions.
+
+**R3 — parser bugs (found by r-tester, fixed by r-architect).** (a) `local_model_syntax_error()`
+had arity `(line, txt, detail)` while five call sites passed 2–3 detail strings → raw R
+`unused argument` errors; fixed with `...` + concatenation (the seven formerly-clean classes
+stay byte-identical). (b) `parse_local_statement("a =~")`: `strsplit` drops the trailing
+empty field → RHS `NA` → raw `missing value where TRUE/FALSE needed`; fixed by treating
+missing/`NA`/zero-length RHS as the empty-RHS case. All 16 error classes now emit the full
+intended message (stable prefix `"unsupported model syntax on line"` + detail + pointer
+sentence), pinned in the tests (14 prefix pins + 7 class-specific detail fragments).
+
+**A/B numbers.** local ≡ joint(uncorrelated, `ind60 ~~ 0 * dem60`) at 1.16e-5 (tests use
+tolerance 1e-4); free correlation: max score diff observed ~1.52 in the test (plan §1's
+0.369/0.242 are the PoliticalDemocracy 3-factor magnitudes). Scoring-matrix identity exact
+for regression/Bartlett: `score = S %*% (y − colMeans(y))` (per-column centering — the naive
+row-wise `y − colMeans(y)` is wrong under R's column-major recycling); `method = "mean"` →
+`S %*% y` raw. FIML per-row matrices do not naively satisfy the identity (same as the joint
+FIML path) — not pinned.
+
+**Smoke/edge matrix (18/18).** SG equivalence to the cbind pattern (identical scores/SEs);
+block-diagonal attrs; layout pin; MG (per-group block-diagonals, `group.equal`); FIML
+(per-row lists, `per_obs`, all-NA-row blocks, listwise default → clear row-count error,
+`fs_indiv()` dispatch, derived pooled `tspa()` ≡ cbind-of-locals control); vector form
+(verbatim fit incl. within-factor `y1 ~~ y4`); all four guards; `corrected_fsT` A/B;
+`std.lv` (psi diagonal 1); `model = NULL` no-op; downstream `tspa()` derived (zero
+cross-loadings in `tspaModel`), `se_fs`-only, `tspa_mx_model()` accepts the merged `fsL`.
+
+**Tests.** `test-get_fs_local.R`: 18 blocks / 113 expectations, ~4 s (full suite ~74 s).
+Full suite **3720 pass / 0 fail** (3607 baseline + 113; 1 pre-existing warn in
+`test-tspa_mx.R`). `R CMD check` **0 / 0 / 0** (vignettes re-knit; the new
+"Local vs joint scores" section in `multiple-factors.Rmd` verified live: local fit +
+derived `tspa()` fit, zero cross-terms printed).

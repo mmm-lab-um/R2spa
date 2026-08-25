@@ -447,7 +447,8 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     # multigroup detection, name matching, and schema building, so those
     # run on clean per-group (or single) matrices.
     if (is_per_unit_fs(fsT, fsL,
-                       mirt_per_obs = isTRUE(attr(data, "mirt_per_obs")))) {
+                       mirt_per_obs = isTRUE(attr(data, "mirt_per_obs")) ||
+                         isTRUE(attr(data, "per_obs")))) {
       pooled <- pool_per_unit(data, reduce, have_int = !is.null(fsb))
       fsT <- pooled$fsT
       fsL <- pooled$fsL
@@ -645,7 +646,8 @@ pool_per_unit <- function(fs, reduce, have_int) {
   # group (PLAN 11).
   g_vals <- resolved$group_vals
   g_col <- resolved$group_col
-  mirt_mg <- isTRUE(attr(fs, "mirt_per_obs")) &&
+  mirt_mg <- (isTRUE(attr(fs, "mirt_per_obs")) ||
+               isTRUE(attr(fs, "per_obs"))) &&
     is.data.frame(fs) && "group" %in% names(fs)
   if (is.null(g_vals) && mirt_mg) {
     g_col <- "group"

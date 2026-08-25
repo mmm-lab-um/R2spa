@@ -23,6 +23,17 @@
   `fs_<v>`/`fs_<v>_se` score columns; explicit arguments always take
   precedence.
 
+- `get_fs()` gains `local = TRUE`: each latent is scored from its own local
+  measurement model (per-construct stage 1, the canonical 2S-PA setup)
+  instead of the single joint multi-factor model; the merged result carries
+  the usual multi-factor attributes with exactly-zero cross-terms
+  (block-diagonal `fsT`/`fsL`/`psi`, zero `ecov_*` columns) and feeds
+  `tspa()` directly. `model` may be a single string (strict per-latent
+  `=~` grammar) or a character vector / named list of complete single-factor
+  model strings (the escape hatch). `vfsLT` (hence
+  `tspa(corrected_se = TRUE)`), `prior_cov`, and `reliability` are not
+  supported in `local` mode (v1).
+
 ## Improvements
 - The stage-2 model string attached to `tspa()` fits (the `tspaModel`
   attribute) is now rendered with normalized operator spacing (`lhs =~ rhs`,

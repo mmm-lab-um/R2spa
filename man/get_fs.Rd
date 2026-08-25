@@ -14,6 +14,7 @@
   object,
   model = NULL,
   group = NULL,
+  local = FALSE,
   method = c("regression", "Bartlett", "ML", "EB", "mean"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
@@ -68,6 +69,20 @@ See \code{\link[lavaan]{model.syntax}} for more information.}
 \item{group}{Character. Name of the grouping variable for multiple group
 analysis, which is passed to \code{\link[lavaan]{cfa}}.
 Only used when \code{object} is a data frame.}
+
+\item{local}{Logical. When \code{TRUE} (data-frame input only), each latent in
+\code{model} is scored from its own local measurement model — the
+canonical per-construct 2S-PA stage 1 — instead of the single
+joint multi-factor model. \code{model} may be a single string (split
+into per-latent \code{lhs =~ i1 + i2 + ...} statements under a strict
+grammar) or a character vector of length >= 2 (or a named list of
+strings), each element a complete single-factor model string fit
+verbatim (the escape hatch for anything the strict grammar
+rejects, e.g. within-factor residual covariances). See \code{Details}.
+Default \code{FALSE} (the joint model, the current behavior).
+\code{model = NULL} is a no-op (the auto single-factor model is
+trivially local); on a fitted model object (\code{lavaan}, \code{merMod},
+\code{mirt}) an error is raised.}
 
 \item{method}{Character. Method for computing factor scores. For
 \code{lavaan} and data frame objects: \code{"regression"} (default,
@@ -244,6 +259,12 @@ by pattern name.
     indicator names joined with `"+"` in indicator order (e.g.
     `"x1+x3"`).
 
+    With `local = TRUE` and missing data (e.g. `missing = "fiml"`),
+    the `fsT`/`fsL`/`fsb`/`scoring_matrix` attributes are instead
+    per-row lists (one entry per data row) and the result carries a
+    `per_obs = TRUE` attribute (the same convention as mirt's
+    `mirt_per_obs`).
+
     Note: for a single-group lavaan fit in `"unified"` format, the
     per-group attribute wrappers (`fsT`, `fsL`, `fsb`,
     `scoring_matrix`, `psi`, and `alpha`) are each a one-element list
@@ -269,6 +290,65 @@ method is called directly.
 
 \code{get_fs()} replaced \code{get_fs_lavaan()} and \code{get_fs_lmer()}, which are now
 thin wrappers retained for backward compatibility.
+\subsection{Local per-construct scoring (\code{local = TRUE})}{
+
+With \code{local = TRUE} (data-frame input only), each latent in \code{model} is
+scored from its own local single-factor measurement model — the
+canonical per-construct 2S-PA stage 1 — instead of the single joint
+multi-factor model. Two \code{model} forms are accepted:
+\itemize{
+\item a single string, split into per-latent \code{lhs =~ i1 + i2 + ...}
+statements under a strict grammar (\verb{#} comments, \verb{;} statement
+separators, and a trailing \code{+} line continuation are allowed;
+everything else — multi-latent left-hand sides, any \verb{~~} (latent-latent
+or residual covariance), structural \code{~} paths, ordered \verb{|~} statements,
+thresholds \code{$}, labels, \code{c()}, and fixed values — is rejected). The
+error names the offending line and points to the alternatives (joint
+mode, \code{local = FALSE}, or the vector form);
+\item a character vector of length >= 2 (or a named list of strings), each
+element a complete single-factor model string fit verbatim (any
+one-factor \code{lavaan} syntax — the escape hatch for what the strict
+grammar rejects, e.g. within-factor residual covariances). Each element
+must define exactly one latent; latent order is the element order and
+latent names must be unique.
+}
+
+The merged result reproduces the joint layout (same columns, same
+attribute shapes) with exactly-zero cross terms: the \code{fsT}, \code{fsL}, and
+\code{psi} attributes are block-diagonal, and the off-diagonal \verb{_by_} loading
+columns and all \verb{ecov_*} columns are zero. The cross-factor structure is
+not estimated by design.
+
+Local scores are \emph{pure} per-construct. With freely correlated factors
+they differ from the joint-model scores, because a joint fit scores every
+latent from all of the indicators (verified on the 3-factor
+\code{PoliticalDemocracy} example: maximum score difference 0.369 for
+regression and 0.242 for Bartlett scores, and even the joint fit's
+per-factor estimates shift, e.g. \code{psi_ind60} 0.4485 joint vs 0.4455
+local). With the factors constrained uncorrelated (e.g.
+\code{ind60 ~~ 0 * dem60}), the likelihood factorizes and the local and joint
+scores agree to optimizer tolerance (~1e-5).
+
+Missing data: \code{missing = "fiml"} (or any FIML option) is forwarded to
+each local fit; the result then carries per-row attribute lists (\code{fsT},
+\code{fsL}, \code{fsb}, \code{scoring_matrix} with one entry per data row) and a
+\code{per_obs = TRUE} attribute (the same convention as mirt's
+\code{mirt_per_obs}). Listwise deletion is rejected with an error, because
+each local fit would drop a different set of rows.
+
+Not supported in local mode (v1): \code{vfsLT = TRUE} (the separate local
+fits have no cross-latent sampling covariances, so
+\code{tspa(corrected_se = TRUE)} and corrected grand-standardized SEs are not
+available from a local stage 1); \code{prior_cov} (a \verb{q x q} prior cannot be
+reduced to the per-latent priors the local fits use); and
+\code{reliability = TRUE} (the per-latent attribute shape is deferred).
+\code{group}, \code{std.lv}, \code{method}, \code{corrected_fsT}, \code{prior_mean}, and
+\code{sum_items} are supported.
+
+The result is downstream-transparent: it feeds \code{\link[=tspa]{tspa()}} directly (no
+explicit \code{fsT}/\code{fsL} needed) and works through \code{\link[=fs_indiv]{fs_indiv()}} and
+\code{\link[=fs_to_group_list]{fs_to_group_list()}}.
+}
 }
 \examples{
 library(lavaan)
@@ -278,6 +358,25 @@ get_fs(PoliticalDemocracy[c("x1", "x2", "x3")])
 get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
        model = " ind60 =~ x1 + x2 + x3
                  dem60 =~ y1 + y2 + y3 + y4 ")
+
+# Local per-construct scoring: each latent is scored from its own
+# single-factor model (the canonical 2S-PA stage 1) and the results are
+# merged into the usual multi-factor layout
+get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4",
+                            "y5", "y6", "y7", "y8")],
+       model = " ind60 =~ x1 + x2 + x3
+                 dem60 =~ y1 + y2 + y3 + y4
+                 dem65 =~ y5 + y6 + y7 + y8 ",
+       local = TRUE)
+
+# Vector form: one complete single-factor model string per latent, fit
+# verbatim (e.g. a within-factor residual covariance the strict string
+# grammar rejects)
+get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
+       model = c("ind60 =~ x1 + x2 + x3",
+                 "dem60 =~ y1 + y2 + y3 + y4
+                  y1 ~~ y4"),
+       local = TRUE)
 
 # Multiple-group
 hs_model <- ' visual  =~ x1 + x2 + x3 '

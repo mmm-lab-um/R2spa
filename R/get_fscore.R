@@ -17,6 +17,64 @@
 #' `get_fs()` replaced `get_fs_lavaan()` and `get_fs_lmer()`, which are now
 #' thin wrappers retained for backward compatibility.
 #'
+#' ## Local per-construct scoring (`local = TRUE`)
+#'
+#' With `local = TRUE` (data-frame input only), each latent in `model` is
+#' scored from its own local single-factor measurement model — the
+#' canonical per-construct 2S-PA stage 1 — instead of the single joint
+#' multi-factor model. Two `model` forms are accepted:
+#'
+#' - a single string, split into per-latent `lhs =~ i1 + i2 + ...`
+#'   statements under a strict grammar (`#` comments, `;` statement
+#'   separators, and a trailing `+` line continuation are allowed;
+#'   everything else — multi-latent left-hand sides, any `~~` (latent-latent
+#'   or residual covariance), structural `~` paths, ordered `|~` statements,
+#'   thresholds `$`, labels, `c()`, and fixed values — is rejected). The
+#'   error names the offending line and points to the alternatives (joint
+#'   mode, `local = FALSE`, or the vector form);
+#' - a character vector of length >= 2 (or a named list of strings), each
+#'   element a complete single-factor model string fit verbatim (any
+#'   one-factor `lavaan` syntax — the escape hatch for what the strict
+#'   grammar rejects, e.g. within-factor residual covariances). Each element
+#'   must define exactly one latent; latent order is the element order and
+#'   latent names must be unique.
+#'
+#' The merged result reproduces the joint layout (same columns, same
+#' attribute shapes) with exactly-zero cross terms: the `fsT`, `fsL`, and
+#' `psi` attributes are block-diagonal, and the off-diagonal `_by_` loading
+#' columns and all `ecov_*` columns are zero. The cross-factor structure is
+#' not estimated by design.
+#'
+#' Local scores are *pure* per-construct. With freely correlated factors
+#' they differ from the joint-model scores, because a joint fit scores every
+#' latent from all of the indicators (verified on the 3-factor
+#' `PoliticalDemocracy` example: maximum score difference 0.369 for
+#' regression and 0.242 for Bartlett scores, and even the joint fit's
+#' per-factor estimates shift, e.g. `psi_ind60` 0.4485 joint vs 0.4455
+#' local). With the factors constrained uncorrelated (e.g.
+#' `ind60 ~~ 0 * dem60`), the likelihood factorizes and the local and joint
+#' scores agree to optimizer tolerance (~1e-5).
+#'
+#' Missing data: `missing = "fiml"` (or any FIML option) is forwarded to
+#' each local fit; the result then carries per-row attribute lists (`fsT`,
+#' `fsL`, `fsb`, `scoring_matrix` with one entry per data row) and a
+#' `per_obs = TRUE` attribute (the same convention as mirt's
+#' `mirt_per_obs`). Listwise deletion is rejected with an error, because
+#' each local fit would drop a different set of rows.
+#'
+#' Not supported in local mode (v1): `vfsLT = TRUE` (the separate local
+#' fits have no cross-latent sampling covariances, so
+#' `tspa(corrected_se = TRUE)` and corrected grand-standardized SEs are not
+#' available from a local stage 1); `prior_cov` (a `q x q` prior cannot be
+#' reduced to the per-latent priors the local fits use); and
+#' `reliability = TRUE` (the per-latent attribute shape is deferred).
+#' `group`, `std.lv`, `method`, `corrected_fsT`, `prior_mean`, and
+#' `sum_items` are supported.
+#'
+#' The result is downstream-transparent: it feeds [tspa()] directly (no
+#' explicit `fsT`/`fsL` needed) and works through [fs_indiv()] and
+#' [fs_to_group_list()].
+#'
 #' @param object A data frame, a fitted [lavaan] model object, or a fitted
 #'        [lme4::lmer] model object (`merMod`).
 #' @param model An optional string specifying the measurement model
@@ -25,6 +83,19 @@
 #' @param group Character. Name of the grouping variable for multiple group
 #'              analysis, which is passed to \code{\link[lavaan]{cfa}}.
 #'              Only used when `object` is a data frame.
+#' @param local Logical. When `TRUE` (data-frame input only), each latent in
+#'        `model` is scored from its own local measurement model — the
+#'        canonical per-construct 2S-PA stage 1 — instead of the single
+#'        joint multi-factor model. `model` may be a single string (split
+#'        into per-latent `lhs =~ i1 + i2 + ...` statements under a strict
+#'        grammar) or a character vector of length >= 2 (or a named list of
+#'        strings), each element a complete single-factor model string fit
+#'        verbatim (the escape hatch for anything the strict grammar
+#'        rejects, e.g. within-factor residual covariances). See `Details`.
+#'        Default `FALSE` (the joint model, the current behavior).
+#'        `model = NULL` is a no-op (the auto single-factor model is
+#'        trivially local); on a fitted model object (`lavaan`, `merMod`,
+#'        `mirt`) an error is raised.
 #' @param method Character. Method for computing factor scores. For
 #'               `lavaan` and data frame objects: `"regression"` (default,
 #'               consistent with \code{\link[lavaan]{lavPredict}}),
@@ -175,6 +246,12 @@
 #'         indicator names joined with `"+"` in indicator order (e.g.
 #'         `"x1+x3"`).
 #'
+#'         With `local = TRUE` and missing data (e.g. `missing = "fiml"`),
+#'         the `fsT`/`fsL`/`fsb`/`scoring_matrix` attributes are instead
+#'         per-row lists (one entry per data row) and the result carries a
+#'         `per_obs = TRUE` attribute (the same convention as mirt's
+#'         `mirt_per_obs`).
+#'
 #'         Note: for a single-group lavaan fit in `"unified"` format, the
 #'         per-group attribute wrappers (`fsT`, `fsL`, `fsb`,
 #'         `scoring_matrix`, `psi`, and `alpha`) are each a one-element list
@@ -198,6 +275,25 @@
 #'        model = " ind60 =~ x1 + x2 + x3
 #'                  dem60 =~ y1 + y2 + y3 + y4 ")
 #'
+#' # Local per-construct scoring: each latent is scored from its own
+#' # single-factor model (the canonical 2S-PA stage 1) and the results are
+#' # merged into the usual multi-factor layout
+#' get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4",
+#'                             "y5", "y6", "y7", "y8")],
+#'        model = " ind60 =~ x1 + x2 + x3
+#'                  dem60 =~ y1 + y2 + y3 + y4
+#'                  dem65 =~ y5 + y6 + y7 + y8 ",
+#'        local = TRUE)
+#'
+#' # Vector form: one complete single-factor model string per latent, fit
+#' # verbatim (e.g. a within-factor residual covariance the strict string
+#' # grammar rejects)
+#' get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
+#'        model = c("ind60 =~ x1 + x2 + x3",
+#'                  "dem60 =~ y1 + y2 + y3 + y4
+#'                   y1 ~~ y4"),
+#'        local = TRUE)
+#'
 #' # Multiple-group
 #' hs_model <- ' visual  =~ x1 + x2 + x3 '
 #' fit <- cfa(hs_model,
@@ -216,6 +312,21 @@
 #' get_fs(fit, prior_mean = c(visual = -0.12), prior_cov = 0.33)
 
 get_fs <- function(object, ...) {
+  # `local = TRUE` is only defined for the data-frame entry point (the
+  # measurement-model syntax string is what gets split into per-latent
+  # models). A fitted model object is a joint model by construction and
+  # carries no syntax string, so fail fast with an actionable message
+  # instead of silently ignoring the argument in the method's `...`.
+  if (isTRUE(list(...)[["local"]]) &&
+      !is.data.frame(object) && !is.matrix(object)) {
+    stop(
+      "'local = TRUE' is only supported when 'object' is a data frame: ",
+      "a fitted model object (lavaan, merMod, mirt) is a joint model by ",
+      "construction and has no measurement-model syntax string to split ",
+      "into per-latent models.",
+      call. = FALSE
+    )
+  }
   UseMethod("get_fs")
 }
 

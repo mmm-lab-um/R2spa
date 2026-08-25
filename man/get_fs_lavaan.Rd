@@ -165,6 +165,12 @@ by pattern name.
     indicator names joined with `"+"` in indicator order (e.g.
     `"x1+x3"`).
 
+    With `local = TRUE` and missing data (e.g. `missing = "fiml"`),
+    the `fsT`/`fsL`/`fsb`/`scoring_matrix` attributes are instead
+    per-row lists (one entry per data row) and the result carries a
+    `per_obs = TRUE` attribute (the same convention as mirt's
+    `mirt_per_obs`).
+
     Note: for a single-group lavaan fit in `"unified"` format, the
     per-group attribute wrappers (`fsT`, `fsL`, `fsb`,
     `scoring_matrix`, `psi`, and `alpha`) are each a one-element list
@@ -195,6 +201,25 @@ get_fs(PoliticalDemocracy[c("x1", "x2", "x3")])
 get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
        model = " ind60 =~ x1 + x2 + x3
                  dem60 =~ y1 + y2 + y3 + y4 ")
+
+# Local per-construct scoring: each latent is scored from its own
+# single-factor model (the canonical 2S-PA stage 1) and the results are
+# merged into the usual multi-factor layout
+get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4",
+                            "y5", "y6", "y7", "y8")],
+       model = " ind60 =~ x1 + x2 + x3
+                 dem60 =~ y1 + y2 + y3 + y4
+                 dem65 =~ y5 + y6 + y7 + y8 ",
+       local = TRUE)
+
+# Vector form: one complete single-factor model string per latent, fit
+# verbatim (e.g. a within-factor residual covariance the strict string
+# grammar rejects)
+get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
+       model = c("ind60 =~ x1 + x2 + x3",
+                 "dem60 =~ y1 + y2 + y3 + y4
+                  y1 ~~ y4"),
+       local = TRUE)
 
 # Multiple-group
 hs_model <- ' visual  =~ x1 + x2 + x3 '

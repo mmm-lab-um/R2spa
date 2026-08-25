@@ -215,11 +215,13 @@ fs_row_cols <- function(fs, fsL, fsT, fsb = NULL) {
 #   - data frame otherwise             -> lavaan "unified" (or
 #     "list"-format single group: direct matrix/vector attributes)
 resolve_fs_per_row <- function(fs) {
-  # mirt per-observation input (get_fs.SingleGroupClass()): the `mirt_per_obs`
-  # marker is authoritative and is checked FIRST. Each row carries its own
-  # fsL/fsT, so one block is minted per row. The marker is never set on a
-  # lavaan/merMod result, so the branches below are byte-identical to before.
-  if (is.data.frame(fs) && isTRUE(attr(fs, "mirt_per_obs"))) {
+  # Per-observation input: the `mirt_per_obs` (mirt) or `per_obs` (local
+  # FIML merge, PLAN 14) marker is authoritative and is checked FIRST.
+  # Each row carries its own fsL/fsT, so one block is minted per row. The
+  # markers are never set on a lavaan/merMod result, so the branches below
+  # are byte-identical to before.
+  if (is.data.frame(fs) &&
+      (isTRUE(attr(fs, "mirt_per_obs")) || isTRUE(attr(fs, "per_obs")))) {
     return(resolve_per_obs(fs))
   }
   if (is.list(fs) && !is.data.frame(fs)) {
@@ -300,10 +302,24 @@ resolve_per_obs <- function(fs) {
       fsb = fsb_i
     )
   })
+  # A per-row result may carry a `group_col` attribute naming its group
+  # column (local FIML multi-group output, PLAN 14); mirt per-obs results
+  # carry none (their group column, if any, is literally named "group" and
+  # is recovered downstream in pool_per_unit()), so the behavior there is
+  # unchanged.
+  g_col <- attr(fs, "group_col")
+  if (!is.null(g_col) && !(g_col %in% names(fs))) {
+    g_col <- NULL
+  }
+  g_vals <- if (is.null(g_col)) {
+    NULL
+  } else {
+    as.character(fs[[g_col]])
+  }
   make_resolved(
     fs_scores_df(fs, ref_L),
     n, seq_len(n), blocks,
-    group_col = NULL, group_vals = NULL, id_vals = NULL
+    group_col = g_col, group_vals = g_vals, id_vals = NULL
   )
 }
 
@@ -551,6 +567,26 @@ resolve_group_blocks <- function(labels_g, T_g, L_g, b_g) {
   } else {
     blocks[[1L]] <- list(fsL = L_g, fsT = T_g, fsb = b_g)
     pattern_idx[] <- 1L
+    # A single observed pattern can still coexist with fully-NA (empty) rows:
+    # lavaan drops an all-missing case from the pattern set but get_fs() keeps
+    # it with an NA score and a NA pattern label. Route those rows to a
+    # dedicated all-NA block (the same convention as the multi-pattern list
+    # branch above) instead of the single value block.
+    na_rows <- is.na(labels_g)
+    if (any(na_rows)) {
+      blocks[[length(blocks) + 1L]] <- list(
+        fsL = matrix(NA_real_, nrow(L_g), ncol(L_g),
+                     dimnames = dimnames(L_g)),
+        fsT = matrix(NA_real_, nrow(T_g), ncol(T_g),
+                     dimnames = dimnames(T_g)),
+        fsb = if (is.null(b_g) || length(b_g) == 0L) {
+          NULL
+        } else {
+          rep(NA_real_, length(b_g))
+        }
+      )
+      pattern_idx[na_rows] <- length(blocks)
+    }
   }
   list(blocks = blocks, pattern_idx = pattern_idx)
 }
