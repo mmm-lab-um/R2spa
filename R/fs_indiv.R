@@ -8,11 +8,13 @@
 # direct attributes), and merMod (one row per cluster with 3-D
 # per-cluster arrays).
 #
-# All three per-row consumers -- augment_fs() (R/get_fscore.R),
-# augment_fs2() (R/get_fscore_math.R) and fs_indiv() -- source their
-# per-row se/loadings/error values from the shared value-only helper
-# fs_row_cols() defined below, so there is one source of truth for those
-# quantities; each consumer applies its own column naming/layout on top.
+# All per-row consumers -- augment_fs() (R/get_fscore.R), augment_fs2()
+# (R/get_fscore_math.R), fs_indiv(), and the mirt per-obs paths
+# (R/get_fs_methods.R) -- source their per-row se/loadings/error values
+# from the shared value-only helper fs_row_cols() defined below, so there
+# is one source of truth for those quantities. The r2spa column naming is
+# shared through fs_row_colnames(), the naming twin of fs_row_cols();
+# augment_fs2() keeps its own legacy se_*/upper-tri naming on top.
 
 #' Individual-specific (per-row) factor-score definition quantities
 #'
@@ -113,29 +115,14 @@ fs_indiv <- function(fs, include_intercept = FALSE, ...) {
     }
   }
 
-  # Column naming (r2spa convention, identical to augment_fs()):
+  # Column naming: the r2spa convention, shared with augment_fs() and the
+  # mirt per-obs paths via fs_row_colnames() (the naming twin of
+  # fs_row_cols()).
   fs_names <- rownames(ref_L)   # "fs_<factor>" (merMod: "fs_u<k>" / legacy)
-  lv_names <- colnames(ref_L)   # latent / random-effect names
-  se_nm <- paste0(rownames(ref_T), "_se")
-  ld_nm <- character(k_ld)
-  count <- 1L
-  for (j in seq_len(q)) {
-    # column-major over the latents, matching c(as.matrix(ref_L))
-    ld_nm[count:(count + q - 1L)] <- paste(lv_names[j], fs_names, sep = "_by_")
-    count <- count + q
-  }
-  ev_nm <- character(k_ev)
-  count <- 1L
-  for (i in seq_len(q)) {
-    for (j in seq_len(i)) {
-      ev_nm[count] <- if (i == j) {
-        paste0("ev_", rownames(ref_T)[i])
-      } else {
-        paste0("ecov_", rownames(ref_T)[i], "_", colnames(ref_T)[j])
-      }
-      count <- count + 1L
-    }
-  }
+  nm <- fs_row_colnames(ref_L, ref_T)
+  se_nm <- nm$se
+  ld_nm <- nm$ld
+  ev_nm <- nm$ev
   int_nm <- if (has_int) paste0("int_", fs_names) else character(0)
 
   cols <- list(resolved$scores, se_mat, ld_mat, ev_mat)
@@ -203,6 +190,48 @@ fs_row_cols <- function(fs, fsL, fsT, fsb = NULL) {
   # nrow/ncol must both be given: with only nrow, matrix() requires the data
   # length to be a multiple of n, which holds only for single-row patterns.
   matrix(row_vals, nrow = n, ncol = length(row_vals), byrow = TRUE)
+}
+
+# The r2spa per-row column NAMES, the naming twin of fs_row_cols()'s value
+# layout. Returns list(se, ld, ev):
+#   se:  <score>_se, one per score (row order of fsT)
+#   ld:  <latent>_by_<score>, q^2 of them, column-major per latent
+#        (matching c(as.matrix(fsL)))
+#   ev:  ev_<score> / ecov_<score_i>_<score_j>, q*(q+1)/2 of them,
+#        i-outer / j<=i-inner on fsT (row-major lower triangle)
+# Shared by every r2spa-named consumer -- augment_fs() (R/get_fscore.R),
+# fs_indiv() above, and the mirt per-obs paths (R/get_fs_methods.R) -- so
+# the naming scheme has exactly one implementation.
+fs_row_colnames <- function(fsL, fsT) {
+  lv_names <- colnames(fsL)
+  # Canonical score names derived from the latent names (the same rule
+  # score_column_names() uses to locate the score columns); equal to the
+  # fsL rownames for every real get_fs() result.
+  ld_fs_names <- paste0("fs_", lv_names)
+  fs_row <- rownames(fsT)
+  fs_col <- colnames(fsT)
+  q <- ncol(fsT)
+  se_nm <- paste0(fs_row, "_se")
+  ld_nm <- character(q * q)
+  count <- 1L
+  for (j in seq_len(q)) {
+    ld_nm[count:(count + q - 1L)] <- paste(lv_names[j], ld_fs_names,
+                                           sep = "_by_")
+    count <- count + q
+  }
+  ev_nm <- character(q * (q + 1L) / 2L)
+  count <- 1L
+  for (i in seq_len(q)) {
+    for (j in seq_len(i)) {
+      ev_nm[count] <- if (i == j) {
+        paste0("ev_", fs_row[i])
+      } else {
+        paste0("ecov_", fs_row[i], "_", fs_col[j])
+      }
+      count <- count + 1L
+    }
+  }
+  list(se = se_nm, ld = ld_nm, ev = ev_nm)
 }
 
 # Resolve a get_fs() result into (a) the score data frame, (b) one

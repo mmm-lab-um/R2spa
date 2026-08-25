@@ -1790,30 +1790,18 @@ get_fs.SingleGroupClass <- function(object, prior_mean = NULL,
   }
 
   # Assemble the canonical data frame. Column set + order is identical to what
-  # fs_indiv(get_fs(m)) emits: fs_<fn> | fs_<fn>_se | <fn_j>_by_fs_<fn>
-  # (q^2, column-major per latent) | ev_fs_<fn>/ecov_<a>_<b> (lower-tri
-  # row-major, i-outer j<=i). No group/id columns.
+  # fs_indiv(get_fs(m)) emits (shared naming via fs_row_colnames()):
+  # fs_<fn> | fs_<fn>_se | <fn_j>_by_fs_<fn> (q^2, column-major per latent)
+  # | ev_fs_<fn>/ecov_<a>_<b> (lower-tri row-major, i-outer j<=i). No
+  # group/id columns.
   scores_df <- as.data.frame(score_mx)
   colnames(scores_df) <- fs_names
-  se_nm <- paste0(fs_names, "_se")
-  ld_nm <- c(create_fsL_names(fn, fs_names))
-  ev_nm <- character(q * (q + 1L) / 2L)
-  count <- 1L
-  for (i in seq_len(q)) {
-    for (j in seq_len(i)) {
-      ev_nm[count] <- if (i == j) {
-        paste0("ev_", fs_names[i])
-      } else {
-        paste0("ecov_", fs_names[i], "_", fs_names[j])
-      }
-      count <- count + 1L
-    }
-  }
+  nm <- fs_row_colnames(fsL_list[[1L]], fsT_list[[1L]])
   out <- as.data.frame(
     cbind(as.matrix(scores_df), vals),
     check.names = FALSE
   )
-  colnames(out) <- c(fs_names, se_nm, ld_nm, ev_nm)
+  colnames(out) <- c(fs_names, nm$se, nm$ld, nm$ev)
 
   # Per-row attributes + group-level latent moments + the per-obs marker that
   # fs_indiv()'s resolve_per_obs() dispatches on.
@@ -1982,28 +1970,16 @@ get_fs.MultipleGroupClass <- function(object, prior_mean = NULL,
   }
 
   # Assemble the canonical data frame (identical column set + order to the
-  # single-group path), then append the trailing `group` column.
+  # single-group path, shared naming via fs_row_colnames()), then append the
+  # trailing `group` column.
   scores_df <- as.data.frame(score_mx)
   colnames(scores_df) <- fs_names
-  se_nm <- paste0(fs_names, "_se")
-  ld_nm <- c(create_fsL_names(fn, fs_names))
-  ev_nm <- character(q * (q + 1L) / 2L)
-  count <- 1L
-  for (i in seq_len(q)) {
-    for (j in seq_len(i)) {
-      ev_nm[count] <- if (i == j) {
-        paste0("ev_", fs_names[i])
-      } else {
-        paste0("ecov_", fs_names[i], "_", fs_names[j])
-      }
-      count <- count + 1L
-    }
-  }
+  nm <- fs_row_colnames(fsL_list[[1L]], fsT_list[[1L]])
   out <- as.data.frame(
     cbind(as.matrix(scores_df), vals),
     check.names = FALSE
   )
-  colnames(out) <- c(fs_names, se_nm, ld_nm, ev_nm)
+  colnames(out) <- c(fs_names, nm$se, nm$ld, nm$ev)
 
   # The group column: one value per observation; NA for completely-missing rows
   # (which carry no group, mirroring the all-NA row convention).

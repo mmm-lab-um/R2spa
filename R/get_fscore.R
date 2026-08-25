@@ -511,36 +511,12 @@ fs_to_group_list <- function(fs) {
 augment_fs <- function(fs, fs_ev) {
   fsL <- attr(fs, "fsL")
   # Column values (se / loadings / lower-tri error terms) come from the
-  # shared value-only engine fs_row_cols() (R/fs_indiv.R); this function
-  # supplies the r2spa column naming.
+  # shared value-only engine fs_row_cols() (R/fs_indiv.R); the r2spa column
+  # naming comes from its naming twin fs_row_colnames().
   vals <- fs_row_cols(fs, fsL, fs_ev)
-  num_lvs <- ncol(fs_ev)
   colnames(fs) <- paste0("fs_", colnames(fs))
-  fs_se_names <- paste0(rownames(fs_ev), "_se")
-  fs_names <- paste0("fs_", colnames(fsL))
-  # Bare name vector (i-outer over the latents), matching the value order
-  # of the ld block in fs_row_cols() -- c(as.matrix(fsL)), column-major.
-  fs_ld_names <- unlist(lapply(seq_len(ncol(fsL)), function(i) {
-    paste(colnames(fsL)[i], fs_names, sep = "_by_")
-  }), use.names = FALSE)
-  fs_ev_names <- character(num_lvs * (num_lvs + 1) / 2)
-  count <- 1
-  for (i in seq_len(num_lvs)) {
-    for (j in seq_len(i)) {
-      if (i == j) {
-        fs_ev_names[count] <- paste0("ev_", rownames(fs_ev)[i])
-      } else {
-        fs_ev_names[count] <- paste0(
-          "ecov_",
-          rownames(fs_ev)[i],
-          "_",
-          colnames(fs_ev)[j]
-        )
-      }
-      count <- count + 1
-    }
-  }
-  colnames(vals) <- c(fs_se_names, fs_ld_names, fs_ev_names)
+  nm <- fs_row_colnames(fsL, fs_ev)
+  colnames(vals) <- c(nm$se, nm$ld, nm$ev)
   fs_dat <- cbind(
     as.data.frame(fs),
     vals
