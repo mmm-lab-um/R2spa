@@ -15,7 +15,7 @@ joint-model `compute_fs_prod()` / `get_fs(product = )` (2026-08, branch
 `fs_a:fs_b_ld`) are kept.
 
 ## Repository Facts
-- ~2,500 lines of R across 7 files in `R/`; 9 test files in `tests/testthat/`.
+- ~7,500 lines of R across 12 files in `R/`; 21 test files in `tests/testthat/`.
 - `.quarantine/` — quarantined consumers of `get_fs()`/`tspa()` (`R/`, `tests/`,
   `vignettes/`), excluded from the package build via `^\.quarantine$` in `.Rbuildignore`.
   Not part of the build, tests, or docs — never modify package code to match it, and don't
@@ -113,9 +113,15 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
 3. **`get_fscore_math.R`** (~540 lines) — `compute_fscore()`, `augment_lav_predict()`,
    `compute_a*`, `compute_fspars()`, `correct_evfs()`, `compute_evfs()`, `compute_ldfs()`,
    `compute_fsrel()`. Pure math, no S3. Touchpoint for SE bugs, missing data, multigroup.
-4. **`tspa.R`** (~530 lines) — `tspa()` entrypoint; owned partable stage-2 schema
+4. **`tspa.R`** (~1,500 lines) — `tspa()` entrypoint; owned partable stage-2 schema
    (`tspa_schema_sf()`/`tspa_schema_mf()` → `tspa_render()`), product-score auto-alias
-   (`tspa_sf_alias()`); `tspa_sf()`/`tspa_mf()` emit the model string fed to `lavaan::sem()`.
+   (`tspa_sf_alias()`), opt-in `product = TRUE` auto-compute (detects model latents
+   that concatenate two factor scores via `tspa_product_latents()`, computes missing
+   DMC product columns via `compute_fs_prod()` with `tspa_ensure_product_cols()`,
+   joins the pooled product SE into `se_fs` on the sf path, and emits fixed
+   `gamma`/`se_P^2` product rows on the mf path via `prods` in
+   `tspa_schema_mf()`); `tspa_sf()`/`tspa_mf()` emit the model string fed to
+   `lavaan::sem()`.
 5. **`lavaan_compat.R`** (~275 lines) — `tsp_*` wrappers, the only file that reads lavaan
    internals (layout/partable probing, tested-up-to version canary). Currently consumed only
    by its own canary tests (`test-lavaan_compat.R`); its package consumers are quarantined.

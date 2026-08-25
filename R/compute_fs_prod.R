@@ -165,19 +165,7 @@ compute_fs_prod <- function(fs, product) {
   )
   # The latent (co)variance: a plain matrix (list-format single group) or
   # the length-1 list named "" (unified single group).
-  psi_attr <- attr(fs, "psi")
-  if (is.matrix(psi_attr)) {
-    psi <- psi_attr
-  } else if (is.list(psi_attr) && length(psi_attr) == 1L &&
-             identical(names(psi_attr), "") && is.matrix(psi_attr[[1L]])) {
-    psi <- psi_attr[[1L]]
-  } else {
-    stop(
-      "Input carries no usable 'psi' attribute (single-group latent ",
-      "covariance); is it a current get_fs() result?",
-      call. = FALSE
-    )
-  }
+  psi <- fs_psi_matrix(attr(fs, "psi"))
   L1 <- resolved$blocks[[1L]]$fsL
   lv_names <- colnames(L1)
   if (is.null(lv_names) || anyNA(lv_names)) {
@@ -370,4 +358,23 @@ fs_prod_se2 <- function(L, T, psi, i, j) {
 # coefficient of xi_i xi_j in E[P | xi] = (L_i (xi - alpha))(L_j (xi - alpha)).
 fs_prod_gamma <- function(L, i, j) {
   L[i, i] * L[j, j] + L[i, j] * L[j, i]
+}
+
+# Unwrap a get_fs() result's 'psi' attribute to the single-group latent
+# (co)variance matrix: a plain matrix (list-format single group) or the
+# length-1 list named "" (unified single group). Errors informatively on
+# anything else (multi-group per-group lists, missing attribute, ...).
+fs_psi_matrix <- function(psi_attr) {
+  if (is.matrix(psi_attr)) {
+    return(psi_attr)
+  }
+  if (is.list(psi_attr) && length(psi_attr) == 1L &&
+      identical(names(psi_attr), "") && is.matrix(psi_attr[[1L]])) {
+    return(psi_attr[[1L]])
+  }
+  stop(
+    "The input carries no usable single-group 'psi' attribute (latent ",
+    "covariance); is it a current single-group get_fs() result?",
+    call. = FALSE
+  )
 }

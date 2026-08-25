@@ -49,6 +49,18 @@
 - `get_fs()` gains a `product` argument forwarding to `compute_fs_prod()`
    (single-group `lavaan` models only; rejected with `local = TRUE` and for
    multi-group models, v1).
+- `tspa()` gains an opt-in `product` argument (default `FALSE`): when
+   `TRUE`, the double-mean-centered product indicators for every model
+   latent whose name concatenates two of the model's factor scores (e.g.
+   `xm` for `x` and `m`) are computed on the fly and incorporated into the
+   stage-2 measurement model — in the single-factor (score-scale) path the
+   product SE joins `se_fs` (per-group pooled, loading 1, as before), and
+   in the multi-factor path the product latent gets a fixed implied loading
+   `gamma` and fixed error variance `se_P^2` from the (pooled) `fsL`/`fsT`
+   and the `psi` attribute. Single-group models only (v1); not supported
+   with `corrected_se = TRUE`; pre-existing product columns (either
+   orientation) are used as-is, so the manual `get_fs(product = )` +
+   `se_fs` workflow is unchanged.
 
 ## Breaking changes
 - The quarantined student function `get_fs_int()` (and its test file) is

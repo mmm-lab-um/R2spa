@@ -75,6 +75,27 @@
 #' intercepts freely. On data with nonzero `fsb` (e.g. a `mirt` fit) even
 #' the free estimates differ from the no-`fsb` form.
 #'
+#' ## Product-score auto-compute (`product = TRUE`)
+#'
+#' With `product = TRUE`, a model latent whose name concatenates two of
+#' the model's factor scores (e.g. `xm` for `x` and `m`) is treated as a
+#' latent interaction measured by the double-mean-centered product
+#' indicator of the two scores. The product columns are computed on the
+#' fly when absent ([compute_fs_prod()] from the data's stage-1
+#' attributes; pre-existing `fs_a:fs_b` columns — in either orientation —
+#' are used as-is, so a [get_fs()] result with `product` set works too)
+#' and the
+#' product is wired into the stage-2 measurement model: in the
+#' single-factor path the product SE joins `se_fs` (per-group pooled by
+#' `reduce`, the same convention as the score SEs), and in the
+#' multi-factor path the product latent gets a fixed loading `gamma` and
+#' fixed error variance `se_P^2` from the (pooled) `fsL`/`fsT`/`psi`.
+#' Rejected with an informative error (v1): multigroup models,
+#' `corrected_se = TRUE`, and data without stage-1 attributes that lacks
+#' the product columns (e.g. a `cbind()`'d [get_fs()] result — compute the
+#' product columns up front or pass the un-`cbind()`'d result). A model
+#' variable matching two different factor-score pairs is an error.
+#'
 #' @param model A string variable describing the structural path model,
 #'              in \code{lavaan} syntax.
 #' @param data A data frame containing factor scores. When `data` is a
@@ -166,6 +187,24 @@
 #'            `fsL`/`fsT` free elements to propagate through the corrected
 #'            covariance (see [vcov_corrected()]); used only when
 #'            `corrected_se = TRUE`.
+#' @param product A logical; when `TRUE`, [tspa()] automatically computes
+#'            the double-mean-centered product indicators (via
+#'            [compute_fs_prod()]) for every latent in `model` whose name
+#'            concatenates two of the model's factor scores (e.g. the
+#'            latent `xm` is the product of the scores of `x` and `m`) and
+#'            incorporates them into the stage-2 measurement model, so
+#'            `tspa("y ~ x + m + xm", data = get_fs(...), product = TRUE)`
+#'            needs no pre-computed product columns. In the single-factor
+#'            (score-scale) path the product latent loads 1 on its
+#'            indicator with error variance the (per-group pooled,
+#'            `reduce`) product SE, like every other single-factor latent;
+#'            in the multi-factor path it loads with the implied loading
+#'            `gamma` and error variance `se_P^2`, both evaluated at the
+#'            (pooled) `fsL`/`fsT` with the `psi` attribute. Single-group
+#'            models only (v1); not supported with `corrected_se = TRUE`.
+#'            Default `FALSE`, which leaves the manual workflow
+#'            ([get_fs()] with `product` set, or [compute_fs_prod()], up
+#'            front, the product SE in `se_fs`) unchanged.
 #' @param ... Additional arguments passed to \code{\link[lavaan]{sem}}. See
 #'            \code{\link[lavaan]{lavOptions}} for a complete list.
 #' @return An object of class \code{lavaan} carrying the following
@@ -321,12 +360,34 @@
 #' fs_mer <- get_fs(lmod)
 #' tspa("u1 ~ u0", data = fs_mer,
 #'      fsT = attr(fs_mer, "fsT"), fsL = attr(fs_mer, "fsL"))
+#'
+#' # Product-score auto-compute (opt-in): the model's `xm` latent is the
+#' # product of the `x` and `m` scores, computed on the fly from the
+#' # data's stage-1 attributes (no pre-computed product columns needed)
+#' set.seed(2116)
+#' covx <- matrix(c(1, 0.4, 0.4, 1), 2)
+#' eta <- as.data.frame(MASS::mvrnorm(500, rep(0, 2), covx))
+#' names(eta) <- c("x", "m")
+#' lk <- list(x = c(0.9, 0.8, 0.7), m = c(0.85, 0.75, 0.65),
+#'            y = c(0.75, 0.7, 0.65))
+#' etay <- 0.5 * eta$x + 0.4 * eta$m + 0.3 * eta$x * eta$m
+#' obs <- setNames(lapply(c("x", "m"), function(v0) {
+#'   eta[[v0]] %*% t(lk[[v0]]) + rnorm(1500)
+#' }), c("x", "m"))
+#' obs$y <- etay %*% t(lk$y) + rnorm(1500)
+#' df <- as.data.frame(do.call(cbind, obs))
+#' names(df) <- c(paste0("x", 1:3), paste0("m", 1:3), paste0("y", 1:3))
+#' fs_prod <- get_fs(df, model = "x =~ x1 + x2 + x3
+#'                     m =~ m1 + m2 + m3
+#'                     y =~ y1 + y2 + y3", std.lv = TRUE)
+#' tspa("y ~ x + m + xm", data = fs_prod, product = TRUE)
 
 
 tspa <- function(model, data, reliability = NULL, se = "standard",
                  se_fs = NULL, fsT = NULL, fsL = NULL, fsb = NULL,
                  reduce = c("mean", "median"),
                  vfsLT = NULL, corrected_se = FALSE, which_free = NULL,
+                 product = FALSE,
                  ...) {
   reduce <- match.arg(reduce)
   # Set when the per-unit fsT/fsL/fsb attributes were collapsed to a single
@@ -344,6 +405,17 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
   if (!is.character(se)) {
     warning("using `se` to set se for factor scores is deprecated. ",
             "use `se_fs` instead.")
+  }
+  if (!is.logical(product) || length(product) != 1L || is.na(product)) {
+    stop("'product' must be a single TRUE/FALSE value.", call. = FALSE)
+  }
+  if (isTRUE(corrected_se) && isTRUE(product)) {
+    stop(
+      "'corrected_se = TRUE' is not supported with 'product = TRUE' ",
+      "(v1): the product indicator's stage-1 uncertainty is not ",
+      "propagated by the delta-method correction.",
+      call. = FALSE
+    )
   }
 
   # PLAN 13: capture before the coercion below (a missing `se_fs` becomes a
@@ -538,6 +610,36 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     if (multigroup && is.null(list(...)[["group"]])) {
       stop("Please specify 'group = ' to fit a multigroup model in lavaan.")
     }
+    # Opt-in product-score auto-compute: for each model latent whose name
+    # concatenates two of this model's factor scores (e.g. `xm` for `x`
+    # and `m`), ensure the DMC product columns exist and the product SE
+    # enters se_fs. The score-scale convention of this path is unchanged:
+    # the product latent loads 1 on its indicator, error = the (pooled)
+    # product SE, like every other single-factor latent.
+    if (isTRUE(product)) {
+      prods <- tspa_product_latents(model, names(data), colnames(se_fs))
+      if (!is.null(prods)) {
+        if (multigroup) {
+          stop(
+            "'product = TRUE' is not supported for multigroup models ",
+            "(v1: single-group only).",
+            call. = FALSE
+          )
+        }
+        data <- tspa_ensure_product_cols(data, prods)
+        for (k in seq_len(nrow(prods))) {
+          v <- prods$v[k]
+          if (v %in% colnames(se_fs)) next
+          se_col <- tspa_product_se_col(data, prods$a[k], prods$b[k])
+          se_v <- if (nrow(se_fs) > 1L) {
+            pool_se_col(data, se_col, reduce, sf_group_col)
+          } else {
+            pool_se_col(data, se_col, reduce)
+          }
+          se_fs[[v]] <- se_v
+        }
+      }
+    }
     # Product-score columns (compute_fs_prod: `fs_a:fs_b`) are not valid
     # lavaan variable names; the schema's generated model name for latent
     # `v` is `fs_v`, so a matching product-score column is aliased into a
@@ -546,7 +648,62 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     data <- tspa_sf_alias(data, se_fs)$data
     tspaModel <- tspa_sf(model, data, se_fs)
   } else { # multi-factor measurement model
-    tspaModel <- tspa_mf(model, data, fsT, fsL, fsb)
+    # Opt-in product-score auto-compute, multi-factor path: the product
+    # latent loads on its DMC indicator with the implied loading `gamma`
+    # (the true-latent scale of this path) and error variance `se_P^2`,
+    # both evaluated at the (pooled) fsL/fsT with the psi attribute.
+    prods_mf <- NULL
+    if (isTRUE(product)) {
+      if (is.list(fsT) && length(fsT) > 1L) {
+        stop(
+          "'product = TRUE' is not supported for multigroup models ",
+          "(v1: single-group only).",
+          call. = FALSE
+        )
+      }
+      L1 <- if (is.list(fsL)) fsL[[1L]] else fsL
+      dat_names <- if (is.data.frame(data)) names(data) else names(data[[1L]])
+      prods <- tspa_product_latents(model, dat_names, colnames(L1))
+      if (!is.null(prods)) {
+        if (!is.data.frame(data)) {
+          stop(
+            "'product = TRUE' requires a single-group data-frame 'data'; ",
+            "a list of per-group data frames is not supported (v1).",
+            call. = FALSE
+          )
+        }
+        T1 <- if (is.list(fsT)) fsT[[1L]] else fsT
+        psi <- fs_psi_matrix(attr(data, "psi"))
+        data <- tspa_ensure_product_cols(data, prods)
+        ld_vals <- numeric(nrow(prods))
+        se2_vals <- numeric(nrow(prods))
+        for (k in seq_len(nrow(prods))) {
+          i <- match(prods$a[k], colnames(L1))
+          j <- match(prods$b[k], colnames(L1))
+          ld_vals[k] <- fs_prod_gamma(L1, i, j)
+          se2_vals[k] <- fs_prod_se2(L1, T1, psi, i, j)
+        }
+        prods_mf <- data.frame(
+          v = prods$v, ld = ld_vals, se2 = se2_vals,
+          stringsAsFactors = FALSE
+        )
+        for (k in seq_len(nrow(prods))) {
+          tgt <- paste0("fs_", prods$v[k])
+          src <- tspa_product_col(data, prods$a[k], prods$b[k])
+          if (is.na(src)) {
+            stop(
+              "The model references the product latent '", prods$v[k],
+              "' but the data has no matching product-score column.",
+              call. = FALSE
+            )
+          }
+          if (!(tgt %in% names(data))) {
+            data[[tgt]] <- data[[src]]
+          }
+        }
+      }
+    }
+    tspaModel <- tspa_mf(model, data, fsT, fsL, fsb, prods_mf)
     if (inherits(data, "list")) {
       data <- do.call(rbind, data)
     }
@@ -573,7 +730,7 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     list(model = model, data = data, reliability = reliability, se = se,
          se_fs = se_fs, fsT = fsT, fsL = fsL, fsb = fsb, reduce = reduce,
          vfsLT = vfsLT, corrected_se = corrected_se,
-         which_free = which_free),
+         which_free = which_free, product = product),
     list(...)
   )
   attr(tspa_fit, "tspa_call") <- match.call()
@@ -798,29 +955,172 @@ pooled_fsT_min_eigen <- function(T_mat) {
   min(eigen(T_mat, symmetric = TRUE, only.values = TRUE)$values)
 }
 
+# Per-group reduction of one materialized `<se_col>` column of a get_fs()
+# result: a scalar (no group column), or one value per group in the
+# stage-2 group order. `rows` restricts the reduction to a row subset
+# (pool_se_fs() pools each group through it).
+pool_se_col <- function(data, se_col, reduce, group_col = NULL, rows = NULL) {
+  reduce_fn <- if (reduce == "median") stats::median else mean
+  x <- data[[se_col]]
+  if (!is.null(rows)) {
+    return(reduce_fn(x[rows], na.rm = TRUE))
+  }
+  if (is.null(group_col)) {
+    return(reduce_fn(x, na.rm = TRUE))
+  }
+  gvals <- data[[group_col]]
+  gnames <- fs_group_order(gvals)
+  # unname: vapply names the result with a character input's values
+  unname(vapply(gnames, function(g) reduce_fn(x[gvals == g], na.rm = TRUE),
+                numeric(1)))
+}
+
 # Per-group reduction of the materialized `fs_<v>_se` columns of a get_fs()
 # result (single-factor FIML): one row per group (group order of the
 # data's group column) with the per-latent pooled se; a numeric vector
 # without a group column.
 pool_se_fs <- function(data, se_names, reduce, group_col) {
-  reduce_fn <- if (reduce == "median") stats::median else mean
   if (is.null(group_col)) {
     return(vapply(se_names, function(v) {
-      reduce_fn(data[[paste0("fs_", v, "_se")]], na.rm = TRUE)
+      pool_se_col(data, paste0("fs_", v, "_se"), reduce)
     }, numeric(1)))
   }
   gvals <- data[[group_col]]
   gnames <- fs_group_order(gvals)
   out <- do.call(rbind, lapply(gnames, function(g) {
-    rows_g <- gvals == g
     vals <- vapply(se_names, function(v) {
-      reduce_fn(data[[paste0("fs_", v, "_se")]][rows_g], na.rm = TRUE)
+      pool_se_col(data, paste0("fs_", v, "_se"), reduce,
+                  rows = (gvals == g))
     }, numeric(1))
     data.frame(t(vals), check.names = FALSE)
   }))
   colnames(out) <- se_names
   rownames(out) <- gnames
   out
+}
+
+# ---------------------------------------------------------------------------
+# Product-score auto-compute (opt-in `product = TRUE`): the product latents
+# a model string names, the missing product columns, and the per-pair
+# column lookups shared by the single- and multi-factor paths.
+# ---------------------------------------------------------------------------
+
+# The product latents a model string names: an identifier token of the
+# model that is (a) not a column of the data, (b) not a numeric value, and
+# (c) the concatenation of two distinct known factor scores (e.g. `xm` for
+# `x` and `m`). Tokens that fail (c) (labels, unknown names, ...) are
+# ignored — a genuinely unknown model variable still fails later in lavaan,
+# as before product support. A known factor score that is also a
+# concatenation is a product latent only when the data has no score column
+# for it (a present `fs_v` column means the regular latent wins and there
+# is nothing to compute). A candidate matching two DIFFERENT pairs is
+# ambiguous and errors. Returns a data frame (v, a, b) or NULL when no
+# product latent is named.
+tspa_product_latents <- function(model, data_names, known) {
+  mtxt <- sub("(?m)#.*$", "", paste(model, collapse = "\n"), perl = TRUE)
+  toks <- unique(unlist(strsplit(mtxt, "[^A-Za-z0-9_.]+")))
+  toks <- toks[nzchar(toks)]
+  cand <- setdiff(toks, data_names)
+  cand <- cand[!grepl("^[+-]?[0-9]+(\\.[0-9]*)?([eE][+-]?[0-9]+)?$", cand)]
+  known <- unique(known)
+  prods <- list()
+  for (v in cand) {
+    # A known factor score with this name wins over the product reading
+    # whenever the data carries its score column.
+    if (v %in% known && paste0("fs_", v) %in% data_names) next
+    hits <- list()
+    for (i in seq_along(known)) {
+      for (j in seq_along(known)) {
+        if (i == j) next
+        if (paste0(known[i], known[j]) == v) {
+          hits[[length(hits) + 1L]] <- c(known[i], known[j])
+        }
+      }
+    }
+    if (length(hits) == 0L) next
+    keys <- vapply(hits, function(p) paste(p, collapse = ":"), character(1))
+    if (length(unique(keys)) > 1L) {
+      stop(
+        "Cannot determine which factor-score pair the model variable '",
+        v, "' is the product of (",
+        paste(unique(keys), collapse = ", "),
+        "). Rename it to disambiguate.",
+        call. = FALSE
+      )
+    }
+    p1 <- hits[[1L]]
+    prods[[length(prods) + 1L]] <- c(v = v, a = p1[1L], b = p1[2L])
+  }
+  if (length(prods) == 0L) {
+    return(NULL)
+  }
+  data.frame(
+    v = vapply(prods, function(p) p["v"], character(1)),
+    a = vapply(prods, function(p) p["a"], character(1)),
+    b = vapply(prods, function(p) p["b"], character(1)),
+    stringsAsFactors = FALSE
+  )
+}
+
+# The existing product-score column of the pair (a, b) in the data, in
+# EITHER orientation (`fs_a:fs_b` or `fs_b:fs_a`; a user may have computed
+# either), NA when absent.
+tspa_product_col <- function(data, a, b) {
+  cands <- c(paste0("fs_", a, ":fs_", b), paste0("fs_", b, ":fs_", a))
+  hit <- intersect(cands, names(data))
+  if (length(hit) == 0L) NA_character_ else hit[1L]
+}
+
+# The existing product-SE column of the pair (a, b), NA when absent.
+tspa_product_se_col <- function(data, a, b) {
+  cl <- tspa_product_col(data, a, b)
+  if (is.na(cl)) return(NA_character_)
+  paste0(cl, "_se")
+}
+
+# Ensure the DMC product columns for the pairs named by `prods` exist in
+# `data`: a pair missing its column in both orientations is computed via
+# compute_fs_prod() (which validates the input and rejects multigroup,
+# merMod, per-observation, and attribute-less data informatively). The
+# new columns are created in canonical (sorted) pair order. Data without
+# the stage-1 attributes (e.g. a cbind()ed get_fs() result, which drops
+# them) cannot be auto-computed and is rejected with the remedy.
+tspa_ensure_product_cols <- function(data, prods) {
+  pairs <- unique(prods[, c("a", "b"), drop = FALSE])
+  missing <- vapply(
+    seq_len(nrow(pairs)),
+    function(k) is.na(tspa_product_col(data, pairs$a[k], pairs$b[k])),
+    logical(1)
+  )
+  if (any(missing)) {
+    if (is.null(attr(data, "fsL")) || is.null(attr(data, "fsT")) ||
+        is.null(attr(data, "psi"))) {
+      stop(
+        "Cannot auto-compute the product column(s) for ",
+        paste(vapply(
+          seq_len(nrow(pairs))[missing],
+          function(k) paste(sort(c(pairs$a[k], pairs$b[k])),
+                            collapse = ":"),
+          character(1)
+        ), collapse = ", "),
+        ": the data lacks the stage-1 attributes (fsL/fsT/psi) that a ",
+        "direct single-group get_fs() result carries (a cbind()ed result ",
+        "drops them). Pre-compute the product columns with get_fs(product = ) ",
+        "or compute_fs_prod(), or pass the un-cbind()ed get_fs() result.",
+        call. = FALSE
+      )
+    }
+    spec <- paste(
+      vapply(
+        seq_len(nrow(pairs))[missing],
+        function(k) paste(sort(c(pairs$a[k], pairs$b[k])), collapse = ":"),
+        character(1)
+      ),
+      collapse = " + "
+    )
+    data <- compute_fs_prod(data, product = spec)
+  }
+  data
 }
 
 # Stage-2 group order (PLAN 13): the unique values of the group column in
@@ -952,8 +1252,10 @@ tspa_schema_sf <- function(model, se) {
 # Multi-factor (fsT/fsL/fsb) schema: per latent, one struct row per score
 # term and per group; error rows follow the lower triangle (incl. diagonal)
 # of fsT in column-major order — the legacy per-group value routing made
-# explicit and unit-testable; per-score intercept rows when fsb is given.
-tspa_schema_mf <- function(model, fsT, fsL, fsb) {
+# explicit and unit-testable; per-score intercept rows when fsb is given;
+# product-indicator rows when `prods` is given (one fixed loading row and
+# one fixed error-variance row per product latent, single-group v1).
+tspa_schema_mf <- function(model, fsT, fsL, fsb, prods = NULL) {
   # `fsT`/`fsL` are plain matrices for a single-group model or named lists
   # of them for a multigroup model. Single-group unified get_fs() output
   # carries length-1 list attributes, so either shape is accepted on either
@@ -1017,6 +1319,23 @@ tspa_schema_mf <- function(model, fsT, fsL, fsb) {
           fs[i], "~", "1", B_list[[g]][i], g, "intercept", lab
         )
       }
+    }
+  }
+  # Product indicators: the DMC product column `fs_v` (aliased from
+  # `fs_a:fs_b` upstream) is a single fixed indicator of the product
+  # latent — loading `gamma`, error variance `se_P^2`, evaluated at the
+  # (pooled) matrices upstream (single-group v1, hence group 1).
+  if (!is.null(prods)) {
+    for (k in seq_len(nrow(prods))) {
+      fv <- paste0("fs_", prods$v[k])
+      rows[[length(rows) + 1L]] <- tspa_row(
+        prods$v[k], "=~", fv, prods$ld[k], 1L, "struct",
+        paste0("__r2spa_pld", k, "__")
+      )
+      rows[[length(rows) + 1L]] <- tspa_row(
+        fv, "~~", fv, prods$se2[k], 1L, "error_var",
+        paste0("__r2spa_pev", k, "__")
+      )
     }
   }
   do.call(rbind, rows)
@@ -1156,8 +1475,8 @@ tspa_sf <- function(model, data, se = NULL) {
   }
 }
 
-tspa_mf <- function(model, data, fsT, fsL, fsb) {
-  tspa_render(tspa_schema_mf(model, fsT, fsL, fsb), style = "mf")
+tspa_mf <- function(model, data, fsT, fsL, fsb, prods = NULL) {
+  tspa_render(tspa_schema_mf(model, fsT, fsL, fsb, prods), style = "mf")
 }
 
 # ---------------------------------------------------------------------------
