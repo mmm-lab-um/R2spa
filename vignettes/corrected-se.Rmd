@@ -2,7 +2,7 @@
 title: "Corrected Standard Errors"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{corrected-se}
+  %\VignetteIndexEntry{Corrected Standard Errors}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 header-includes:
@@ -57,13 +57,13 @@ model <- '
 ```{r}
 cfa_ind60 <- cfa("ind60 =~ x1 + x2 + x3", data = PoliticalDemocracy)
 # Regression factor scores
-fs1 <- get_fs_lavaan(cfa_ind60, vfsLT = TRUE)
+fs1 <- get_fs(cfa_ind60, vfsLT = TRUE, format = "list")
 # Delta method variance of (loading, error variance)
 vldev1 <- attr(fs1, which = "vfsLT")
 cfa_dem60 <- cfa("dem60 =~ y1 + y2 + y3 + y4",
                  data = PoliticalDemocracy)
 # Regression factor scores
-fs2 <- get_fs_lavaan(cfa_dem60, vfsLT = TRUE)
+fs2 <- get_fs(cfa_dem60, vfsLT = TRUE, format = "list")
 # Delta method variance of (loading, error variance)
 vldev2 <- attr(fs2, which = "vfsLT")
 fs_dat <- data.frame(
