@@ -237,4 +237,11 @@ fit <- cfa("visual =~ x1 + x2 + x3",
            data = HolzingerSwineford1939,
            group = "school", group.equal = c("loadings", "intercepts"))
 get_fs(fit, prior_mean = c(visual = -0.12), prior_cov = 0.33)
+
+# Product-score indicator for the ind60 x dem60 interaction (single-group
+# lavaan models only, v1); see compute_fs_prod() for the derivation
+get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
+       model = " ind60 =~ x1 + x2 + x3
+                 dem60 =~ y1 + y2 + y3 + y4 ",
+       product = "ind60:dem60")
 }

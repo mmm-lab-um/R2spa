@@ -538,11 +538,11 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     if (multigroup && is.null(list(...)[["group"]])) {
       stop("Please specify 'group = ' to fit a multigroup model in lavaan.")
     }
-    # Product-score columns (get_fs_int: `fs_a:fs_b`) are not valid lavaan
-    # variable names; the schema's generated model name for latent `v` is
-    # `fs_v`, so a matching product-score column is aliased into a working
-    # copy of the data. Manual pre-renames keep working (the alias is a
-    # no-op when `fs_v` already exists).
+    # Product-score columns (compute_fs_prod: `fs_a:fs_b`) are not valid
+    # lavaan variable names; the schema's generated model name for latent
+    # `v` is `fs_v`, so a matching product-score column is aliased into a
+    # working copy of the data. Manual pre-renames keep working (the alias
+    # is a no-op when `fs_v` already exists).
     data <- tspa_sf_alias(data, se_fs)$data
     tspaModel <- tspa_sf(model, data, se_fs)
   } else { # multi-factor measurement model
@@ -1161,11 +1161,11 @@ tspa_mf <- function(model, data, fsT, fsL, fsb) {
 }
 
 # ---------------------------------------------------------------------------
-# Product-score (get_fs_int) auto-alias: the schema's generated model name
-# for latent `v` is `fs_v`; a data column `fs_a:fs_b` (a,b latent names in
-# se_fs) whose names concatenate to `v` is copied into the working data as
-# `fs_v`. Old user models that pre-rename the product-score column keep
-# working because the alias is a no-op when `fs_v` already exists.
+# Product-score (compute_fs_prod) auto-alias: the schema's generated model
+# name for latent `v` is `fs_v`; a data column `fs_a:fs_b` (a,b latent
+# names in se_fs) whose names concatenate to `v` is copied into the working
+# data as `fs_v`. Old user models that pre-rename the product-score column
+# keep working because the alias is a no-op when `fs_v` already exists.
 # ---------------------------------------------------------------------------
 
 tspa_sf_alias <- function(data, se) {

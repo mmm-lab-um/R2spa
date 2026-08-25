@@ -75,6 +75,15 @@
 #' explicit `fsT`/`fsL` needed) and works through [fs_indiv()] and
 #' [fs_to_group_list()].
 #'
+#' ## Product-score indicators (`product`)
+#'
+#' When `product` is supplied, [get_fs()] computes the double-mean-centered
+#' product indicator columns (`fs_a:fs_b`), their standard errors
+#' (`fs_a:fs_b_se`) and their implied loadings (`fs_a:fs_b_ld`) via
+#' [compute_fs_prod()] and appends them to the result; see
+#' [compute_fs_prod()] for the derivation. Single-group lavaan models only
+#' (v1); not supported with `local = TRUE`.
+#'
 #' @param object A data frame, a fitted [lavaan] model object, or a fitted
 #'        [lme4::lmer] model object (`merMod`).
 #' @param model An optional string specifying the measurement model
@@ -172,6 +181,14 @@
 #'        supplied list must cover all model factors, and each item may
 #'        belong to only one sum. Only used for `lavaan` and data frame
 #'        objects with `method = "mean"`.
+#' @param product A character string of the form `"a:b + c:d"` (pairs of
+#'        distinct latent names) or a list of length-2 latent-name pairs.
+#'        When supplied, [get_fs()] computes the double-mean-centered
+#'        product indicator columns (`fs_a:fs_b`), their standard errors
+#'        (`fs_a:fs_b_se`) and their implied loadings (`fs_a:fs_b_ld`) via
+#'        [compute_fs_prod()] and appends them to the result; see
+#'        [compute_fs_prod()] for the derivation. Single-group lavaan
+#'        models only (v1); not supported with `local = TRUE`.
 #' @param format Output format when `object` is a lavaan or merMod object.
 #'        `"unified"` (default) returns a single data frame; for multiple
 #'        groups it carries a `group` column and attributes `fsT`, `fsL`,
@@ -310,6 +327,13 @@
 #'            data = HolzingerSwineford1939,
 #'            group = "school", group.equal = c("loadings", "intercepts"))
 #' get_fs(fit, prior_mean = c(visual = -0.12), prior_cov = 0.33)
+#'
+#' # Product-score indicator for the ind60 x dem60 interaction (single-group
+#' # lavaan models only, v1); see compute_fs_prod() for the derivation
+#' get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
+#'        model = " ind60 =~ x1 + x2 + x3
+#'                  dem60 =~ y1 + y2 + y3 + y4 ",
+#'        product = "ind60:dem60")
 
 get_fs <- function(object, ...) {
   # `local = TRUE` is only defined for the data-frame entry point (the
