@@ -152,20 +152,15 @@ Bootstrap Standard Errors
 
 ```{r, eval = FALSE, echo = TRUE}
 run_tspa <- function(df, inds) {
-  fs_ind60 <- get_fs(object = df[inds, ], model = "ind60 =~ x1 + x2 + x3",
-                     se = "none", test = "none")
-  fs_dem60 <- get_fs(object = df[inds, ], model = "dem60 =~ y1 + y2 + y3 + y4",
-                     se = "none", test = "none")
-  fs_dat <- cbind(fs_ind60, fs_dem60)
-  # Assemble loadings
-  ld <- block_diag(attr(fs_ind60, which = "fsL"),
-                   attr(fs_dem60, which = "fsL"))
-  ev <- block_diag(attr(fs_ind60, which = "fsT"),
-                   attr(fs_dem60, which = "fsT"))
+  # local = TRUE: score each latent from its own (separate) measurement model
+  fs_dat <- get_fs(object = df[inds, ],
+                   model = "ind60 =~ x1 + x2 + x3
+                            dem60 =~ y1 + y2 + y3 + y4",
+                   local = TRUE,
+                   se = "none", test = "none")
+  # tspa() reads fsL/fsT/fsb and the per-score SEs from the get_fs() result
   tspa_fit <- tspa(model = "dem60 ~ ind60",
                    data = fs_dat,
-                   fsL = ld,
-                   fsT = ev,
                    test = "none")
   coef(tspa_fit)
 }
@@ -230,10 +225,9 @@ run_tspa2 <- function(df, inds) {
                      model = "ind60 =~ x1 + x2 + x3
                               dem60 =~ y1 + y2 + y3 + y4",
                      se = "none", test = "none")
+  # tspa() reads fsL/fsT/fsb and the per-score SEs from the get_fs() result
   tspa_fit2 <- tspa(model = "dem60 ~ ind60",
                     data = fs_joint,
-                    fsT = attr(fs_joint, "fsT"),
-                    fsL = attr(fs_joint, "fsL"),
                     test = "none")
   coef(tspa_fit2)
 }
