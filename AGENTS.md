@@ -28,9 +28,11 @@ joint-model `compute_fs_prod()` / `get_fs(product = )` (2026-08, branch
     re-integrated to `vignettes/` when `tspa(corrected_se)` gained multigroup support and the
     corrected grand-standardized SE path (2026-08). `get_fs_int.R` (latent interaction)
     and its test file were **deleted** (2026-08, branch `rejoin/fs-prod`) — superseded by
-    `R/compute_fs_prod.R` / `get_fs(product = )` with the same column conventions; the
-    quarantined `get_fs_int-vignette.Rmd`/`categorical-interaction.Rmd` vignettes remain
-    stale (not built) pending a later rewrite. The `tspa()` `tspa_args` attribute
+     `R/compute_fs_prod.R` / `get_fs(product = )` with the same column conventions; the
+     quarantined `get_fs_int-vignette.Rmd` vignette was rewritten on top of
+     `compute_fs_prod()` / `get_fs(product = )` / `tspa(product = TRUE)` (2026-08-26) but
+     is still not built (pending re-integration); `categorical-interaction.Rmd` remains
+     stale. The `tspa()` `tspa_args` attribute
    (self-contained evaluated argument list) and the `tsp_set_vcov()` lavaan-compat boundary
    (the single `@vcov[["vcov"]]` write behind `corrected_se`) are staying-code features
    consumed by the now-package-internal `vcov_corrected()`.
@@ -115,13 +117,18 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
    `compute_fsrel()`. Pure math, no S3. Touchpoint for SE bugs, missing data, multigroup.
 4. **`tspa.R`** (~1,500 lines) — `tspa()` entrypoint; owned partable stage-2 schema
    (`tspa_schema_sf()`/`tspa_schema_mf()` → `tspa_render()`), product-score auto-alias
-   (`tspa_sf_alias()`), opt-in `product = TRUE` auto-compute (detects model latents
-   that concatenate two factor scores via `tspa_product_latents()`, computes missing
-   DMC product columns via `compute_fs_prod()` with `tspa_ensure_product_cols()`,
-   joins the pooled product SE into `se_fs` on the sf path, and emits fixed
-   `gamma`/`se_P^2` product rows on the mf path via `prods` in
-   `tspa_schema_mf()`); `tspa_sf()`/`tspa_mf()` emit the model string fed to
-   `lavaan::sem()`.
+    (`tspa_sf_alias()`), opt-in `product = TRUE` auto-compute (detects model
+    latents naming the product of two factor scores — concatenated (`xm`) or
+    lavaan interaction syntax (`x:m`, rewritten to the render name
+    `xm` via `tspa_rewrite_product_toks()`; a non-score `a:b` passes
+    through to lavaan) — via `tspa_product_latents()`, computes missing
+    DMC product columns via `compute_fs_prod()` with
+    `tspa_ensure_product_cols()`, joins the pooled product SE into `se_fs`
+    on the sf path (an explicit product SE may be keyed by the `a:b`
+    token, stored check.names()-ed as `x.m`), and emits fixed
+    `gamma`/`se_P^2` product rows on the mf path via `prods` in
+    `tspa_schema_mf()`); `tspa_sf()`/`tspa_mf()` emit the model string fed to
+    `lavaan::sem()`.
 5. **`lavaan_compat.R`** (~275 lines) — `tsp_*` wrappers, the only file that reads lavaan
    internals (layout/partable probing, tested-up-to version canary). Currently consumed only
    by its own canary tests (`test-lavaan_compat.R`); its package consumers are quarantined.
@@ -152,7 +159,9 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
 `R/compute_fs_prod.R` (2026-08, branch `rejoin/fs-prod`);
 `tspa_corrected_se.R` (`vcov_corrected()`), `grandStandardizedSolution.R`
 (multigroup standardization), and `tspa_mx.R`/`tspa_mx_model()` (OpenMx) were re-integrated
-to `R/` earlier in 2026-08. Only stale vignettes remain in `.quarantine/vignettes/`.
+to `R/` earlier in 2026-08. `.quarantine/vignettes/` holds the rewritten
+`get_fs_int-vignette.Rmd` (2026-08-26, pending re-integration), the still-stale
+`categorical-interaction.Rmd`, and `reliability.Rmd` (+ `sim_results_reliability.RDS`).
 
 ## General Instruction
 Trust and follow the rules above exactly. Never hand-edit `NAMESPACE` or `man/*.Rd`, never call

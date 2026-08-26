@@ -77,24 +77,32 @@
 #'
 #' ## Product-score auto-compute (`product = TRUE`)
 #'
-#' With `product = TRUE`, a model latent whose name concatenates two of
-#' the model's factor scores (e.g. `xm` for `x` and `m`) is treated as a
-#' latent interaction measured by the double-mean-centered product
-#' indicator of the two scores. The product columns are computed on the
-#' fly when absent ([compute_fs_prod()] from the data's stage-1
-#' attributes; pre-existing `fs_a:fs_b` columns — in either orientation —
-#' are used as-is, so a [get_fs()] result with `product` set works too)
-#' and the
-#' product is wired into the stage-2 measurement model: in the
-#' single-factor path the product SE joins `se_fs` (per-group pooled by
-#' `reduce`, the same convention as the score SEs), and in the
-#' multi-factor path the product latent gets a fixed loading `gamma` and
-#' fixed error variance `se_P^2` from the (pooled) `fsL`/`fsT`/`psi`.
-#' Rejected with an informative error (v1): multigroup models,
-#' `corrected_se = TRUE`, and data without stage-1 attributes that lacks
-#' the product columns (e.g. a `cbind()`'d [get_fs()] result — compute the
-#' product columns up front or pass the un-`cbind()`'d result). A model
-#' variable matching two different factor-score pairs is an error.
+#' With `product = TRUE`, a model latent that names the product of two of
+#' the model's factor scores is treated as a latent interaction measured
+#' by the double-mean-centered product indicator of the two scores. The
+#' pair may be named by concatenation (`xm` for `x` and `m`) or in
+#' lavaan's interaction syntax (`x:m`); the interaction-syntax form is
+#' rewritten to the concatenated render name, because in the generated
+#' model `x:m` would be parsed by lavaan as an interaction of the (latent)
+#' variables. An `a:b` token whose parts are not both factor scores (e.g.
+#' `x:g` with `g` an observed covariate) is not claimed and is passed
+#' through to lavaan as an ordinary interaction. The product columns are
+#' computed on the fly when absent ([compute_fs_prod()] from the data's
+#' stage-1 attributes; pre-existing `fs_a:fs_b` columns — in either
+#' orientation — are used as-is, so a [get_fs()] result with `product` set
+#' works too) and the product is wired into the stage-2 measurement model:
+#' in the single-factor path the product SE joins `se_fs` (per-group
+#' pooled by `reduce`, the same convention as the score SEs; an explicit
+#' product SE may be keyed by either the render name `xm` or the token
+#' `x:m`), and in the multi-factor path the product latent gets a fixed
+#' loading `gamma` and fixed error variance `se_P^2` from the (pooled)
+#' `fsL`/`fsT`/`psi`. Rejected with an informative error (v1): multigroup
+#' models, `corrected_se = TRUE`, and data without stage-1 attributes that
+#' lacks the product columns (e.g. a `cbind()`'d [get_fs()] result —
+#' compute the product columns up front or pass the un-`cbind()`'d
+#' result). A model variable matching two different factor-score pairs,
+#' the same pair named twice (`x:m` and `xm`), or a render name colliding
+#' with another model variable, is an error.
 #'
 #' @param model A string variable describing the structural path model,
 #'              in \code{lavaan} syntax.
@@ -189,11 +197,13 @@
 #'            `corrected_se = TRUE`.
 #' @param product A logical; when `TRUE`, [tspa()] automatically computes
 #'            the double-mean-centered product indicators (via
-#'            [compute_fs_prod()]) for every latent in `model` whose name
-#'            concatenates two of the model's factor scores (e.g. the
-#'            latent `xm` is the product of the scores of `x` and `m`) and
-#'            incorporates them into the stage-2 measurement model, so
-#'            `tspa("y ~ x + m + xm", data = get_fs(...), product = TRUE)`
+#'            [compute_fs_prod()]) for every latent in `model` that names
+#'            the product of two of the model's factor scores — by
+#'            concatenation (the latent `xm` is the product of the scores
+#'            of `x` and `m`) or in lavaan's interaction syntax (`x:m`,
+#'            rendered under the concatenated name) — and incorporates
+#'            them into the stage-2 measurement model, so
+#'            `tspa("y ~ x + m + x:m", data = get_fs(...), product = TRUE)`
 #'            needs no pre-computed product columns. In the single-factor
 #'            (score-scale) path the product latent loads 1 on its
 #'            indicator with error variance the (per-group pooled,
@@ -361,9 +371,10 @@
 #' tspa("u1 ~ u0", data = fs_mer,
 #'      fsT = attr(fs_mer, "fsT"), fsL = attr(fs_mer, "fsL"))
 #'
-#' # Product-score auto-compute (opt-in): the model's `xm` latent is the
-#' # product of the `x` and `m` scores, computed on the fly from the
-#' # data's stage-1 attributes (no pre-computed product columns needed)
+#' # Product-score auto-compute (opt-in): the model's `x:m` latent is the
+#' # product of the `x` and `m` scores (rendered under the concatenated
+#' # name `xm`), computed on the fly from the data's stage-1 attributes
+#' # (no pre-computed product columns needed)
 #' set.seed(2116)
 #' covx <- matrix(c(1, 0.4, 0.4, 1), 2)
 #' eta <- as.data.frame(MASS::mvrnorm(500, rep(0, 2), covx))
@@ -380,7 +391,7 @@
 #' fs_prod <- get_fs(df, model = "x =~ x1 + x2 + x3
 #'                     m =~ m1 + m2 + m3
 #'                     y =~ y1 + y2 + y3", std.lv = TRUE)
-#' tspa("y ~ x + m + xm", data = fs_prod, product = TRUE)
+#' tspa("y ~ x + m + x:m", data = fs_prod, product = TRUE)
 
 
 tspa <- function(model, data, reliability = NULL, se = "standard",
@@ -610,12 +621,14 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     if (multigroup && is.null(list(...)[["group"]])) {
       stop("Please specify 'group = ' to fit a multigroup model in lavaan.")
     }
-    # Opt-in product-score auto-compute: for each model latent whose name
-    # concatenates two of this model's factor scores (e.g. `xm` for `x`
-    # and `m`), ensure the DMC product columns exist and the product SE
-    # enters se_fs. The score-scale convention of this path is unchanged:
-    # the product latent loads 1 on its indicator, error = the (pooled)
-    # product SE, like every other single-factor latent.
+    # Opt-in product-score auto-compute: for each model latent that names
+    # the product of two of this model's factor scores — concatenated
+    # (`xm` for `x` and `m`) or in lavaan interaction syntax (`x:m`,
+    # rendered under the concatenated name) — ensure the DMC product
+    # columns exist and the product SE enters se_fs. The score-scale
+    # convention of this path is unchanged: the product latent loads 1 on
+    # its indicator, error = the (pooled) product SE, like every other
+    # single-factor latent.
     if (isTRUE(product)) {
       prods <- tspa_product_latents(model, names(data), colnames(se_fs))
       if (!is.null(prods)) {
@@ -625,6 +638,18 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
             "(v1: single-group only).",
             call. = FALSE
           )
+        }
+        model <- tspa_rewrite_product_toks(model, prods)
+        # An explicit product SE keyed by the model token (`x:m`) is
+        # renamed to the render name (`xm`) the generated model uses.
+        # The token column survived the as.data.frame() coercion as a
+        # check.names() name (`x.m`), so match that form.
+        for (k in seq_len(nrow(prods))) {
+          tk <- make.names(prods$tok[k])
+          if (prods$tok[k] != prods$v[k] && tk %in% colnames(se_fs)) {
+            se_fs[[prods$v[k]]] <- se_fs[[tk]]
+            se_fs[[tk]] <- NULL
+          }
         }
         data <- tspa_ensure_product_cols(data, prods)
         for (k in seq_len(nrow(prods))) {
@@ -649,9 +674,11 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     tspaModel <- tspa_sf(model, data, se_fs)
   } else { # multi-factor measurement model
     # Opt-in product-score auto-compute, multi-factor path: the product
-    # latent loads on its DMC indicator with the implied loading `gamma`
-    # (the true-latent scale of this path) and error variance `se_P^2`,
-    # both evaluated at the (pooled) fsL/fsT with the psi attribute.
+    # latent (named by concatenation or lavaan interaction syntax, as in
+    # the single-factor path) loads on its DMC indicator with the implied
+    # loading `gamma` (the true-latent scale of this path) and error
+    # variance `se_P^2`, both evaluated at the (pooled) fsL/fsT with the
+    # psi attribute.
     prods_mf <- NULL
     if (isTRUE(product)) {
       if (is.list(fsT) && length(fsT) > 1L) {
@@ -672,6 +699,7 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
             call. = FALSE
           )
         }
+        model <- tspa_rewrite_product_toks(model, prods)
         T1 <- if (is.list(fsT)) fsT[[1L]] else fsT
         psi <- fs_psi_matrix(attr(data, "psi"))
         data <- tspa_ensure_product_cols(data, prods)
@@ -1005,28 +1033,54 @@ pool_se_fs <- function(data, se_names, reduce, group_col) {
 # column lookups shared by the single- and multi-factor paths.
 # ---------------------------------------------------------------------------
 
-# The product latents a model string names: an identifier token of the
-# model that is (a) not a column of the data, (b) not a numeric value, and
-# (c) the concatenation of two distinct known factor scores (e.g. `xm` for
-# `x` and `m`). Tokens that fail (c) (labels, unknown names, ...) are
-# ignored — a genuinely unknown model variable still fails later in lavaan,
-# as before product support. A known factor score that is also a
-# concatenation is a product latent only when the data has no score column
-# for it (a present `fs_v` column means the regular latent wins and there
-# is nothing to compute). A candidate matching two DIFFERENT pairs is
-# ambiguous and errors. Returns a data frame (v, a, b) or NULL when no
+# The product latents a model string names. An identifier token of the
+# model (a data column or a numeric value is never one) is a product latent
+# in either form:
+#   (a) lavaan interaction syntax `a:b` — a single token with non-empty
+#       parts, both distinct known factor scores; it renders under the
+#       concatenated name `ab`, because in the generated model `a:b` would
+#       be parsed by lavaan as an interaction of the (latent) variables;
+#   (b) the concatenation of two distinct known factor scores (e.g. `xm`
+#       for `x` and `m`).
+# Tokens that are neither (a label, an unknown name, an `a:b` token whose
+# parts are not both factor scores — passed through to lavaan as an
+# ordinary interaction — ...) are ignored: a genuinely unknown model
+# variable still fails later in lavaan, as before product support. A known
+# factor score that is also a concatenation is a product latent only when
+# the data has no score column for it (a present `fs_v` column means the
+# regular latent wins and there is nothing to compute). A candidate
+# matching two DIFFERENT pairs is ambiguous and errors, as is a model that
+# names the same pair twice (`x:m` and `xm`) or whose render name collides
+# with another model variable. Returns a data frame (tok, v, a, b) — `tok`
+# the model token as written, `v` the render name — or NULL when no
 # product latent is named.
 tspa_product_latents <- function(model, data_names, known) {
   mtxt <- sub("(?m)#.*$", "", paste(model, collapse = "\n"), perl = TRUE)
-  toks <- unique(unlist(strsplit(mtxt, "[^A-Za-z0-9_.]+")))
+  # `:` is kept inside tokens (the interaction syntax `a:b`); everything
+  # else non-name splits.
+  toks <- unique(unlist(strsplit(mtxt, "[^A-Za-z0-9_.:]+")))
   toks <- toks[nzchar(toks)]
   cand <- setdiff(toks, data_names)
   cand <- cand[!grepl("^[+-]?[0-9]+(\\.[0-9]*)?([eE][+-]?[0-9]+)?$", cand)]
   known <- unique(known)
   prods <- list()
   for (v in cand) {
-    # A known factor score with this name wins over the product reading
-    # whenever the data carries its score column.
+    # Form (a): `a:b`.
+    m <- regmatches(
+      v, regexec("^([A-Za-z0-9_.]+):([A-Za-z0-9_.]+)$", v, perl = TRUE)
+    )[[1L]]
+    if (length(m) == 3L) {
+      a <- m[2L]
+      b <- m[3L]
+      if (a != b && a %in% known && b %in% known) {
+        prods[[length(prods) + 1L]] <-
+          c(tok = v, v = paste0(a, b), a = a, b = b)
+      }
+      next
+    }
+    # Form (b): the concatenation of two known factor scores. A known
+    # factor score with this name wins over the product reading whenever
+    # the data carries its score column.
     if (v %in% known && paste0("fs_", v) %in% data_names) next
     hits <- list()
     for (i in seq_along(known)) {
@@ -1049,17 +1103,66 @@ tspa_product_latents <- function(model, data_names, known) {
       )
     }
     p1 <- hits[[1L]]
-    prods[[length(prods) + 1L]] <- c(v = v, a = p1[1L], b = p1[2L])
+    prods[[length(prods) + 1L]] <- c(tok = v, v = v, a = p1[1L], b = p1[2L])
   }
   if (length(prods) == 0L) {
     return(NULL)
   }
-  data.frame(
+  df <- data.frame(
+    tok = vapply(prods, function(p) p["tok"], character(1)),
     v = vapply(prods, function(p) p["v"], character(1)),
     a = vapply(prods, function(p) p["a"], character(1)),
     b = vapply(prods, function(p) p["b"], character(1)),
     stringsAsFactors = FALSE
   )
+  # The same pair named twice (`x:m` and `xm`) would render two model
+  # variables with the same name.
+  pair_keys <- vapply(
+    seq_len(nrow(df)),
+    function(k) paste(sort(c(df$a[k], df$b[k])), collapse = ":"),
+    character(1)
+  )
+  if (any(duplicated(pair_keys))) {
+    dups <- df$tok[duplicated(pair_keys) |
+                      duplicated(pair_keys, fromLast = TRUE)]
+    stop(
+      "The model names the same factor-score pair more than once (",
+      paste(unique(dups), collapse = ", "),
+      "). Name it once.",
+      call. = FALSE
+    )
+  }
+  # A render name colliding with another model variable (e.g. a stage-1
+  # latent called `xm` while the model also names `x:m`) would silently
+  # merge two latents.
+  for (k in seq_len(nrow(df))) {
+    if (df$v[k] != df$tok[k] &&
+        df$v[k] %in% setdiff(toks, c(df$tok[k], data_names))) {
+      stop(
+        "The render name '", df$v[k], "' of the product latent '",
+        df$tok[k], "' collides with another variable of the model. ",
+        "Rename the pair.",
+        call. = FALSE
+      )
+    }
+  }
+  df
+}
+
+# Rewrite the model string's product tokens to their render names (form
+# (a) tokens only; form (b) tokens already are their render names). The
+# token is matched as a whole model variable: its boundaries are
+# non-name characters.
+tspa_rewrite_product_toks <- function(model, prods) {
+  for (k in seq_len(nrow(prods))) {
+    if (identical(prods$tok[k], prods$v[k])) next
+    esc <- gsub(".", "\\\\.", prods$tok[k], fixed = TRUE)
+    model <- gsub(
+      paste0("(?<![A-Za-z0-9_.])", esc, "(?![A-Za-z0-9_.])"),
+      prods$v[k], model, perl = TRUE
+    )
+  }
+  model
 }
 
 # The existing product-score column of the pair (a, b) in the data, in

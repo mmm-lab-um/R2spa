@@ -127,11 +127,13 @@ covariance (see \code{\link[=vcov_corrected]{vcov_corrected()}}); used only when
 
 \item{product}{A logical; when \code{TRUE}, \code{\link[=tspa]{tspa()}} automatically computes
 the double-mean-centered product indicators (via
-\code{\link[=compute_fs_prod]{compute_fs_prod()}}) for every latent in \code{model} whose name
-concatenates two of the model's factor scores (e.g. the
-latent \code{xm} is the product of the scores of \code{x} and \code{m}) and
-incorporates them into the stage-2 measurement model, so
-\code{tspa("y ~ x + m + xm", data = get_fs(...), product = TRUE)}
+\code{\link[=compute_fs_prod]{compute_fs_prod()}}) for every latent in \code{model} that names
+the product of two of the model's factor scores — by
+concatenation (the latent \code{xm} is the product of the scores
+of \code{x} and \code{m}) or in lavaan's interaction syntax (\code{x:m},
+rendered under the concatenated name) — and incorporates
+them into the stage-2 measurement model, so
+\code{tspa("y ~ x + m + x:m", data = get_fs(...), product = TRUE)}
 needs no pre-computed product columns. In the single-factor
 (score-scale) path the product latent loads 1 on its
 indicator with error variance the (per-group pooled,
@@ -250,24 +252,32 @@ the free estimates differ from the no-\code{fsb} form.
 
 \subsection{Product-score auto-compute (\code{product = TRUE})}{
 
-With \code{product = TRUE}, a model latent whose name concatenates two of
-the model's factor scores (e.g. \code{xm} for \code{x} and \code{m}) is treated as a
-latent interaction measured by the double-mean-centered product
-indicator of the two scores. The product columns are computed on the
-fly when absent (\code{\link[=compute_fs_prod]{compute_fs_prod()}} from the data's stage-1
-attributes; pre-existing \code{fs_a:fs_b} columns — in either orientation —
-are used as-is, so a \code{\link[=get_fs]{get_fs()}} result with \code{product} set works too)
-and the
-product is wired into the stage-2 measurement model: in the
-single-factor path the product SE joins \code{se_fs} (per-group pooled by
-\code{reduce}, the same convention as the score SEs), and in the
-multi-factor path the product latent gets a fixed loading \code{gamma} and
-fixed error variance \code{se_P^2} from the (pooled) \code{fsL}/\code{fsT}/\code{psi}.
-Rejected with an informative error (v1): multigroup models,
-\code{corrected_se = TRUE}, and data without stage-1 attributes that lacks
-the product columns (e.g. a \code{cbind()}'d \code{\link[=get_fs]{get_fs()}} result — compute the
-product columns up front or pass the un-\code{cbind()}'d result). A model
-variable matching two different factor-score pairs is an error.
+With \code{product = TRUE}, a model latent that names the product of two of
+the model's factor scores is treated as a latent interaction measured
+by the double-mean-centered product indicator of the two scores. The
+pair may be named by concatenation (\code{xm} for \code{x} and \code{m}) or in
+lavaan's interaction syntax (\code{x:m}); the interaction-syntax form is
+rewritten to the concatenated render name, because in the generated
+model \code{x:m} would be parsed by lavaan as an interaction of the (latent)
+variables. An \code{a:b} token whose parts are not both factor scores (e.g.
+\code{x:g} with \code{g} an observed covariate) is not claimed and is passed
+through to lavaan as an ordinary interaction. The product columns are
+computed on the fly when absent (\code{\link[=compute_fs_prod]{compute_fs_prod()}} from the data's
+stage-1 attributes; pre-existing \code{fs_a:fs_b} columns — in either
+orientation — are used as-is, so a \code{\link[=get_fs]{get_fs()}} result with \code{product} set
+works too) and the product is wired into the stage-2 measurement model:
+in the single-factor path the product SE joins \code{se_fs} (per-group
+pooled by \code{reduce}, the same convention as the score SEs; an explicit
+product SE may be keyed by either the render name \code{xm} or the token
+\code{x:m}), and in the multi-factor path the product latent gets a fixed
+loading \code{gamma} and fixed error variance \code{se_P^2} from the (pooled)
+\code{fsL}/\code{fsT}/\code{psi}. Rejected with an informative error (v1): multigroup
+models, \code{corrected_se = TRUE}, and data without stage-1 attributes that
+lacks the product columns (e.g. a \code{cbind()}'d \code{\link[=get_fs]{get_fs()}} result —
+compute the product columns up front or pass the un-\code{cbind()}'d
+result). A model variable matching two different factor-score pairs,
+the same pair named twice (\code{x:m} and \code{xm}), or a render name colliding
+with another model variable, is an error.
 }
 }
 \examples{
@@ -399,9 +409,10 @@ fs_mer <- get_fs(lmod)
 tspa("u1 ~ u0", data = fs_mer,
      fsT = attr(fs_mer, "fsT"), fsL = attr(fs_mer, "fsL"))
 
-# Product-score auto-compute (opt-in): the model's `xm` latent is the
-# product of the `x` and `m` scores, computed on the fly from the
-# data's stage-1 attributes (no pre-computed product columns needed)
+# Product-score auto-compute (opt-in): the model's `x:m` latent is the
+# product of the `x` and `m` scores (rendered under the concatenated
+# name `xm`), computed on the fly from the data's stage-1 attributes
+# (no pre-computed product columns needed)
 set.seed(2116)
 covx <- matrix(c(1, 0.4, 0.4, 1), 2)
 eta <- as.data.frame(MASS::mvrnorm(500, rep(0, 2), covx))
@@ -418,5 +429,5 @@ names(df) <- c(paste0("x", 1:3), paste0("m", 1:3), paste0("y", 1:3))
 fs_prod <- get_fs(df, model = "x =~ x1 + x2 + x3
                     m =~ m1 + m2 + m3
                     y =~ y1 + y2 + y3", std.lv = TRUE)
-tspa("y ~ x + m + xm", data = fs_prod, product = TRUE)
+tspa("y ~ x + m + x:m", data = fs_prod, product = TRUE)
 }

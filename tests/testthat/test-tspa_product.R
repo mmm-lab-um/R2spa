@@ -1,9 +1,11 @@
 # tspa(product = TRUE) -- opt-in product-score auto-compute
 #
 # With product = TRUE, tspa() computes the double-mean-centered product
-# indicators for every model latent whose name concatenates two of the
-# model's factor scores (e.g. `xm` for `x` and `m`) and wires them into
-# the stage-2 measurement model: the single-factor (score-scale) path
+# indicators for every model latent that names the product of two of the
+# model's factor scores -- by concatenation (`xm` for `x` and `m`) or in
+# lavaan's interaction syntax (`x:m`, rendered under the concatenated name)
+# -- and wires them into the stage-2 measurement model: the single-factor
+# (score-scale) path
 # joins the (pooled) product SE into se_fs (loading 1, like every other
 # single-factor latent); the multi-factor path adds a fixed loading
 # gamma and fixed error variance se_P^2 (from the (pooled) fsL/fsT and
@@ -85,6 +87,64 @@ test_that("tspa_product_latents() strips comments and rejects ambiguous candidat
   expect_error(
     tspa_product_latents("y ~ abc", c("y"), c("y", "a", "bc", "ab", "c")),
     "Cannot determine which factor-score pair"
+  )
+})
+
+test_that("tspa_product_latents() detects a:b interaction-syntax tokens", {
+  prods <- tspa_product_latents(
+    "y ~ x + m + z + x:m + x:z + m:z",
+    c("y", "fs_x", "x1"), c("y", "x", "m", "z")
+  )
+  expect_equal(prods$tok, c("x:m", "x:z", "m:z"))
+  expect_equal(prods$v, c("xm", "xz", "mz"))
+  expect_equal(sort(prods$a), c("m", "x", "x"))
+  expect_equal(sort(prods$b), c("m", "z", "z"))
+})
+
+test_that("tspa_product_latents() leaves non-product a:b tokens alone and rejects conflicts", {
+  # `x:g` with g not a factor score: a genuine lavaan interaction,
+  # passed through (not claimed)
+  expect_null(tspa_product_latents("y ~ x + m + x:g",
+                                   c("y"), c("y", "x", "m")))
+  # `x:x` is a squared term in lavaan, not a same-factor product
+  expect_null(tspa_product_latents("y ~ x + m + x:x",
+                                   c("y"), c("y", "x", "m")))
+  # a statement label (`b1:`) is not a product token
+  expect_null(tspa_product_latents("b1: y ~ x + m",
+                                   c("y"), c("y", "x", "m")))
+  # the same pair named twice (`x:m` and `xm`) is an error
+  expect_error(
+    tspa_product_latents("y ~ x + m + x:m + xm", c("y"), c("y", "x", "m")),
+    "names the same factor-score pair more than once"
+  )
+  # a render name colliding with another model variable is an error
+  # (`xm` is a regular latent here: its score column is present)
+  expect_error(
+    tspa_product_latents("y ~ x + m + xm + x:m", c("y", "fs_xm"),
+                         c("y", "x", "m", "xm")),
+    "collides with another variable"
+  )
+})
+
+test_that("tspa_rewrite_product_toks() rewrites whole model variables only", {
+  prods <- tspa_product_latents(
+    "y ~ x + m + z + x:m + x:z", c("y"), c("y", "x", "m", "z"))
+  expect_identical(
+    tspa_rewrite_product_toks("y ~ x + m + z + x:m + x:z", prods),
+    "y ~ x + m + z + xm + xz"
+  )
+  # a longer token containing the product token is untouched
+  prods2 <- tspa_product_latents(
+    "y ~ xx:m + x:m", c("y"), c("y", "x", "xx", "m"))
+  expect_identical(
+    tspa_rewrite_product_toks("y ~ xx:m + x:m", prods2),
+    "y ~ xxm + xm"
+  )
+  # concatenated tokens (form b) need no rewrite
+  prods3 <- tspa_product_latents("y ~ x + m + xm", c("y"), c("y", "x", "m"))
+  expect_identical(
+    tspa_rewrite_product_toks("y ~ x + m + xm", prods3),
+    "y ~ x + m + xm"
   )
 })
 
@@ -369,7 +429,95 @@ test_that("product = TRUE rejects multigroup, corrected_se, and attribute-less d
 })
 
 # ---------------------------------------------------------------------------
-# Group 7: pool_se_col() / pool_se_fs() refactor regression
+# Group 7: lavaan interaction syntax (`a:b` product latents)
+# ---------------------------------------------------------------------------
+
+test_that("sf: a:b syntax fits identically to the concatenated syntax", {
+  df <- prod_setup()
+  for (method in c("regression", "Bartlett")) {
+    fs_plain <- get_fs(df, model = prod_model, std.lv = TRUE,
+                       method = method)
+    se_reg <- c(y = fs_plain[1, "fs_y_se"], x = fs_plain[1, "fs_x_se"],
+                m = fs_plain[1, "fs_m_se"], z = fs_plain[1, "fs_z_se"])
+    fit_colon <- suppressWarnings(
+      tspa("y ~ x + m + z + x:m + x:z + m:z", data = fs_plain,
+           se_fs = se_reg, product = TRUE)
+    )
+    fit_concat <- suppressWarnings(
+      tspa("y ~ x + m + z + xm + xz + mz", data = fs_plain,
+           se_fs = se_reg, product = TRUE)
+    )
+    expect_identical(attr(fit_colon, "tspaModel"),
+                     attr(fit_concat, "tspaModel"),
+                     info = paste("model string,", method))
+    expect_equal(coef(fit_colon), coef(fit_concat),
+                 info = paste("coefs,", method))
+    expect_equal(vcov(fit_colon), vcov(fit_concat),
+                 info = paste("vcov,", method))
+  }
+})
+
+test_that("sf: an explicit product se_fs may be keyed by the a:b token", {
+  df <- prod_setup()
+  fs_prod <- get_fs(df, model = prod_model, std.lv = TRUE,
+                    method = "Bartlett", product = "x:m")
+  se_reg <- c(y = fs_prod[1, "fs_y_se"], x = fs_prod[1, "fs_x_se"],
+              m = fs_prod[1, "fs_m_se"], z = fs_prod[1, "fs_z_se"])
+  # keyed by the model token (as.data.frame() stores it as `x.m`)
+  fit_tok <- suppressWarnings(tspa(
+    "y ~ x + m + z + x:m", data = fs_prod,
+    se_fs = c(se_reg, "x:m" = 0.11), product = TRUE))
+  # keyed by the render name
+  fit_nm <- suppressWarnings(tspa(
+    "y ~ x + m + z + xm", data = fs_prod,
+    se_fs = c(se_reg, xm = 0.11), product = TRUE))
+  expect_identical(attr(fit_tok, "tspaModel"), attr(fit_nm, "tspaModel"))
+  expect_equal(coef(fit_tok), coef(fit_nm))
+  # the renamed entry is what the schema (and the replay) sees
+  expect_equal(attr(fit_tok, "tspa_args")$se_fs[["xm"]], 0.11)
+  expect_false("x.m" %in% colnames(attr(fit_tok, "tspa_args")$se_fs))
+})
+
+test_that("mf: a:b syntax fits identically to the concatenated syntax", {
+  df <- prod_setup()
+  for (method in c("regression", "Bartlett")) {
+    fs <- get_fs(df, model = prod_model, std.lv = TRUE, method = method)
+    fit_colon <- suppressWarnings(
+      tspa("y ~ x + m + z + x:m + x:z + m:z", data = fs, product = TRUE))
+    fit_concat <- suppressWarnings(
+      tspa("y ~ x + m + z + xm + xz + mz", data = fs, product = TRUE))
+    expect_identical(attr(fit_colon, "tspaModel"),
+                     attr(fit_concat, "tspaModel"),
+                     info = paste("model string,", method))
+    expect_equal(coef(fit_colon), coef(fit_concat),
+                 info = paste("coefs,", method))
+    # the generated model carries the render name, not the interaction token
+    m0 <- attr(fit_colon, "tspaModel")
+    expect_no_match(m0, "x:m", fixed = TRUE)
+    expect_match(m0, "xm =~ ", fixed = TRUE)
+  }
+})
+
+test_that("a:b product fits replay identically via tspa_args (idempotent)", {
+  df <- prod_setup()
+  fs_plain <- get_fs(df, model = prod_model, std.lv = TRUE,
+                     method = "Bartlett")
+  se_reg <- c(y = fs_plain[1, "fs_y_se"], x = fs_plain[1, "fs_x_se"],
+              m = fs_plain[1, "fs_m_se"], z = fs_plain[1, "fs_z_se"])
+  fit_sf <- tspa("y ~ x + m + z + x:m + x:z + m:z", data = fs_plain,
+                 se_fs = se_reg, product = TRUE)
+  fit_sf_re <- do.call(tspa, attr(fit_sf, "tspa_args"))
+  expect_identical(coef(fit_sf_re), coef(fit_sf))
+  expect_identical(vcov(fit_sf_re), vcov(fit_sf))
+  fit_mf <- suppressWarnings(
+    tspa("y ~ x + m + z + x:m", data = fs_plain, product = TRUE))
+  fit_mf_re <- do.call(tspa, attr(fit_mf, "tspa_args"))
+  expect_identical(coef(fit_mf_re), coef(fit_mf))
+  expect_identical(vcov(fit_mf_re), vcov(fit_mf))
+})
+
+# ---------------------------------------------------------------------------
+# Group 8: pool_se_col() / pool_se_fs() refactor regression
 # ---------------------------------------------------------------------------
 
 test_that("pool_se_fs() matches the hand computation (refactor regression)", {

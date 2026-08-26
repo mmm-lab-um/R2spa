@@ -62,17 +62,24 @@
    (single-group `lavaan` models only; rejected with `local = TRUE` and for
    multi-group models, v1).
 - `tspa()` gains an opt-in `product` argument (default `FALSE`): when
-   `TRUE`, the double-mean-centered product indicators for every model
-   latent whose name concatenates two of the model's factor scores (e.g.
-   `xm` for `x` and `m`) are computed on the fly and incorporated into the
-   stage-2 measurement model — in the single-factor (score-scale) path the
-   product SE joins `se_fs` (per-group pooled, loading 1, as before), and
-   in the multi-factor path the product latent gets a fixed implied loading
-   `gamma` and fixed error variance `se_P^2` from the (pooled) `fsL`/`fsT`
-   and the `psi` attribute. Single-group models only (v1); not supported
-   with `corrected_se = TRUE`; pre-existing product columns (either
-   orientation) are used as-is, so the manual `get_fs(product = )` +
-   `se_fs` workflow is unchanged.
+    `TRUE`, the double-mean-centered product indicators for every model
+    latent that names the product of two of the model's factor scores — by
+    concatenation (`xm` for `x` and `m`) or in lavaan's interaction syntax
+    (`x:m`, rendered under the concatenated name) — are computed on the fly
+    and incorporated into the stage-2 measurement model — in the
+    single-factor (score-scale) path the product SE joins `se_fs`
+    (per-group pooled, loading 1, as before), and in the multi-factor path
+    the product latent gets a fixed implied loading `gamma` and fixed error
+    variance `se_P^2` from the (pooled) `fsL`/`fsT` and the `psi` attribute.
+    An `a:b` token whose parts are not both factor scores (e.g. `x:g` with
+    `g` an observed covariate) is not claimed and passes through to lavaan
+    as an ordinary interaction; an explicit product SE may be keyed by
+    either the render name or the `a:b` token. Single-group models only
+    (v1); not supported with `corrected_se = TRUE`; naming the same pair
+    twice (`x:m` and `xm`) or a render name colliding with another model
+    variable is an error; pre-existing product columns (either orientation)
+    are used as-is, so the manual `get_fs(product = )` + `se_fs` workflow is
+    unchanged.
 
 ## Breaking changes
 - The quarantined student function `get_fs_int()` (and its test file) is
