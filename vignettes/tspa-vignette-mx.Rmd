@@ -178,6 +178,34 @@ zero); with `prior_mean = c(F1 = 2)` they are non-zero and differ by row. These
 `fsb` values are exactly what `tspa_mx_model()` reads as its score-intercept row
 ("With Mean Structure" above).
 
+`get_fs()` results can now also be passed to `tspa_mx_model()` directly:
+with all of `se_fs`/`fsL`/`fsT`/`fsb` omitted, the measurement inputs are
+derived from the result's attributes — the per-row loadings and error
+variances become definition variables referencing the result's own
+`*_by_*`/`ev_*`/`ecov_*` columns, and the `int_fs_*` score-intercept columns
+are appended from the `fsb` attribute (the `fs_indiv()` round-trip, now
+automatic). The minimal model that exercises the score-intercept row, on
+the nonzero-prior and the zero-mean results:
+
+```{r}
+# All measurement inputs (per-row loadings, error variances, and the
+# int_fs_* intercept columns) are derived from the get_fs() result:
+tspa_mx_fit <- tspa_mx_model("F1 ~ 1", data = fse)
+summary(tspa_mx_fit)
+# The zero-mean result derives the same way (its fsb attribute is all-zero,
+# so the appended int_fs_F1 column is all-zero):
+tspa_mx_fit <- tspa_mx_model("F1 ~ 1", data = fs)
+summary(tspa_mx_fit)
+```
+
+Under `prior_mean = c(F1 = 2)` the appended `int_fs_F1` column is nonzero
+and row-varying; for the zero-mean result it is all-zero. For a
+`get_fs()` result, then, the `fs_indiv()` + hand-rolled character matrices
+of the next section — and the explicit `attr(..., "fsL")`-style arguments
+used elsewhere in this vignette — are optional sugar, not a requirement;
+they remain the route when the per-row quantities come from outside
+`get_fs()`.
+
 ## 2S-PA with EAP (shrinkage) scores
 
 Because EAP (shrinkage) scores are used, we use the following properties for
@@ -219,6 +247,15 @@ tspa_mx_fit <- mxRun(tspa_mx)
 # Summarize the results
 summary(tspa_mx_fit)
 ```
+
+The same model fits in one call from a `get_fs()` result: with the
+measurement arguments omitted, `tspa_mx_model()` derives the
+definition-variable matrices (and the `int_fs_*` intercept columns) from the
+result's own `*_by_*`/`ev_*`/`ecov_*` columns and `fsb` attribute, as in the
+previous section. The hand-rolled route stays when the per-person quantities
+come from outside `get_fs()` — as here, where the per-person reliabilities and
+error variances are the hand-computed EAP formulas above, not a `get_fs()`
+result's implied-loadings / error-covariance columns.
 
 ## Joint model reference
 

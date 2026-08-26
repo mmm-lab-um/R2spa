@@ -22,6 +22,18 @@
   derived from the result's `fsT`/`fsL`/`fsb` attributes or its
   `fs_<v>`/`fs_<v>_se` score columns; explicit arguments always take
   precedence.
+- `tspa_mx_model()` now accepts a `get_fs()` result as `data` directly:
+  when `se_fs`/`fsL`/`fsT`/`fsb` are all omitted, the measurement inputs
+  are derived from the result's attributes — constant quantities (complete
+  data, `local = TRUE`, `format = "list"`) become fixed numerics, while
+  per-row (mirt, `local = TRUE` FIML) and per-pattern (single-group FIML)
+  quantities become definition variables referencing the result's own
+  `*_by_*`/`ev_*`/`ecov_*` columns, with the `int_fs_*` score-intercept
+  columns appended automatically from the `fsb` attribute. Explicit
+  arguments always take precedence, a non-`get_fs()` frame fails fast with
+  an actionable message instead of the old misleading error, and there is
+  no pooling (the OpenMx route is exact-or-fail, unlike
+  `tspa(reduce = )`); multigroup remains refused in Phase 1.
 
 - `get_fs()` gains `local = TRUE`: each latent is scored from its own local
   measurement model (per-construct stage 1, the canonical 2S-PA setup)

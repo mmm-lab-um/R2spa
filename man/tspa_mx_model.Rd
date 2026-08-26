@@ -23,24 +23,42 @@ here.}
 
 \item{data}{A data frame carrying the factor-score columns
 (\verb{fs_<latent>}) and, for definition-variable entries, the per-observation
-columns they reference. \code{\link[=fs_indiv]{fs_indiv()}} on a \code{\link[=get_fs]{get_fs()}} result produces
-exactly this table. Definition-variable columns must be free of \code{NA}.}
+columns they reference. A \code{\link[=get_fs]{get_fs()}} result works directly: with
+\code{se_fs}/\code{fsL}/\code{fsT}/\code{fsb} omitted, the measurement inputs are derived
+from its attributes (see Details), and the \verb{int_fs_*} intercept
+columns are appended automatically --- \code{fs_indiv()} is no longer
+needed to obtain them. \code{\link[=fs_indiv]{fs_indiv()}} on a \code{\link[=get_fs]{get_fs()}} result produces
+the equivalent fully explicit table. Definition-variable columns must
+be free of \code{NA}.}
 
 \item{se_fs}{A named numeric vector of standard errors (one per latent) for
 the single-score-per-latent case; implies fixed unit loadings and error
-variances \code{se_fs^2}.}
+variances \code{se_fs^2}. An explicit \code{se_fs} always wins over derivation;
+when omitted (along with \code{fsL}, \code{fsT}, and \code{fsb}), the measurement
+inputs are derived from a \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see
+Details).}
 
 \item{fsL}{A \verb{q x p} loading matrix including cross-loadings: rows = score
 names (\verb{fs_<latent>}), columns = latent names. Each cell is either a
-number (fixed loading) or a character naming a definition-variable column.}
+number (fixed loading) or a character naming a definition-variable column.
+Or omitted, in which case the value is derived from the \code{fsL} attribute
+of a \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see Details); an explicit \code{fsL}
+always wins.}
 
 \item{fsT}{A \verb{q x q} error variance-covariance matrix over the score names;
 the lower triangle (incl. diagonal) is used. Each cell is a number
-(fixed) or a character naming a definition-variable column.}
+(fixed) or a character naming a definition-variable column.
+Or omitted, in which case the value is derived from the \code{fsT} attribute
+of a \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see Details); an explicit \code{fsT}
+always wins.}
 
 \item{fsb}{A vector of score intercepts (length \code{q}, named by score, either
 order) --- each a number (fixed) or a definition-variable column name.
-\code{NULL} (default) fixes all score intercepts at zero.}
+\code{NULL} (default) fixes all score intercepts at zero.
+Or omitted, in which case the value is derived from the \code{fsb} attribute
+of a \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see Details); the derivation
+omits it --- fixed zero intercepts --- when the result carries no \code{fsb}
+attribute.}
 
 \item{...}{Additional arguments passed on to \code{\link[OpenMx:mxRun]{OpenMx::mxRun()}}
 (e.g. \code{intervals = TRUE}).}
@@ -65,14 +83,50 @@ the lavaan structural string is parsed with \code{\link[lavaan:lavaanify]{lavaan
 corrected latents are given auto latent variances, the score indicators and
 their errors/intercepts are attached per \href{https://www.rdocumentation.org/packages/R2spa}{tspa()'s} schema, and the whole thing
 is fit with \code{mxFitFunctionML()} (raw-data FIML).
+\subsection{Auto-derivation from a \code{\link[=get_fs]{get_fs()}} result}{
+
+\code{tspa_mx_model()} derives its measurement inputs from a \code{\link[=get_fs]{get_fs()}}
+result passed as \code{data}, so the canonical call is
+\code{tspa_mx_model(model, data = get_fs(...))}. Derivation fires only
+when all of \code{se_fs}, \code{fsL}, \code{fsT}, and \code{fsb} are omitted; explicit
+arguments always win. Derivation is provenance-gated: \code{data} must
+resolve as a \code{\link[=get_fs]{get_fs()}} result, so a hand-rolled frame with plain
+matrix \code{fsT}/\code{fsL} attributes but no such provenance is rejected
+with an informative error.
+
+Attributes are dispatched by shape: constant quantities (plain
+matrices --- complete-data, \code{local = TRUE}, and \code{format = "list"}
+results; a plain \code{fsb} vector) become fixed numeric matrices, while
+per-row quantities (\code{mirt_per_obs}/\code{per_obs}-marked results) and
+per-pattern quantities (single-group FIML, keyed by
+\code{fs_pattern$label}) become definition-variable matrices referencing
+the result's own \verb{*_by_*}, \verb{ev_*}, and \verb{ecov_*} columns. A
+non-\code{NULL} \code{fsb} attribute appends \verb{int_fs_*} intercept columns to a
+working copy of \code{data} (the \code{fs_indiv(include_intercept = TRUE)}
+equivalent); \code{NULL} keeps the default fixed-zero intercepts. Unlike
+\code{\link[=tspa]{tspa()}} (whose \verb{reduce = } argument pools per-unit quantities),
+there is no pooling here --- the OpenMx route is exact-or-fail. A
+multigroup result (the \code{group_col} attribute) is refused with the
+Phase-1 message; a \code{mirt} multigroup result (a \code{group} column, no
+\code{group_col} attribute) derives as a single pooled per-row-corrected
+fit (no per-group structural parameters; the \code{group} column is
+inert). A \code{get_fs(product = )} result derives identically: its extra
+\code{fs_a:fs_b} (and \verb{_se}/\verb{_ld}) columns are inert to derivation, but the
+\code{:} they carry is illegal in \code{OpenMx::mxData()} column names, so the
+frame is un-fittable until the product columns are dropped (a
+pre-existing limitation that affects the explicit-argument route too).
+}
 }
 \examples{
 \dontrun{
-## Per-row correction straight from a get_fs() result via fs_indiv():
-fit <- cfa("dem60 =~ y1 + y2 + y3 + y4; ind60 =~ x1 + x2 + x3",
-           data = PoliticalDemocracy)
-fs  <- get_fs(PoliticalDemocracy, "dem60 =~ y1 + y2 + y3 + y4
-                                     ind60 =~ x1 + x2 + x3")
+## Measurement inputs derived from a get_fs() result:
+fs <- get_fs(PoliticalDemocracy, "dem60 =~ y1 + y2 + y3 + y4
+                                  ind60 =~ x1 + x2 + x3")
+# measurement inputs derived from the get_fs() result
+tspa_mx_model("dem60 ~ ind60; dem60 + ind60 ~ 1", data = fs)
+
+## Equivalent, fully explicit (per-row definition variables via
+## fs_indiv()):
 dat <- fs_indiv(fs, include_intercept = TRUE)
 tspa_mx_model("dem60 ~ ind60; dem60 + ind60 ~ 1",
   data = dat,

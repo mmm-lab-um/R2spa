@@ -84,6 +84,10 @@ Each construct below is a single-factor score from continuous items, so
 while the multi-factor and multigroup examples omit it, since `tspa()` reads
 those standard errors from the `get_fs()` result automatically. The
 `multiple-factors` vignette shows the `fsT`/`fsL` form.
+The `OpenMx` backend `tspa_mx_model()` likewise omits the
+measurement inputs on a `get_fs()` result, deriving them from the
+result's attributes (per-row quantities as definition variables —
+the exact, non-pooled route; see the `tspa-vignette-mx` vignette).
 
 ## Reading the `get_fs()` output
 

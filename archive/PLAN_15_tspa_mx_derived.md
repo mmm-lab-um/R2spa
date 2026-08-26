@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-25
 **Owner roles:** `r-architect` (code), `r-tester` (tests), `r-doc` (roxygen/NEWS/vignettes)
-**Status:** drafted (2026-08-25)
+**Status:** implemented (2026-08-25) — decisions D1–D8 delivered as specified; see §9.
 **Blocked by / relates to:** none. Builds on PLAN 13 (the `tspa()` derivation whose
 gate semantics this mirrors) and the per-row `fs_indiv()`/`resolve_fs_per_row()`
 machinery (PLAN 07/11).
@@ -166,8 +166,21 @@ mirroring `test-tspa_derived.R`:
    diagonal, zero cross-terms) — pins D2/D3 agreement on the same data.
 3. **SG FIML joint** (`local = FALSE`, NAs injected): per-pattern defvar
    route ≡ manual character-matrix + `fs_indiv()`-data route (D3 per-pattern).
+   **Narrowed (implementation finding V3c):** full per-row/per-pattern
+   q≥2 defvar models abort in OpenMx 2.22.11 ("implied covariance not
+   positive definite") for both the derived **and** the documented manual
+   route (off-diagonal defvar cells trigger it; seeds 7/42/99/123/1334,
+   SLSQP and CSOLNP) — a pre-existing OpenMx RAM limitation, not a
+   derivation defect. Pin instead: derived model **string** ≡ manual model
+   string (identical), appended `int_fs_*` ≡ `fs_indiv()` values, and a
+   q=1 / diagonal-only per-row fit as the end-to-end numerical A/B.
 4. **Local FIML** (`per_obs`) and **mirt SG** (`mirt_per_obs`): per-row
    defvar ≡ manual route (mirt control = the roxygen-example matrices).
+   **mirt MG documented behavior:** a `MultipleGroupClass` result carries no
+   `group_col` attribute (only a `group` column), so D7 does not fire — it
+   derives as a single **pooled per-row-corrected** fit (the exact per-row
+   measurement quantities; no per-group structural parameters; the `group`
+   column is inert). Pin with one A/B (≡ explicit character matrices).
 5. **Intercepts:** mean-structure CFA (nonzero constant `fsb`) → numeric path
    ≡ explicit `fsb`; mirt `prior_mean = c(F1 = 2)` → `int_fs_*` appended,
    derived ≡ explicit `fsb = c(fs_F1 = "int_fs_F1")` on
@@ -226,6 +239,69 @@ mirroring `test-tspa_derived.R`:
 - Pooling / `reduce` of per-unit quantities in the OpenMx route — by design
   (exact or fail).
 
-## 9. Verification log
+## 9. Verification log (closed 2026-08-25)
 
-(filled at close)
+**Hook.** R/tspa_mx.R (purely additive, +198 lines): `se_fs_given`/`fsb_given`
+captured at the top of `tspa_mx_model()` (D1); derivation + D5 fail-fast wired
+between the arg-guards and `tspa_mx_spec()`; new internal
+`tspa_mx_derive_measurement()` co-located after `tspa_mx_unwrap()`, returning
+`list(fsL, fsT, fsb, data, prov_err)` and dispatching: matrices → D2;
+`group_col` attr → D7 stop; `per_obs`/`mirt_per_obs` → D3 per-row (character
+matrices + `int_fs_*` appended to a working copy); `fs_pattern$label` → D3
+per-pattern (row-wise label mapping).
+
+**Deviations (all minor, all in the helper's internals, none in the contract):**
+
+1. **Length-1 unwrap is local to the helper.** Unified results wrap *every*
+   attribute (incl. `fs_pattern`) in a `list("" = …)`; the helper unwraps
+   length-1 lists itself and dispatches longer lists only on the `group_col`
+   marker, so `tspa_mx_unwrap()`'s multigroup message is preserved for
+   genuine explicit MG inputs.
+2. **`first_pattern_value()` is called on the already length-1-unwrapped
+   `L`/`T`** (a unified SG attribute is double-wrapped: `""` then the
+   per-row/per-pattern list).
+3. **mirt MG derives as pooled per-row (not refused).** A
+   `MultipleGroupClass` result carries no `group_col` attribute (only a
+   `group` column), so D7 does not fire; it fits as a single pooled
+   per-row-corrected model (exact per-row measurement quantities, no
+   per-group structural parameters, `group` column inert). Documented in the
+   roxygen `@details` and pinned by a dedicated A/B test.
+
+**Findings (pre-existing, not derivation defects):**
+
+- **V3c — OpenMx 2.22.11 q≥2 off-diagonal-defvar abort.** Full per-row/
+  per-pattern q≥2 defvar models abort with "implied covariance not positive
+  definite" for BOTH the derived and the documented manual character-matrix
+  routes (seeds 7/42/99/123/1334, SLSQP and CSOLNP; HS 2/3-factor and
+  synthetic; diagonal-only controls fit fine). Test item 3 is pinned at
+  string identity + `int_fs_*` identity + a q=1 end-to-end A/B accordingly;
+  the vignette demonstrates the mirt derived route on q=1 results for the
+  same reason.
+- **Product frames are un-fittable by OpenMx as-is**: `mxData()` rejects the
+  `:` in `fs_a:fs_b` column names ("is illegal because it contains the ':'
+  character") — the explicit-argument route fails identically (byte-identical
+  message). Pinned: both routes error the same; with the product columns
+  dropped, derived ≡ explicit bit-exact and the model string is unchanged
+  with/without them (inertness). One-line roxygen note added.
+- **Fixed numeric `fsb` is a no-op in the RAM model** (pre-existing, by
+  design — R/tspa_mx.R comment: a fixed/absent mean leaves the observed
+  score mean at its data value; only *character* `fsb` emits a score-mean
+  line). Item 5a pins the D2 numeric dispatch + A/B equivalence, not a mean
+  constraint.
+
+**A/B results (r-architect verification, all bit-exact, max|Δcoef| = 0):**
+V1 SG complete 2-factor (D2) · V2 `local = TRUE` compact 3-factor (D2) ·
+V3 SG FIML joint (structure: model string identical; `int_fs_*` ≡
+`fs_indiv()`; q=1 numerical A/B) · V4 mirt SG per-row (default and
+`prior_mean = c(F1 = 2)` auto-append) · V5 error paths (D5 + gate text, D5
+base, D7 MG message, D6 NA guard) · V6 explicit-wins (se_fs path, xor
+error) — plus r-tester's 70 expectations (13 blocks): items 1–9 of §5 all
+pass, A/Bs pinned with `expect_identical` on coefficients and 1e-10
+tolerances on path/variance values.
+
+**Gate.** `devtools::test()`: **FAIL 0 | WARN 1 | PASS 3940** (baseline
+before the plan: 3870 / 0 fail; the 1 warn is the pre-existing
+`test-tspa_mx.R` "some estimated lv variances are negative").
+`R CMD check`: **0 errors / 0 warnings / 0 notes** (3m 19s, vignettes
+re-knit). `document()` clean; NAMESPACE unchanged; only
+`man/tspa_mx_model.Rd` regenerated.

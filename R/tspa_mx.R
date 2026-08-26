@@ -16,6 +16,39 @@
 #' https://www.rdocumentation.org/packages/R2spa) schema, and the whole thing
 #' is fit with `mxFitFunctionML()` (raw-data FIML).
 #'
+#' ## Auto-derivation from a [get_fs()] result
+#'
+#' `tspa_mx_model()` derives its measurement inputs from a [get_fs()]
+#' result passed as `data`, so the canonical call is
+#' `tspa_mx_model(model, data = get_fs(...))`. Derivation fires only
+#' when all of `se_fs`, `fsL`, `fsT`, and `fsb` are omitted; explicit
+#' arguments always win. Derivation is provenance-gated: `data` must
+#' resolve as a [get_fs()] result, so a hand-rolled frame with plain
+#' matrix `fsT`/`fsL` attributes but no such provenance is rejected
+#' with an informative error.
+#'
+#' Attributes are dispatched by shape: constant quantities (plain
+#' matrices --- complete-data, `local = TRUE`, and `format = "list"`
+#' results; a plain `fsb` vector) become fixed numeric matrices, while
+#' per-row quantities (`mirt_per_obs`/`per_obs`-marked results) and
+#' per-pattern quantities (single-group FIML, keyed by
+#' `fs_pattern$label`) become definition-variable matrices referencing
+#' the result's own `*_by_*`, `ev_*`, and `ecov_*` columns. A
+#' non-`NULL` `fsb` attribute appends `int_fs_*` intercept columns to a
+#' working copy of `data` (the `fs_indiv(include_intercept = TRUE)`
+#' equivalent); `NULL` keeps the default fixed-zero intercepts. Unlike
+#' [tspa()] (whose `reduce = ` argument pools per-unit quantities),
+#' there is no pooling here --- the OpenMx route is exact-or-fail. A
+#' multigroup result (the `group_col` attribute) is refused with the
+#' Phase-1 message; a `mirt` multigroup result (a `group` column, no
+#' `group_col` attribute) derives as a single pooled per-row-corrected
+#' fit (no per-group structural parameters; the `group` column is
+#' inert). A `get_fs(product = )` result derives identically: its extra
+#' `fs_a:fs_b` (and `_se`/`_ld`) columns are inert to derivation, but the
+#' `:` they carry is illegal in `OpenMx::mxData()` column names, so the
+#' frame is un-fittable until the product columns are dropped (a
+#' pre-existing limitation that affects the explicit-argument route too).
+#'
 #' @param model A character string describing the structural path model in
 #'   `lavaan` syntax, using the **latent** (factor) names. Phase 1 restricts
 #'   every variable in `model` to a corrected latent (one that has a factor
@@ -23,20 +56,38 @@
 #'   here.
 #' @param data A data frame carrying the factor-score columns
 #'   (`fs_<latent>`) and, for definition-variable entries, the per-observation
-#'   columns they reference. [`fs_indiv()`] on a [get_fs()] result produces
-#'   exactly this table. Definition-variable columns must be free of `NA`.
+#'   columns they reference. A [get_fs()] result works directly: with
+#'   `se_fs`/`fsL`/`fsT`/`fsb` omitted, the measurement inputs are derived
+#'   from its attributes (see Details), and the `int_fs_*` intercept
+#'   columns are appended automatically --- `fs_indiv()` is no longer
+#'   needed to obtain them. [`fs_indiv()`] on a [get_fs()] result produces
+#'   the equivalent fully explicit table. Definition-variable columns must
+#'   be free of `NA`.
 #' @param se_fs A named numeric vector of standard errors (one per latent) for
 #'   the single-score-per-latent case; implies fixed unit loadings and error
-#'   variances `se_fs^2`.
+#'   variances `se_fs^2`. An explicit `se_fs` always wins over derivation;
+#'   when omitted (along with `fsL`, `fsT`, and `fsb`), the measurement
+#'   inputs are derived from a [get_fs()] result passed as `data` (see
+#'   Details).
 #' @param fsL A `q x p` loading matrix including cross-loadings: rows = score
 #'   names (`fs_<latent>`), columns = latent names. Each cell is either a
 #'   number (fixed loading) or a character naming a definition-variable column.
+#'   Or omitted, in which case the value is derived from the `fsL` attribute
+#'   of a [get_fs()] result passed as `data` (see Details); an explicit `fsL`
+#'   always wins.
 #' @param fsT A `q x q` error variance-covariance matrix over the score names;
 #'   the lower triangle (incl. diagonal) is used. Each cell is a number
 #'   (fixed) or a character naming a definition-variable column.
+#'   Or omitted, in which case the value is derived from the `fsT` attribute
+#'   of a [get_fs()] result passed as `data` (see Details); an explicit `fsT`
+#'   always wins.
 #' @param fsb A vector of score intercepts (length `q`, named by score, either
 #'   order) --- each a number (fixed) or a definition-variable column name.
 #'   `NULL` (default) fixes all score intercepts at zero.
+#'   Or omitted, in which case the value is derived from the `fsb` attribute
+#'   of a [get_fs()] result passed as `data` (see Details); the derivation
+#'   omits it --- fixed zero intercepts --- when the result carries no `fsb`
+#'   attribute.
 #' @param ... Additional arguments passed on to [`OpenMx::mxRun()`]
 #'   (e.g. `intervals = TRUE`).
 #' @return A fitted `OpenMx` `MxModel`. `coef()`, `vcov()`, and `summary()`
@@ -48,11 +99,14 @@
 #'
 #' @examples
 #' \dontrun{
-#' ## Per-row correction straight from a get_fs() result via fs_indiv():
-#' fit <- cfa("dem60 =~ y1 + y2 + y3 + y4; ind60 =~ x1 + x2 + x3",
-#'            data = PoliticalDemocracy)
-#' fs  <- get_fs(PoliticalDemocracy, "dem60 =~ y1 + y2 + y3 + y4
-#'                                      ind60 =~ x1 + x2 + x3")
+#' ## Measurement inputs derived from a get_fs() result:
+#' fs <- get_fs(PoliticalDemocracy, "dem60 =~ y1 + y2 + y3 + y4
+#'                                   ind60 =~ x1 + x2 + x3")
+#' # measurement inputs derived from the get_fs() result
+#' tspa_mx_model("dem60 ~ ind60; dem60 + ind60 ~ 1", data = fs)
+#'
+#' ## Equivalent, fully explicit (per-row definition variables via
+#' ## fs_indiv()):
 #' dat <- fs_indiv(fs, include_intercept = TRUE)
 #' tspa_mx_model("dem60 ~ ind60; dem60 + ind60 ~ 1",
 #'   data = dat,
@@ -69,6 +123,11 @@
 
 tspa_mx_model <- function(model, data, se_fs = NULL, fsL = NULL,
                           fsT = NULL, fsb = NULL, ...) {
+  # PLAN 15 (D1): capture before any coercion (mirrors tspa(), R/tspa.R) so
+  # NULL-ness is the "the user supplied this argument" signal the
+  # measurement-input derivation gates on.
+  se_fs_given <- !is.null(se_fs)
+  fsb_given <- !is.null(fsb)
   if (!is.character(model)) {
     stop("The structural path model 'model' must be a lavaan syntax string.",
          call. = FALSE)
@@ -87,6 +146,38 @@ tspa_mx_model <- function(model, data, se_fs = NULL, fsL = NULL,
       (is.list(fsT) && !is.matrix(fsT) && length(fsT) > 1L)) {
     stop("Multigroup 'fsL'/'fsT' are not supported yet (Phase 1 is single-group).",
          call. = FALSE)
+  }
+
+  # PLAN 15 (D1): explicit measurement inputs always win; derivation fires
+  # only when all four are omitted, and every such call errors today (no
+  # currently-working call changes behavior).
+  if (!se_fs_given && is.null(fsL) && is.null(fsT) && !fsb_given) {
+    derived <- tspa_mx_derive_measurement(data)
+    if (is.null(derived$fsL)) {
+      # D5: fail fast with an actionable message instead of the misleading
+      # "'fsL' rows must be named by the factor-score names." fall-through
+      # in tspa_mx_spec().
+      stop(
+        "No measurement inputs found for the factor scores in 'data'. ",
+        "Please supply one of: (1) 'se_fs' (single-factor), (2) 'fsL' and ",
+        "'fsT', or (3) a get_fs() result as 'data' (its attributes carry ",
+        "the inputs).",
+        if (is.null(derived$prov_err)) {
+          ""
+        } else {
+          paste0(
+            " The 'fsT'/'fsL' attributes on 'data' were detected but not ",
+            "used because the data does not look like a get_fs() result: ",
+            derived$prov_err
+          )
+        },
+        call. = FALSE
+      )
+    }
+    fsL <- derived$fsL
+    fsT <- derived$fsT
+    fsb <- derived$fsb
+    data <- derived$data
   }
 
   spec <- tspa_mx_spec(se_fs, fsL, fsT, fsb)
@@ -129,6 +220,167 @@ tspa_mx_unwrap <- function(x) {
          call. = FALSE)
   }
   x
+}
+
+# PLAN 15 (D1-D4): derive the measurement inputs (fsL/fsT/fsb) from a
+# get_fs() result's attributes for the all-args-NULL case. Dispatch:
+#   - both unwrapped attributes plain matrices -> D2 fixed numeric;
+#   - group_col attribute present              -> D7 stop (multigroup);
+#   - per_obs/mirt_per_obs marker              -> D3 per-row: character
+#     definition-variable matrices (+ int_fs_<score> columns appended to a
+#     working copy of `data` when the fsb attribute is present);
+#   - fs_pattern attribute present (SG FIML)   -> D3 per-pattern: the same
+#     character matrices (pattern-constant columns), int_fs_<score> values
+#     mapped row-wise through fs_pattern$label.
+# Returns list(fsL, fsT, fsb, data, prov_err); fsL is NULL when nothing is
+# derivable (prov_err = the D4 gate message, or NULL when the frame simply
+# carries no fsT/fsL attributes) -- the caller turns that into the D5
+# fail-fast. Stops() for multigroup input (D7) and for shapes it cannot
+# handle.
+tspa_mx_derive_measurement <- function(data) {
+  attr_T <- attr(data, "fsT")
+  attr_L <- attr(data, "fsL")
+  if (is.null(attr_T) || is.null(attr_L)) {
+    # No attributes at all: nothing to derive (D5 base message, caller).
+    return(list(fsL = NULL, fsT = NULL, fsb = NULL, data = data,
+                prov_err = NULL))
+  }
+
+  # D4 provenance gate: derive only from attributes that resolve as a
+  # get_fs() result, reusing resolve_fs_per_row()'s informative errors
+  # (PLAN 13 style, cf. R/tspa.R). A hand-rolled frame with plain matrix
+  # attributes but no get_fs() provenance is NOT derived; its gate message
+  # is carried to the caller's D5 fail-fast.
+  prov <- tryCatch(
+    {
+      resolve_fs_per_row(data)
+      TRUE
+    },
+    error = function(e) conditionMessage(e)
+  )
+  if (!isTRUE(prov)) {
+    return(list(fsL = NULL, fsT = NULL, fsb = NULL, data = data,
+                prov_err = prov))
+  }
+
+  # Unwrap only the unified single-group length-1 wrapper: a longer list
+  # (per-pattern, per-row, multigroup) is dispatched below and must keep its
+  # list form (tspa_mx_unwrap() would reject it with the multigroup message).
+  L <- if (is.list(attr_L) && !is.matrix(attr_L) && length(attr_L) == 1L)
+    attr_L[[1L]] else attr_L
+  T <- if (is.list(attr_T) && !is.matrix(attr_T) && length(attr_T) == 1L)
+    attr_T[[1L]] else attr_T
+  # fsb: same length-1-only unwrap (a per-row / per-pattern list stays a
+  # list); an all-NULL per-pattern list means "no intercepts" (fixed zero).
+  b <- attr(data, "fsb")
+  if (is.list(b) && !is.matrix(b)) {
+    if (length(b) == 1L) {
+      b <- b[[1L]]
+    } else if (all(vapply(b, is.null, logical(1L)))) {
+      b <- NULL
+    }
+  }
+
+  if (is.matrix(L) && is.matrix(T)) {
+    # D2: constant quantities -> fixed numeric matrices; fsb NULL -> the
+    # default fixed-zero intercepts.
+    return(list(fsL = L, fsT = T, fsb = b, data = data, prov_err = NULL))
+  }
+
+  # D7: the multigroup signal is the group_col attribute, NOT the list
+  # length (a single-group FIML result also carries a list fsT, keyed by
+  # pattern label -- the same disambiguation compute_fs_prod() uses).
+  if (!is.null(attr(data, "group_col"))) {
+    stop("Multigroup 'fsL'/'fsT' are not supported yet (Phase 1 is single-group).",
+         call. = FALSE)
+  }
+
+  # Reference dimnames from the first row/pattern (structural, so valid even
+  # for an all-NA first row): rownames = score names, colnames = latent names.
+  # Note: from the already length-1-unwrapped L/T -- first_pattern_value()
+  # itself only unwraps one list level, and a unified single-group attribute
+  # is double-wrapped ("", then the per-row / per-pattern list).
+  ref_L <- first_pattern_value(L)
+  ref_T <- first_pattern_value(T)
+  scores <- rownames(ref_L)
+  latents <- colnames(ref_L)
+  q <- length(scores)
+  p <- length(latents)
+  # D3: character definition-variable matrices referencing the frame's own
+  # columns (the get_fs() naming, cf. fs_row_colnames()). The spec uses the
+  # lower triangle of fsT, so the upper triangle stays NA.
+  scores_T <- rownames(ref_T)
+  L_char <- matrix(NA_character_, nrow = q, ncol = p,
+                   dimnames = list(scores, latents))
+  for (j in seq_len(p)) L_char[, j] <- paste0(latents[j], "_by_", scores)
+  T_char <- matrix(NA_character_, nrow = q, ncol = q,
+                   dimnames = list(scores_T, scores_T))
+  for (i in seq_len(q)) {
+    T_char[i, i] <- paste0("ev_", scores[i])
+    for (j in seq_len(i - 1L)) {
+      T_char[i, j] <- paste0("ecov_", scores[i], "_", scores[j])
+    }
+  }
+  b_char <- setNames(paste0("int_", scores), scores)
+
+  if (isTRUE(attr(data, "per_obs")) || isTRUE(attr(data, "mirt_per_obs"))) {
+    # D3 per-row: fsb is a per-row list (one q-vector per row; the legacy
+    # single-value case falls back to a shared constant, cf.
+    # resolve_per_obs()). All-NA elements stay NA -> the D6 NA guard fires.
+    if (!is.null(b) && !is.list(b)) b <- rep(list(b), nrow(data))
+    if (!is.null(b)) {
+      for (i in seq_len(q)) {
+        data[[paste0("int_", scores[i])]] <- vapply(
+          b,
+          function(v) if (is.null(v)) NA_real_ else as.numeric(v)[i],
+          numeric(1L)
+        )
+      }
+    }
+    return(list(fsL = L_char, fsT = T_char,
+                fsb = if (is.null(b)) NULL else b_char,
+                data = data, prov_err = NULL))
+  }
+
+  fp <- attr(data, "fs_pattern")
+  # Unified single-group results wrap fs_pattern in the same length-1 ""
+  # list as the fsT/fsL attributes (cf. resolve_lavaan_unified()).
+  if (is.list(fp) && length(fp) == 1L && !is.null(names(fp)) &&
+      names(fp) == "") {
+    fp <- fp[[1L]]
+  }
+  if (!is.list(fp) || !is.character(fp$label)) {
+    stop(
+      "Cannot derive the measurement inputs from 'data': its 'fsL'/'fsT' ",
+      "attributes are lists, but the frame is neither a per-row result ",
+      "(`per_obs`/`mirt_per_obs` marker) nor a pattern-keyed (SG FIML) ",
+      "result with a character 'fs_pattern' label. Pass 'fsL'/'fsT' ",
+      "explicitly.",
+      call. = FALSE
+    )
+  }
+
+  # D3 per-pattern (SG FIML joint): the columns are pattern-constant, so the
+  # character matrices are complete. int_fs_<score> values map each row to
+  # its pattern via fs_pattern$label (NA rows / absent patterns stay NA ->
+  # the D6 NA guard fires).
+  if (!is.null(b)) {
+    labels <- fp$label
+    for (i in seq_len(q)) {
+      data[[paste0("int_", scores[i])]] <- vapply(
+        labels,
+        function(lb) {
+          if (is.na(lb)) return(NA_real_)
+          v <- b[[lb]]
+          if (is.null(v)) NA_real_ else as.numeric(v)[i]
+        },
+        numeric(1L)
+      )
+    }
+  }
+  list(fsL = L_char, fsT = T_char,
+       fsb = if (is.null(b)) NULL else b_char,
+       data = data, prov_err = NULL)
 }
 
 # Numeric -> values, character -> definition-variable column names, in one
