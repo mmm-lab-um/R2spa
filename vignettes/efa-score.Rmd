@@ -27,8 +27,10 @@ library(lavaan)
 ## Example: Big Five Inventory
 
 ```{r}
-# Covariance (with FIML)
-corr_bfi <- lavCor(bfi[1:25], missing = "fiml")
+# Complete-case (listwise) correlation — the same rows used to compute the
+# scores below, so stage 1 (EFA) and stage 2 (2S-PA) share one data basis.
+cc <- complete.cases(bfi[, 1:25])
+corr_bfi <- cor(bfi[cc, 1:25])
 # EFA (Target rotation)
 target_mat_bfi <- matrix(0, nrow = 25, ncol = 5)
 target_mat_bfi[1:5, 1] <- NA
@@ -37,10 +39,11 @@ target_mat_bfi[11:15, 3] <- NA
 target_mat_bfi[16:20, 4] <- NA
 target_mat_bfi[21:25, 5] <- NA
 fa_target_bfi <- psych::fa(
-    corr_bfi, n.obs = 2436,
+    corr_bfi, n.obs = sum(cc),
     nfactors = 5,
     rotate = "targetQ", Target = target_mat_bfi,
-    scores = "Bartlett")
+    scores = "Bartlett",
+    n.rotations = 1)  # <-- avoids the psych 2.6.5 faRotations() bug
 # Factor correlations
 fa_target_bfi$Phi |>
     (`[`)(paste0("MR", 1:5), paste0("MR", 1:5)) |>
