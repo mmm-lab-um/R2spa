@@ -109,6 +109,7 @@ get_fs.data.frame <- function(
   prior_mean = NULL,
   prior_cov = NULL,
   sum_items = NULL,
+  product = NULL,
   ...
 ) {
   # `local` is a named formal placed before `...` so it is never forwarded
@@ -154,6 +155,10 @@ get_fs.data.frame <- function(
         call. = FALSE
       )
     }
+    if (!is.null(product)) {
+      stop("'product' is not supported with 'local = TRUE' (v1).",
+           call. = FALSE)
+    }
     return(get_fs_local(
       object,
       model = model,
@@ -176,7 +181,8 @@ get_fs.data.frame <- function(
     format = format,
     prior_mean = prior_mean,
     prior_cov = prior_cov,
-    sum_items = sum_items
+    sum_items = sum_items,
+    product = product
   )
 }
 
@@ -1024,6 +1030,7 @@ get_fs.lavaan <- function(
   prior_mean = NULL,
   prior_cov = NULL,
   sum_items = NULL,
+  product = NULL,
   ...
 ) {
   method <- normalize_fs_method(method)
@@ -1247,6 +1254,12 @@ get_fs.lavaan <- function(
         )
       }
     }
+  }
+  if (!is.null(product)) {
+    if (ngroups > 1) {
+      stop("'product' is not supported for multi-group models (v1); single-group lavaan models only.", call. = FALSE)
+    }
+    out <- compute_fs_prod(out, product = product)
   }
   out
 }

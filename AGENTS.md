@@ -8,12 +8,14 @@ those scores and error-variance estimates into a `lavaan::sem()` path model that
 measurement error. Core machinery: factor-score computation, schema-driven stage-2 model
 assembly. The first-order delta-method SE correction (`vcov_corrected()`, also exposed
 in-place via `tspa(corrected_se = TRUE)`), multigroup grand standardization, and the
-`tspa_mx_model()` OpenMx path have all been **re-integrated** into `R/` (2026-08). Only
-latent interaction (`get_fs_int()`) remains **quarantined** in `.quarantine/` while the
-remaining contracts settle (see `archive/PLAN_QUARANTINE.md`).
+`tspa_mx_model()` OpenMx path have all been **re-integrated** into `R/` (2026-08). The
+latent-interaction function `get_fs_int()` was **removed** and replaced by the
+joint-model `compute_fs_prod()` / `get_fs(product = )` (2026-08, branch
+`rejoin/fs-prod`); its column conventions (`fs_a:fs_b`, `fs_a:fs_b_se`,
+`fs_a:fs_b_ld`) are kept.
 
 ## Repository Facts
-- ~2,500 lines of R across 7 files in `R/`; 9 test files in `tests/testthat/`.
+- ~7,500 lines of R across 12 files in `R/`; 21 test files in `tests/testthat/`.
 - `.quarantine/` — quarantined consumers of `get_fs()`/`tspa()` (`R/`, `tests/`,
   `vignettes/`), excluded from the package build via `^\.quarantine$` in `.Rbuildignore`.
   Not part of the build, tests, or docs — never modify package code to match it, and don't
@@ -21,10 +23,14 @@ remaining contracts settle (see `archive/PLAN_QUARANTINE.md`).
    `document()` → `test()` → `check()`. Its test files are self-contained with provenance
    headers (plan: `archive/PLAN_QUARANTINE.md`). Re-integration log: `tspa_corrected_se.R` (`vcov_corrected()`),
     `grandStandardizedSolution.R`, and `tspa_mx.R`/`tspa_mx_model()` are re-integrated into
-    `R/` (2026-08); only `get_fs_int.R` remains. The `corrected-se.Rmd` vignette (and its
+    `R/` (2026-08). The `corrected-se.Rmd` vignette (and its
     `boo_separate.RDS`/`boo_joint.RDS` fixtures, now shared with the corrected-SE tests) was
     re-integrated to `vignettes/` when `tspa(corrected_se)` gained multigroup support and the
-    corrected grand-standardized SE path (2026-08). The `tspa()` `tspa_args` attribute
+    corrected grand-standardized SE path (2026-08). `get_fs_int.R` (latent interaction)
+    and its test file were **deleted** (2026-08, branch `rejoin/fs-prod`) — superseded by
+    `R/compute_fs_prod.R` / `get_fs(product = )` with the same column conventions; the
+    quarantined `get_fs_int-vignette.Rmd`/`categorical-interaction.Rmd` vignettes remain
+    stale (not built) pending a later rewrite. The `tspa()` `tspa_args` attribute
    (self-contained evaluated argument list) and the `tsp_set_vcov()` lavaan-compat boundary
    (the single `@vcov[["vcov"]]` write behind `corrected_se`) are staying-code features
    consumed by the now-package-internal `vcov_corrected()`.
@@ -82,13 +88,15 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
 
 ## Naming / Style
 - Exported: `snake_case` (current inventory: `get_fs`, `tspa`, `get_fs_lavaan`, `get_fs_lmer`,
-  `compute_fscore`, `augment_lav_predict`, `fs_to_group_list`, `block_diag`, `tspa_mx_model`,
-  `vcov_corrected`, `grand_standardized_solution`/`grandStandardizedSolution` — the legacy
-  CamelCase alias pair is kept in sync; quarantined: `get_fs_int` only).
-- Column conventions from `get_fs()`/`get_fs_int()` (the latter is quarantined — the
-  conventions remain the spec for re-integration) — downstream functions parse by name:
+  `compute_fscore`, `compute_fs_prod`, `augment_lav_predict`, `fs_to_group_list`, `block_diag`,
+  `tspa_mx_model`, `vcov_corrected`, `grand_standardized_solution`/`grandStandardizedSolution`
+  — the legacy CamelCase alias pair is kept in sync).
+- Column conventions from `get_fs()` — downstream functions parse by name:
   - `fs_<name>` score | `<name>_se` SE | `ev_<name>` error variance
   - `ecov_<name1>_<name2>` error covariance | `<indicator>_by_<name>` implied loading
+  - `fs_a:fs_b` DMC product indicator | `fs_a:fs_b_se` per-row SE | `fs_a:fs_b_ld` implied
+    loading (from `get_fs(product = )`/`compute_fs_prod()`; `tspa_sf_alias()` maps
+    `fs_a:fs_b` to the `fs_ab` model name)
   - Attributes: `fsT` (error cov), `fsL` (loadings), `fsb` (intercepts), `scoring_matrix`
     (lavaan: per-group score×item matrices; `merMod`: named list of per-cluster
     `num_re × n_j` matrices)
@@ -105,9 +113,15 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
 3. **`get_fscore_math.R`** (~540 lines) — `compute_fscore()`, `augment_lav_predict()`,
    `compute_a*`, `compute_fspars()`, `correct_evfs()`, `compute_evfs()`, `compute_ldfs()`,
    `compute_fsrel()`. Pure math, no S3. Touchpoint for SE bugs, missing data, multigroup.
-4. **`tspa.R`** (~530 lines) — `tspa()` entrypoint; owned partable stage-2 schema
+4. **`tspa.R`** (~1,500 lines) — `tspa()` entrypoint; owned partable stage-2 schema
    (`tspa_schema_sf()`/`tspa_schema_mf()` → `tspa_render()`), product-score auto-alias
-   (`tspa_sf_alias()`); `tspa_sf()`/`tspa_mf()` emit the model string fed to `lavaan::sem()`.
+   (`tspa_sf_alias()`), opt-in `product = TRUE` auto-compute (detects model latents
+   that concatenate two factor scores via `tspa_product_latents()`, computes missing
+   DMC product columns via `compute_fs_prod()` with `tspa_ensure_product_cols()`,
+   joins the pooled product SE into `se_fs` on the sf path, and emits fixed
+   `gamma`/`se_P^2` product rows on the mf path via `prods` in
+   `tspa_schema_mf()`); `tspa_sf()`/`tspa_mf()` emit the model string fed to
+   `lavaan::sem()`.
 5. **`lavaan_compat.R`** (~275 lines) — `tsp_*` wrappers, the only file that reads lavaan
    internals (layout/partable probing, tested-up-to version canary). Currently consumed only
    by its own canary tests (`test-lavaan_compat.R`); its package consumers are quarantined.
@@ -124,11 +138,21 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
     `grandStandardizedSolution()` threads the corrected covariance, so a corrected fit reports
     corrected grand-standardized SEs (point estimates unchanged). Helpers:
     `tsp_tri2full_colmajor()`, `check_refit_convergence()`.
+8. **`compute_fs_prod.R`** — `compute_fs_prod()` (+ `get_fs(product = )`), the
+   double-mean-centered product factor-score indicators for single-group lavaan
+   models (v1). Attribute-driven: per-pattern `fsL`/`fsT` via
+   `resolve_fs_per_row()`, shared `psi` attribute; joint-normal SE formula
+   `se_P^2 = tau_a s_b^2 + tau_b s_a^2 + s_a^2 s_b^2 + c^2 + 2 tau_ab c`
+   (derivation in roxygen `@details`; pure-matrix helpers `fs_prod_se2()`,
+   `fs_prod_gamma()`, spec parser `parse_product_spec()` co-located). Replaces
+   the removed quarantined `get_fs_int()`.
 
-Quarantined (in `.quarantine/R/`, do not build against): `get_fs_int.R` (latent interaction)
-**only**. `tspa_corrected_se.R` (`vcov_corrected()`), `grandStandardizedSolution.R`
+`.quarantine/R/` is now **empty** (its test file `test-get_fs_int.R` was deleted with it):
+`get_fs_int.R` (latent interaction) was removed and replaced by
+`R/compute_fs_prod.R` (2026-08, branch `rejoin/fs-prod`);
+`tspa_corrected_se.R` (`vcov_corrected()`), `grandStandardizedSolution.R`
 (multigroup standardization), and `tspa_mx.R`/`tspa_mx_model()` (OpenMx) were re-integrated
-to `R/` in 2026-08.
+to `R/` earlier in 2026-08. Only stale vignettes remain in `.quarantine/vignettes/`.
 
 ## General Instruction
 Trust and follow the rules above exactly. Never hand-edit `NAMESPACE` or `man/*.Rd`, never call

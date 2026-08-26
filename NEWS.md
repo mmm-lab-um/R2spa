@@ -28,11 +28,46 @@
   instead of the single joint multi-factor model; the merged result carries
   the usual multi-factor attributes with exactly-zero cross-terms
   (block-diagonal `fsT`/`fsL`/`psi`, zero `ecov_*` columns) and feeds
-  `tspa()` directly. `model` may be a single string (strict per-latent
-  `=~` grammar) or a character vector / named list of complete single-factor
-  model strings (the escape hatch). `vfsLT` (hence
-  `tspa(corrected_se = TRUE)`), `prior_cov`, and `reliability` are not
-  supported in `local` mode (v1).
+   `tspa()` directly. `model` may be a single string (strict per-latent
+   `=~` grammar) or a character vector / named list of complete single-factor
+   model strings (the escape hatch). `vfsLT` (hence
+   `tspa(corrected_se = TRUE)`), `prior_cov`, and `reliability` are not
+   supported in `local` mode (v1).
+- New exported `compute_fs_prod()` + `get_fs(product = )`: double-mean-centered
+   product factor-score indicators for pairs of distinct latents in a
+   single-group `lavaan` model (v1). For each requested pair (`product` as an
+   `"a:b + c:d"` string, a list of length-2 name pairs, or a 2-column
+   matrix/data frame) the result gains `fs_a:fs_b` (the product indicator),
+   `fs_a:fs_b_se` (per-row standard error) and `fs_a:fs_b_ld` (implied
+   loading). The SE uses the general joint-model formula
+   `se_P^2 = tau_a s_b^2 + tau_b s_a^2 + s_a^2 s_b^2 + c^2 + 2 tau_ab c`
+   (derivation in `?compute_fs_prod`), so correlated factors, cross-loadings,
+   and error covariances are handled — the separate-single-factor special
+   case it reduces to. Under FIML the SE/loading resolve per
+   observed-indicator pattern; the output feeds `tspa()` directly via the
+   existing product-score auto-alias.
+- `get_fs()` gains a `product` argument forwarding to `compute_fs_prod()`
+   (single-group `lavaan` models only; rejected with `local = TRUE` and for
+   multi-group models, v1).
+- `tspa()` gains an opt-in `product` argument (default `FALSE`): when
+   `TRUE`, the double-mean-centered product indicators for every model
+   latent whose name concatenates two of the model's factor scores (e.g.
+   `xm` for `x` and `m`) are computed on the fly and incorporated into the
+   stage-2 measurement model — in the single-factor (score-scale) path the
+   product SE joins `se_fs` (per-group pooled, loading 1, as before), and
+   in the multi-factor path the product latent gets a fixed implied loading
+   `gamma` and fixed error variance `se_P^2` from the (pooled) `fsL`/`fsT`
+   and the `psi` attribute. Single-group models only (v1); not supported
+   with `corrected_se = TRUE`; pre-existing product columns (either
+   orientation) are used as-is, so the manual `get_fs(product = )` +
+   `se_fs` workflow is unchanged.
+
+## Breaking changes
+- The quarantined student function `get_fs_int()` (and its test file) is
+  removed; its functionality is superseded by `get_fs(product = )` /
+  `compute_fs_prod()`, which keep its column-naming convention
+  (`fs_a:fs_b`, `fs_a:fs_b_se`, `fs_a:fs_b_ld`) but use the corrected
+  joint-model SE formula.
 
 ## Improvements
 - The stage-2 model string attached to `tspa()` fits (the `tspaModel`

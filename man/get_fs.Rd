@@ -23,6 +23,7 @@
   prior_mean = NULL,
   prior_cov = NULL,
   sum_items = NULL,
+  product = NULL,
   ...
 )
 
@@ -38,6 +39,7 @@
   prior_mean = NULL,
   prior_cov = NULL,
   sum_items = NULL,
+  product = NULL,
   ...
 )
 
@@ -178,6 +180,15 @@ exactly one factor and every factor to have at least one item. A
 supplied list must cover all model factors, and each item may
 belong to only one sum. Only used for \code{lavaan} and data frame
 objects with \code{method = "mean"}.}
+
+\item{product}{A character string of the form \code{"a:b + c:d"} (pairs of
+distinct latent names) or a list of length-2 latent-name pairs.
+When supplied, \code{\link[=get_fs]{get_fs()}} computes the double-mean-centered
+product indicator columns (\code{fs_a:fs_b}), their standard errors
+(\code{fs_a:fs_b_se}) and their implied loadings (\code{fs_a:fs_b_ld}) via
+\code{\link[=compute_fs_prod]{compute_fs_prod()}} and appends them to the result; see
+\code{\link[=compute_fs_prod]{compute_fs_prod()}} for the derivation. Single-group lavaan
+models only (v1); not supported with \code{local = TRUE}.}
 
 \item{...}{additional arguments passed to \code{\link[lavaan]{cfa}}
 (when \code{object} is a data frame). See \code{\link[lavaan]{lavOptions}}
@@ -349,6 +360,16 @@ The result is downstream-transparent: it feeds \code{\link[=tspa]{tspa()}} direc
 explicit \code{fsT}/\code{fsL} needed) and works through \code{\link[=fs_indiv]{fs_indiv()}} and
 \code{\link[=fs_to_group_list]{fs_to_group_list()}}.
 }
+
+\subsection{Product-score indicators (\code{product})}{
+
+When \code{product} is supplied, \code{\link[=get_fs]{get_fs()}} computes the double-mean-centered
+product indicator columns (\code{fs_a:fs_b}), their standard errors
+(\code{fs_a:fs_b_se}) and their implied loadings (\code{fs_a:fs_b_ld}) via
+\code{\link[=compute_fs_prod]{compute_fs_prod()}} and appends them to the result; see
+\code{\link[=compute_fs_prod]{compute_fs_prod()}} for the derivation. Single-group lavaan models only
+(v1); not supported with \code{local = TRUE}.
+}
 }
 \examples{
 library(lavaan)
@@ -394,4 +415,11 @@ fit <- cfa("visual =~ x1 + x2 + x3",
            data = HolzingerSwineford1939,
            group = "school", group.equal = c("loadings", "intercepts"))
 get_fs(fit, prior_mean = c(visual = -0.12), prior_cov = 0.33)
+
+# Product-score indicator for the ind60 x dem60 interaction (single-group
+# lavaan models only, v1); see compute_fs_prod() for the derivation
+get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
+       model = " ind60 =~ x1 + x2 + x3
+                 dem60 =~ y1 + y2 + y3 + y4 ",
+       product = "ind60:dem60")
 }
