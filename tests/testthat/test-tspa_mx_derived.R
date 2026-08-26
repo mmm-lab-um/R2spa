@@ -17,15 +17,16 @@
 # bit-exactly (expect_identical on unname(coef()) + tight-tolerance
 # coefficient extractions, as in test-tspa_mx.R).
 #
-# Scope narrowing (implementation finding V3c, plan section 5 item 3):
-# full per-row/per-pattern q >= 2 definition-variable models do NOT
-# optimize in OpenMx 2.22.11 (off-diagonal defvar cells abort with
-# "implied covariance not positive definite" for the derived AND the
-# documented manual route; seeds 7/42/99/123/1334, SLSQP and CSOLNP) -- a
-# pre-existing OpenMx RAM limitation, not a derivation defect. The SG FIML
-# block therefore pins the derived model string against the manual
-# character-matrix string, the appended int_fs_* columns against
-# fs_indiv(include_intercept = TRUE), and a q = 1 end-to-end numerical A/B.
+# q >= 2 off-diagonal defvar models were once pinned at the string level
+# only (implementation finding V3c, plan section 5 item 3): they aborted
+# with "implied covariance not positive definite" on the derived route.
+# The abort was NOT an OpenMx limitation -- it was a '~~' defvar-lookup
+# orientation bug: lavaanify() may present a covariance row with (lhs, rhs)
+# reversed relative to the score order, so a lower-triangle-only fsT (the
+# documented and the derived convention) was not found and the c(1) defvar
+# sentinel leaked into the model as a fixed unit covariance between scores.
+# Fixed in tspa_mx_defvar_col(); the q >= 2 cases (SG FIML per-pattern and
+# mirt 2-factor per-row) are pinned numerically end-to-end below.
 # =====================================================================
 
 library(lavaan)
@@ -114,6 +115,14 @@ Tm_fiml <- matrix(c("ev_fs_visual", "ecov_fs_speed_fs_visual", NA,
                   dimnames = list(c("fs_visual", "fs_speed"),
                                   c("fs_visual", "fs_speed")))
 bm_fiml <- c(fs_visual = "int_fs_visual", fs_speed = "int_fs_speed")
+# 3b: the same q = 2 case fitted end-to-end. The lower-triangle-only
+# Tm_fiml is the sharper pin: it exercises the '~~' lookup fallback for the
+# orientation in which lavaanify() presents the (lhs, rhs) pair.
+fit_d3b <- suppressWarnings(tspa_mx_model("visual ~ speed", data = fs_fiml2))
+fit_e3b <- suppressWarnings(tspa_mx_model(
+  "visual ~ speed", data = fs_indiv(fs_fiml2, include_intercept = TRUE),
+  fsL = Lm_fiml, fsT = Tm_fiml, fsb = bm_fiml
+))
 
 # --- 3c/4a. q = 1 fixtures (single latent -> diagonal-only defvars fit) ----
 mod_hs1 <- "visual =~ x1 + x2 + x3"
@@ -277,12 +286,41 @@ test_that("derived SG FIML (per-pattern) reproduces the manual def-var spec and 
   expect_true(any(der3$data[["int_fs_visual"]] != 0))
 })
 
+test_that("derived SG FIML q = 2 (per-pattern) end-to-end equals the manual def-var fit", {
+  # Regression for the '~~' defvar-lookup orientation bug: with the
+  # lower-triangle-only Tm_fiml, the derived fit must equal the manual
+  # character-matrix fit (both previously aborted with a leaked fixed unit
+  # covariance whenever lavaanify() presented the pair reversed).
+  expect_identical(unname(coef(fit_d3b)), unname(coef(fit_e3b)))
+  expect_equal(mx_path_val(fit_d3b, "speed", "visual"),
+               mx_path_val(fit_e3b, "speed", "visual"), tolerance = 1e-10)
+  expect_equal(vcov(fit_d3b), vcov(fit_e3b), tolerance = 1e-10,
+               ignore_attr = TRUE)
+})
+
 test_that("derived SG FIML q = 1 end-to-end equals the manual def-var fit", {
-  # V3c: full q >= 2 per-pattern defvar fits do not optimize in OpenMx
-  # 2.22.11 (both routes); the q = 1 (diagonal-only) case is the numerical A/B
+  # the q = 1 (diagonal-only) case (no off-diagonal defvars to look up)
   expect_identical(unname(coef(fit_d3c)), unname(coef(fit_e3c)))
   expect_equal(mx_var_val(fit_d3c, "visual"),
                mx_var_val(fit_e3c, "visual"), tolerance = 1e-10)
+})
+
+test_that("the '~~' defvar lookup is orientation-agnostic for lower-triangle-only fsT", {
+  S2 <- c("fs_F1", "fs_F2")
+  Lm <- `dimnames<-`(matrix(c("F1_by_fs_F1", NA, NA, "F2_by_fs_F2"), 2L),
+                     list(S2, c("F1", "F2")))
+  Tm <- matrix(NA_character_, 2L, 2L, dimnames = list(S2, S2))
+  Tm[1L, 1L] <- "ev_fs_F1"
+  Tm[2L, 1L] <- "ecov_fs_F2_fs_F1" # lower triangle only
+  Tm[2L, 2L] <- "ev_fs_F2"
+  spec <- R2spa:::tspa_mx_spec(NULL, Lm, Tm, NULL)
+  expect_identical(R2spa:::tspa_mx_defvar_col(spec, "fs_F2", "~~", "fs_F1"),
+                   "ecov_fs_F2_fs_F1")
+  # the orientation in which lavaanify() actually presents the row
+  expect_identical(R2spa:::tspa_mx_defvar_col(spec, "fs_F1", "~~", "fs_F2"),
+                   "ecov_fs_F2_fs_F1")
+  expect_identical(R2spa:::tspa_mx_defvar_col(spec, "fs_F1", "~~", "fs_F1"),
+                   "ev_fs_F1")
 })
 
 test_that("derived local FIML (per_obs, q = 1) equals the manual def-var fit", {
@@ -425,6 +463,47 @@ fit_mg_e <- suppressWarnings(tspa_mx_model(
   fsL = Lm1, fsT = Tm1, fsb = bm1
 ))
 
+# --- 4d: mirt SG, two factors (off-diagonal defvars) ------------------------
+# The vignette case (Lai & Hsiao 2022): the q >= 2 per-row fit that aborted
+# before the '~~' lookup fix. The manual control uses the documented
+# lower-triangle-only fsT (the vignette's full-triangle matrix works too).
+set.seed(1235)
+n2d <- 300L
+eta2d <- MASS::mvrnorm(n2d, mu = c(0, 0), Sigma = diag(c(1, 1 - 0.5^2)),
+                       empirical = TRUE)
+th2d_1 <- eta2d[, 1]
+th2d_2 <- -1 + 0.5 * th2d_1 + eta2d[, 2]
+dat2d_a <- as.data.frame(mirt::simdata(a = matrix(1, 5L), d = rnorm(5L),
+                                       N = n2d, itemtype = "2PL",
+                                       Theta = th2d_1))
+dat2d_b <- as.data.frame(mirt::simdata(a = matrix(runif(5L, 0.5, 1.5), 5L),
+                                       d = rnorm(5L), N = n2d,
+                                       itemtype = "2PL", Theta = th2d_2))
+dat2d <- cbind(dat2d_a, dat2d_b)
+colnames(dat2d) <- paste0("Item_", 1:10)
+mirt_2f <- suppressWarnings(
+  mirt::mirt(dat2d, model = "F1 = 1-5\nF2 = 6-10\nCOV = F1*F2",
+             itemtype = "2PL", verbose = FALSE)
+)
+fs_mirt2f <- get_fs(mirt_2f)
+S2f <- c("fs_F1", "fs_F2")
+Lm2f <- matrix(c("F1_by_fs_F1", "F1_by_fs_F2", "F2_by_fs_F1",
+                 "F2_by_fs_F2"),
+               nrow = 2L, dimnames = list(S2f, c("F1", "F2")))
+# lower triangle only (column-major fill: [1,1], [2,1], [1,2], [2,2])
+Tm2f <- `dimnames<-`(
+  matrix(c("ev_fs_F1", "ecov_fs_F2_fs_F1", NA, "ev_fs_F2"), 2L),
+  rep(list(S2f), 2)
+)
+bm2f <- c(fs_F1 = "int_fs_F1", fs_F2 = "int_fs_F2")
+fit_2f_d <- suppressWarnings(tspa_mx_model("F2 ~ F1\nF2 + F1 ~ 1",
+                                           data = fs_mirt2f))
+fit_2f_e <- suppressWarnings(tspa_mx_model(
+  "F2 ~ F1\nF2 + F1 ~ 1",
+  data = fs_indiv(fs_mirt2f, include_intercept = TRUE),
+  fsL = Lm2f, fsT = Tm2f, fsb = bm2f
+))
+
 # --- 8: mirt SG with a completely-missing row (D6) --------------------------
 d_na <- mirt_sim1f(50L)
 d_na[1L, ] <- NA
@@ -453,6 +532,21 @@ test_that("mirt MG (group column, no group_col attribute) derives as a pooled pe
   expect_identical(unname(coef(fit_mg_d)), unname(coef(fit_mg_e)))
   expect_equal(mx_var_val(fit_mg_d, "F1"), mx_var_val(fit_mg_e, "F1"),
                tolerance = 1e-10)
+})
+
+test_that("derived mirt 2-factor (per-row, off-diagonal defvars) equals the manual def-var fit", {
+  # The vignette's multidimensional case end-to-end (q = 2 per-row). Before
+  # the '~~' lookup fix the derived route aborted ("implied covariance not
+  # positive definite") with a leaked fixed unit score covariance.
+  expect_identical(unname(coef(fit_2f_d)), unname(coef(fit_2f_e)))
+  expect_equal(mx_path_val(fit_2f_d, "F1", "F2"),
+               mx_path_val(fit_2f_e, "F1", "F2"), tolerance = 1e-10)
+  expect_equal(mx_var_val(fit_2f_d, "F1"), mx_var_val(fit_2f_e, "F1"),
+               tolerance = 1e-10)
+  expect_equal(mx_var_val(fit_2f_d, "F2"), mx_var_val(fit_2f_e, "F2"),
+               tolerance = 1e-10)
+  expect_equal(vcov(fit_2f_d), vcov(fit_2f_e), tolerance = 1e-10,
+               ignore_attr = TRUE)
 })
 
 test_that("derived mirt prior_mean (nonzero per-row fsb) equals the explicit int_fs_ fit", {

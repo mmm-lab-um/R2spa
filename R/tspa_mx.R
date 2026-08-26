@@ -541,7 +541,13 @@ tspa_mx_defvar_col <- function(spec, lhs, op, rhs) {
     return(if (is.na(li) || is.na(sj)) NA_character_ else spec$L$coln[sj, li])
   }
   if (op == "~~") {
-    return(if (is.na(si) || is.na(sj)) NA_character_ else spec$T$coln[si, sj])
+    if (is.na(si) || is.na(sj)) return(NA_character_)
+    # lavaanify() may present a '~~' row with (lhs, rhs) in either orientation
+    # relative to the score order, so a lower-triangle-only fsT (the documented
+    # and the derived convention) must be found from both.
+    v <- spec$T$coln[si, sj]
+    if (is.na(v)) v <- spec$T$coln[sj, si]
+    return(v)
   }
   if (op == "~1") {
     return(if (is.na(si)) NA_character_ else spec$b$coln[1L, si])

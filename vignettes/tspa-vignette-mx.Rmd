@@ -94,10 +94,12 @@ OpenMx
 
 ```{r}
 tspa_mx <- tspa_mx_model(model = "dem60 ~ ind60\ndem60 + ind60 ~ 1",
-                         data = fs_dat,
-                         fsL = attr(fs_dat, "fsL"),
-                         fsT = attr(fs_dat, "fsT"),
-                         fsb = attr(fs_dat, "fsb"))
+                         data = fs_dat)
+# We recently supported dropping fsL, fsT, and fsb when they can
+# be derived from the get_fs() result's attributes. So we skip
+# tspa_mx_model(...,     fsL = attr(fs_dat, "fsL"),
+#                        fsT = attr(fs_dat, "fsT"),
+#                        fsb = attr(fs_dat, "fsb"))
 # Run OpenMx
 tspa_mx_fit <- mxRun(tspa_mx)
 # Summarize the results
@@ -298,23 +300,21 @@ mfit <- mirt(dat, model = mod, itemtype = "2PL", verbose = FALSE)
 ```
 
 ```{r}
-# Factor scores, plus the per-row loadings and error covariances get_fs()
-# attaches (the same full-factor-covariance correction the hand-rolled form
-# below used to compute by hand).
+# Factor scores, plus the per-row loadings and error covariances and
+# score intercepts get_fs() attaches (the same full-factor-covariance
+# correction the EAP section above derives from the hand-computed
+# reliabilities and error variances).
 fs_dat <- get_fs(mfit)
 ```
 
 ```{r}
-# Structural model on the two latent dimensions (distinct from the score columns)
-S <- c("fs_F1", "fs_F2")
-cross_load <- matrix(c("F1_by_fs_F1", "F1_by_fs_F2",
-                       "F2_by_fs_F1", "F2_by_fs_F2"), nrow = 2) |>
-    `dimnames<-`(list(S, c("theta1", "theta2")))
-err_cov <- matrix(c("ev_fs_F1", "ecov_fs_F2_fs_F1",
-                    "ecov_fs_F2_fs_F1", "ev_fs_F2"), nrow = 2) |>
-    `dimnames<-`(rep(list(S), 2))
-tspa_mx2 <- tspa_mx_model(model = "theta2 ~ theta1\ntheta2 + theta1 ~ 1",
-                          data = fs_dat, fsL = cross_load, fsT = err_cov)
+# Structural model on the two latent dimensions (the mirt factor names, kept
+# distinct from the score columns). All measurement inputs are derived from
+# the get_fs() result's attributes: the per-row loadings and error
+# covariances become definition variables referencing its own
+# *_by_*/ev_*/ecov_* columns, and the int_fs_* score-intercept columns are
+# appended from the fsb attribute (the fs_indiv() round-trip, now automatic):
+tspa_mx2 <- tspa_mx_model(model = "F2 ~ F1\nF2 + F1 ~ 1", data = fs_dat)
 # Run OpenMx
 tspa_mx2_fit <- mxRun(tspa_mx2)
 # Summarize the results

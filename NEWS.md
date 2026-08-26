@@ -113,7 +113,16 @@
 - Update naming for `get_fscore()` (#79)
     * Rename `vc` to `ev` (error variance-covariance) for better consistency
 
-## Bug Fixes
+ ## Bug Fixes
+- `tspa_mx_model()` no longer mis-specifies off-diagonal factor-score
+  covariances when `lavaanify()` presents a `~~` row with the (lhs, rhs)
+  pair reversed relative to the score order: the definition-variable lookup
+  now falls back to the transposed triangle, so a lower-triangle-only `fsT`
+  (the documented and the auto-derived convention) is honored. Previously
+  the `c(1)` definition-variable sentinel leaked into the model as a fixed
+  unit covariance between the scores, and such fits (e.g. multi-factor mirt
+  per-row models, single-group FIML per-pattern models) aborted with
+  "implied covariance not positive definite".
 - Fix a bug in the `se_fs` argument in `tspa()` (#90).
 - `grandStandardizedSolution()` now assigns standardized estimates and SEs
   to partable rows by their global free position instead of assuming the
@@ -127,7 +136,10 @@
     * tspa-growth-vignette (#50)
     * get_fs_int-vignette (#82)
     * reliability (#81)
-    * missing-data (#79)
+     * missing-data (#79)
+     * 2S-PA with OpenMx and IRT (mirt): the multidimensional example now
+       uses the auto-derived measurement inputs (no hand-rolled
+       `cross_load`/`err_cov` matrices)
 
 ## Other
 - General code clean-up (#82).
