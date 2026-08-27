@@ -55,5 +55,5 @@ Suggests:
     umx
 VignetteBuilder: knitr
 Config/testthat/edition: 3
-URL: https://gengrui-zhang.github.io/R2spa/
+URL: https://gengrui-zhang.github.io/R2spa/, https://mmm-lab-um.github.io/R2spa/
 Config/roxygen2/version: 8.1.0
