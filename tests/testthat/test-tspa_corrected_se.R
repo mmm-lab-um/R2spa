@@ -14,10 +14,14 @@
 # proof.
 # T3 goldens: the shipped central-difference output at the shipped step
 # (h0 = 1e-5), R 4.6.1 / lavaan 0.7-2, re-derived 2026-08-22. Deterministic
-# across runs at a fixed h (the stage-2 refits are reproducible); the
-# correction is NOT step-invariant below h ~ 1e-6 (the optimizer-noise
-# regime; at h = 1e-7 the d60~~d60 entry drops to ~16.89), so the goldens
-# are pinned to h0, not to an h -> 0 limit.
+# across runs at a fixed h (the stage-2 refits are reproducible), but
+# platform-sensitive: the h0 = 1e-5 central difference amplifies BLAS/
+# optimizer noise in the stage-2 refits (observed cross-platform drift
+# 1.6e-3 relative, x86-64 Linux/Windows vs aarch64 macOS, 2026-08-27), so
+# the tolerance is 1e-2. The correction is NOT step-invariant below
+# h ~ 1e-6 (the optimizer-noise regime; at h = 1e-7 the d60~~d60 entry
+# drops to ~16.89), so the goldens are pinned to h0, not to an h -> 0
+# limit.
 # Re-derive: cfa(3-factor joint, PoliticalDemocracy) ->
 # get_fs_lavaan(vfsLT = TRUE) -> tspa("dem60 ~ ind60; dem65 ~ ind60 +
 # dem60") -> vcov_corrected(fit, vfsLT) - vcov(fit), read the named
@@ -128,13 +132,14 @@ test_that("T3: q = 3 correction is non-zero and matches golden values (B1 guard)
   expect_gt(cor["dem60~~dem60", "dem60~~dem60"], 1)
   # Golden elements (provenance, step, and drift protocol in the file
   # header): the shipped central-difference step (h0 = 1e-5), deterministic
-  # across runs on the pinned R/lavaan.
+  # across runs on the pinned R/lavaan/platform (1e-2 absorbs the
+  # cross-platform BLAS/optimizer drift; see header).
   expect_equal(cor["dem60~~dem60", "dem60~~dem60"], 17.3455467,
-               tolerance = 1e-3)
+               tolerance = 1e-2)
   expect_equal(cor["dem65~dem60", "dem65~dem60"], 1.1961761,
-               tolerance = 1e-3)
+               tolerance = 1e-2)
   expect_equal(cor["dem60~ind60", "dem60~ind60"], 1.4245011,
-               tolerance = 1e-3)
+               tolerance = 1e-2)
 })
 
 test_that("T4: corrected SEs are within a loose tolerance of the bootstrap MAD", {

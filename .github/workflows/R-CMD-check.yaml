@@ -29,6 +29,17 @@ jobs:
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
+      # Single-thread the BLAS so the corrected-SE goldens (T3 in
+      # test-tspa_corrected_se.R) are run-to-run deterministic. There is no
+      # cross-OS BLAS *version* pinning available as a CI action (r-lib/actions
+      # has no setup-blas), so the residual Accelerate (macOS) vs OpenBLAS
+      # (Linux) difference is absorbed by the goldens' 1e-2 tolerance instead.
+      # VECLIB_MAXIMUM_THREADS targets the macOS Accelerate/vecLib path; the
+      # others cover OpenBLAS/OpenMP/MKL.
+      OPENBLAS_NUM_THREADS: 1
+      OMP_NUM_THREADS: 1
+      MKL_NUM_THREADS: 1
+      VECLIB_MAXIMUM_THREADS: 1
 
     steps:
       - uses: actions/checkout@v4
@@ -77,14 +88,28 @@ jobs:
           extra-packages: any::rcmdcheck
           needs: check
 
-      - name: Pin lavaan 0.7-2 (CRAN archive)
+      - name: Pin lavaan 0.7-2 (current CRAN, then archive)
+        # 0.7-2 is still the current CRAN release, so the archive URL 404s
+        # until a newer lavaan pushes it into /Archive/. Try current CRAN
+        # first, then the archive, and hard-fail if neither yields the pin.
         run: |
-          install.packages(
-            "https://cran.r-project.org/src/contrib/Archive/lavaan/lavaan_0.7-2.tar.gz",
-            repos = "https://cloud.r-project.org",
-            type = "source"
-          )
-        shell: R {0}
+          want <- "0.7-2"
+          have <- if (requireNamespace("lavaan", quietly = TRUE))
+            as.character(packageVersion("lavaan")) else NA_character_
+          if (!identical(have, want)) {
+            urls <- c(
+              paste0("https://cran.r-project.org/src/contrib/lavaan_", want, ".tar.gz"),
+              paste0("https://cran.r-project.org/src/contrib/Archive/lavaan/lavaan_", want, ".tar.gz")
+            )
+            for (url in urls) {
+              try(install.packages(url, repos = "https://cloud.r-project.org",
+                                   type = "source"), silent = TRUE)
+              if (requireNamespace("lavaan", quietly = TRUE) &&
+                  identical(as.character(packageVersion("lavaan")), want)) break
+            }
+          }
+          stopifnot(identical(as.character(packageVersion("lavaan")), want))
+        shell: Rscript {0}
 
       - uses: r-lib/actions/check-r-package@v2
         with:
@@ -114,20 +139,21 @@ jobs:
           needs: heavy
 
       - name: Install lavaan (development)
+        # Upstream account was renamed: Lavaan/lavaan (404s since 2026-08).
         run: |
-          remotes::install_github("Lavaan/lavaan", dependencies = FALSE, quiet = TRUE)
-        shell: R {0}
+          remotes::install_github("yrosseel/lavaan", dependencies = FALSE, quiet = TRUE)
+        shell: Rscript {0}
 
       - name: Install R2spa
         run: R CMD INSTALL --no-multiarch --with-keep.source .
-        shell: R {0}
+        shell: bash
 
-      - name: Run scoped test subset (tspa/compat/get_fs_int)
+      - name: Run scoped test subset (tspa/compat/product)
         run: |
           testthat::test_local(
             ".",
-            filter = "^(tspa|tspa_render|lavaan_compat|get_fs_int)$",
+            filter = "^(tspa|tspa_render|lavaan_compat|compute_fs_prod)$",
             load_package = "installed",
             stop_on_failure = TRUE
           )
-        shell: R {0}
+        shell: Rscript {0}
