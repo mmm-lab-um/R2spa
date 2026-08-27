@@ -140,7 +140,15 @@ indicator with error variance the (per-group pooled,
 \code{reduce}) product SE, like every other single-factor latent;
 in the multi-factor path it loads with the implied loading
 \code{gamma} and error variance \code{se_P^2}, both evaluated at the
-(pooled) \code{fsL}/\code{fsT} with the \code{psi} attribute. Single-group
+(pooled) \code{fsL}/\code{fsT} with the \code{psi} attribute. When two
+product latents share a factor score (e.g. \code{x:m} and \code{x:z}
+share \code{x}), their indicators' measurement errors are
+correlated, and \code{tspa()} fixes those error covariances in the
+stage-2 model, estimated from the stage-1 \code{fsL}/\code{fsT}/\code{psi}
+(the Isserlis expansion of the joint-normal score-error
+moments — the same joint-normality assumptions the
+\code{\link[=compute_fs_prod]{compute_fs_prod()}} product SE rests on); with a single
+product latent there is nothing to fix. Single-group
 models only (v1); not supported with \code{corrected_se = TRUE}.
 Default \code{FALSE}, which leaves the manual workflow
 (\code{\link[=get_fs]{get_fs()}} with \code{product} set, or \code{\link[=compute_fs_prod]{compute_fs_prod()}}, up

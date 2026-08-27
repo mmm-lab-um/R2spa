@@ -354,6 +354,38 @@ fs_prod_se2 <- function(L, T, psi, i, j) {
   tau_i * s_j2 + tau_j * s_i2 + s_i2 * s_j2 + c_ij^2 + 2 * tau_ij * c_ij
 }
 
+# Cov(u_ij, u_kl) for the measurement errors of the DMC product indicators
+# of the score pairs (i, j) and (k, l) (row indices of the block's fsL,
+# column indices of the shared psi), where
+#   u_kl = X_k e_l + X_l e_k + e_k e_l - c_kl,  X_k = L_k (xi - alpha),
+# tau_uv = L_u psi L_v' (a scalar: row u of L times psi times row v'),
+# c_uv = T[u, v] (so c_uu = T[u, u]), by the Isserlis expansion of the
+# joint-normal (xi, e) moments (E[e] = 0, Cov(e, xi) = 0):
+#   tau_ik c_jl + tau_il c_jk + tau_jk c_il + tau_jl c_ik
+#     + c_ik c_jl + c_il c_jk
+# Symmetric in the two pairs (i, j) <-> (k, l); the diagonal case
+# (i, j) = (k, l) reduces exactly to fs_prod_se2(). Nonzero whenever the two
+# products share a factor score (or, more generally, when a score-error
+# moment links the two pairs) — the error covariance tspa() must fix
+# between such product indicators in the stage-2 model. Plain matrices in,
+# scalar out; an all-NA block yields NA (NA propagates through %*%).
+fs_prod_ecov <- function(L, T, psi, i, j, k, l) {
+  Li <- as.numeric(L[i, , drop = TRUE])
+  Lj <- as.numeric(L[j, , drop = TRUE])
+  Lk <- as.numeric(L[k, , drop = TRUE])
+  Ll <- as.numeric(L[l, , drop = TRUE])
+  tau_ik <- as.numeric(Li %*% psi %*% Lk)
+  tau_il <- as.numeric(Li %*% psi %*% Ll)
+  tau_jk <- as.numeric(Lj %*% psi %*% Lk)
+  tau_jl <- as.numeric(Lj %*% psi %*% Ll)
+  c_ik <- T[i, k]
+  c_il <- T[i, l]
+  c_jk <- T[j, k]
+  c_jl <- T[j, l]
+  tau_ik * c_jl + tau_il * c_jk + tau_jk * c_il + tau_jl * c_ik +
+    c_ik * c_jl + c_il * c_jk
+}
+
 # Implied loading: gamma = L[i, i] L[j, j] + L[i, j] L[j, i], the
 # coefficient of xi_i xi_j in E[P | xi] = (L_i (xi - alpha))(L_j (xi - alpha)).
 fs_prod_gamma <- function(L, i, j) {

@@ -1,6 +1,24 @@
 # R2spa 0.0.4
 
 ## New Features
+- Product factor-score indicators now carry fixed measurement-error
+  covariances in the stage-2 model: products sharing a factor score (e.g.
+  `xm` and `xz`) have correlated measurement errors (the shared score's
+  error enters both), and `tspa()` computes the error covariance for every
+  pair of product latents from the stage-1 `fsL`/`fsT`/`psi` attributes
+  (new pure-matrix helper `fs_prod_ecov()`: a diagonal score-error matrix —
+  disjoint-indicator CFAs — reduces the shared-factor pair to `tau_jl
+  s_i^2`, the non-shared pair's latent covariance times the shared score's
+  error variance; local-mode separate-models results reduce to zero) and
+  emits it as a fixed `fs_v1 ~~ fs_v2` statement. Works on both the
+  single-factor (`se_fs`) and the multi-factor (`fsT`/`fsL`) paths, for both
+  `tspa(product = TRUE)` and the manual workflow (product columns
+  pre-computed with `get_fs(product = )` / `compute_fs_prod()` and listed in
+  `se_fs`), removing the first-order (n-independent) attenuation of the
+  product coefficients that the previously free covariance absorbed. Data
+  lacking the stage-1 attributes (e.g. a `cbind()`'d `get_fs()` result) with
+  two or more product latents is rejected with an informative error (remedy:
+  pass the un-`cbind()`'d result). Single-group models (v1).
 - Add function `get_fs_int()` for estimating interaction effects in 2S-PA (#82).
 - Add computation of reliability function in `get_fscore()` (#81)
 - Add functions of obtaining tidy-ed factor scores data for `get_fscore()` (#79)

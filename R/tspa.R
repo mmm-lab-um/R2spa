@@ -210,7 +210,15 @@
 #'            `reduce`) product SE, like every other single-factor latent;
 #'            in the multi-factor path it loads with the implied loading
 #'            `gamma` and error variance `se_P^2`, both evaluated at the
-#'            (pooled) `fsL`/`fsT` with the `psi` attribute. Single-group
+#'            (pooled) `fsL`/`fsT` with the `psi` attribute. When two
+#'            product latents share a factor score (e.g. `x:m` and `x:z`
+#'            share `x`), their indicators' measurement errors are
+#'            correlated, and `tspa()` fixes those error covariances in the
+#'            stage-2 model, estimated from the stage-1 `fsL`/`fsT`/`psi`
+#'            (the Isserlis expansion of the joint-normal score-error
+#'            moments — the same joint-normality assumptions the
+#'            [compute_fs_prod()] product SE rests on); with a single
+#'            product latent there is nothing to fix. Single-group
 #'            models only (v1); not supported with `corrected_se = TRUE`.
 #'            Default `FALSE`, which leaves the manual workflow
 #'            ([get_fs()] with `product` set, or [compute_fs_prod()], up
@@ -629,6 +637,7 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     # convention of this path is unchanged: the product latent loads 1 on
     # its indicator, error = the (pooled) product SE, like every other
     # single-factor latent.
+    prods <- NULL
     if (isTRUE(product)) {
       prods <- tspa_product_latents(model, names(data), colnames(se_fs))
       if (!is.null(prods)) {
@@ -670,8 +679,39 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     # `v` is `fs_v`, so a matching product-score column is aliased into a
     # working copy of the data. Manual pre-renames keep working (the alias
     # is a no-op when `fs_v` already exists).
-    data <- tspa_sf_alias(data, se_fs)$data
-    tspaModel <- tspa_sf(model, data, se_fs)
+    al <- tspa_sf_alias(data, se_fs)
+    data <- al$data
+    # Product-indicator error covariances: with more than one product
+    # latent, two products sharing a factor score have correlated
+    # measurement errors that the stage-2 model must fix. The authoritative
+    # pair set is `prods` (product = TRUE); the alias's `prod_map` covers
+    # the manual workflow (pre-computed product columns with the product
+    # SEs in se_fs), including replayed/pre-renamed fits where the alias
+    # itself was a no-op.
+    prod_pairs <- prods
+    if (is.null(prod_pairs) && !is.null(al$prod_map)) {
+      prod_pairs <- al$prod_map
+    }
+    prod_ecov <- NULL
+    if (!is.null(prod_pairs) && nrow(prod_pairs) >= 2L) {
+      fsL_a <- attr(data, "fsL")
+      fsT_a <- attr(data, "fsT")
+      psi_a <- attr(data, "psi")
+      if (is.null(fsL_a) || is.null(fsT_a) || is.null(psi_a)) {
+        stop(
+          "Cannot compute the product-indicator error covariances: the ",
+          "data lacks the stage-1 attributes (fsL/fsT/psi) that a direct ",
+          "single-group get_fs() result carries (a cbind()ed result drops ",
+          "them). Pass the un-cbind()ed get_fs() result.",
+          call. = FALSE
+        )
+      }
+      L1 <- if (is.list(fsL_a)) fsL_a[[1L]] else fsL_a
+      T1 <- if (is.list(fsT_a)) fsT_a[[1L]] else fsT_a
+      psi1 <- fs_psi_matrix(psi_a)
+      prod_ecov <- tspa_prod_ecov(prod_pairs, L1, T1, psi1)
+    }
+    tspaModel <- tspa_sf(model, data, se_fs, prod_ecov)
   } else { # multi-factor measurement model
     # Opt-in product-score auto-compute, multi-factor path: the product
     # latent (named by concatenation or lavaan interaction syntax, as in
@@ -680,6 +720,7 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     # variance `se_P^2`, both evaluated at the (pooled) fsL/fsT with the
     # psi attribute.
     prods_mf <- NULL
+    prods_ecov <- NULL
     if (isTRUE(product)) {
       if (is.list(fsT) && length(fsT) > 1L) {
         stop(
@@ -729,9 +770,14 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
             data[[tgt]] <- data[[src]]
           }
         }
+        # Product-indicator error covariances: pairs of product latents
+        # sharing a factor score have correlated measurement errors that
+        # the stage-2 model fixes (NULL for a single product, as for a
+        # pair set with no nonzero covariances).
+        prods_ecov <- tspa_prod_ecov(prods, L1, T1, psi)
       }
     }
-    tspaModel <- tspa_mf(model, data, fsT, fsL, fsb, prods_mf)
+    tspaModel <- tspa_mf(model, data, fsT, fsL, fsb, prods_mf, prods_ecov)
     if (inherits(data, "list")) {
       data <- do.call(rbind, data)
     }
@@ -1226,6 +1272,62 @@ tspa_ensure_product_cols <- function(data, prods) {
   data
 }
 
+# Product-indicator error covariances for the stage-2 model: for every
+# unordered pair of the product latents named by `prods` (a data frame with
+# columns v, a, b — `a`/`b` the factor scores of the DMC indicator
+# `fs_a:fs_b`; the extra `tok` column of tspa_product_latents() is ignored),
+# the measurement-error covariance of the two indicators,
+# fs_prod_ecov() (R/compute_fs_prod.R), evaluated at the (pooled) matrices
+# L/T/psi. Two product indicators sharing a factor score (e.g. `x:m` and
+# `x:z` share `x`) have correlated measurement errors that the stage-2 model
+# must fix; a (numerically) zero value — the two pairs linked by no
+# score-error moment — is dropped. Returns a data frame (v1, v2, ecov) in
+# (r, p) loop order, or NULL when there are fewer than two products or every
+# pair is zero.
+tspa_prod_ecov <- function(prods, L, Tm, psi) {
+  if (nrow(prods) < 2L) {
+    return(NULL)
+  }
+  if (!is.matrix(L) || !is.matrix(Tm) || !is.matrix(psi)) {
+    stop(
+      "The product-indicator error covariances require plain-matrix ",
+      "stage-1 'fsL'/'fsT'/'psi' values; per-pattern (FIML) blocks are not ",
+      "supported with more than one product latent (v1).",
+      call. = FALSE
+    )
+  }
+  ia <- match(prods$a, colnames(L))
+  ib <- match(prods$b, colnames(L))
+  if (anyNA(ia) || anyNA(ib)) {
+    stop(
+      "The product-indicator error covariances cannot be computed: the ",
+      "factor score(s) ",
+      paste(sort(unique(c(prods$a[is.na(ia)], prods$b[is.na(ib)]))),
+            collapse = ", "),
+      " are not a column of the stage-1 'fsL' matrix.",
+      call. = FALSE
+    )
+  }
+  n <- nrow(prods)
+  v1 <- character()
+  v2 <- character()
+  ecov <- numeric()
+  for (r in seq_len(n - 1L)) {
+    for (p in seq(r + 1L, n)) {
+      val <- fs_prod_ecov(L, Tm, psi, ia[p], ib[p], ia[r], ib[r])
+      if (abs(val) > 1e-12) {
+        v1 <- c(v1, prods$v[r])
+        v2 <- c(v2, prods$v[p])
+        ecov <- c(ecov, val)
+      }
+    }
+  }
+  if (length(ecov) == 0L) {
+    return(NULL)
+  }
+  data.frame(v1 = v1, v2 = v2, ecov = ecov, stringsAsFactors = FALSE)
+}
+
 # Stage-2 group order (PLAN 13): the unique values of the group column in
 # first-appearance order -- verified on lavaan 0.7-2 to be lavaan's own
 # `group =` order for BOTH character and factor columns (lavaan does not
@@ -1329,8 +1431,10 @@ tspa_user_rows <- function(model) {
 
 # Single-factor (se_fs) schema: per latent, one fixed-loading struct row
 # and one error-variance row per group; values follow the se_fs rows
-# (groups) in order.
-tspa_schema_sf <- function(model, se) {
+# (groups) in order; fixed error-covariance rows between product
+# indicators sharing a factor score when `prod_ecov` is given
+# (single-group v1, hence group 1).
+tspa_schema_sf <- function(model, se, prod_ecov = NULL) {
   var <- colnames(se)
   fs <- paste0("fs_", var)
   ng <- nrow(se)
@@ -1349,6 +1453,15 @@ tspa_schema_sf <- function(model, se) {
       )
     }
   }
+  if (!is.null(prod_ecov)) {
+    for (k in seq_len(nrow(prod_ecov))) {
+      rows[[length(rows) + 1L]] <- tspa_row(
+        paste0("fs_", prod_ecov$v1[k]), "~~", paste0("fs_", prod_ecov$v2[k]),
+        prod_ecov$ecov[k], 1L, "error_cov",
+        paste0("__r2spa_peck", k, "__")
+      )
+    }
+  }
   do.call(rbind, rows)
 }
 
@@ -1357,8 +1470,11 @@ tspa_schema_sf <- function(model, se) {
 # of fsT in column-major order — the legacy per-group value routing made
 # explicit and unit-testable; per-score intercept rows when fsb is given;
 # product-indicator rows when `prods` is given (one fixed loading row and
-# one fixed error-variance row per product latent, single-group v1).
-tspa_schema_mf <- function(model, fsT, fsL, fsb, prods = NULL) {
+# one fixed error-variance row per product latent, single-group v1) and
+# fixed error-covariance rows between product indicators sharing a factor
+# score when `prod_ecov` is given (group 1 likewise).
+tspa_schema_mf <- function(model, fsT, fsL, fsb, prods = NULL,
+                           prod_ecov = NULL) {
   # `fsT`/`fsL` are plain matrices for a single-group model or named lists
   # of them for a multigroup model. Single-group unified get_fs() output
   # carries length-1 list attributes, so either shape is accepted on either
@@ -1427,7 +1543,9 @@ tspa_schema_mf <- function(model, fsT, fsL, fsb, prods = NULL) {
   # Product indicators: the DMC product column `fs_v` (aliased from
   # `fs_a:fs_b` upstream) is a single fixed indicator of the product
   # latent — loading `gamma`, error variance `se_P^2`, evaluated at the
-  # (pooled) matrices upstream (single-group v1, hence group 1).
+  # (pooled) matrices upstream (single-group v1, hence group 1); two
+  # product indicators sharing a factor score get a fixed error-covariance
+  # row (from `prod_ecov`, likewise group 1).
   if (!is.null(prods)) {
     for (k in seq_len(nrow(prods))) {
       fv <- paste0("fs_", prods$v[k])
@@ -1439,6 +1557,16 @@ tspa_schema_mf <- function(model, fsT, fsL, fsb, prods = NULL) {
         fv, "~~", fv, prods$se2[k], 1L, "error_var",
         paste0("__r2spa_pev", k, "__")
       )
+    }
+    if (!is.null(prod_ecov)) {
+      for (k in seq_len(nrow(prod_ecov))) {
+        rows[[length(rows) + 1L]] <- tspa_row(
+          paste0("fs_", prod_ecov$v1[k]), "~~",
+          paste0("fs_", prod_ecov$v2[k]),
+          prod_ecov$ecov[k], 1L, "error_cov",
+          paste0("__r2spa_peck", k, "__")
+        )
+      }
     }
   }
   do.call(rbind, rows)
@@ -1572,14 +1700,16 @@ tspa_render <- function(sch, style = c("sf", "mf")) {
   paste0(elems, collapse = "\n")
 }
 
-tspa_sf <- function(model, data, se = NULL) {
+tspa_sf <- function(model, data, se = NULL, prod_ecov = NULL) {
   if (nrow(se) != 0) {
-    return(tspa_render(tspa_schema_sf(model, se), style = "sf"))
+    return(tspa_render(tspa_schema_sf(model, se, prod_ecov), style = "sf"))
   }
 }
 
-tspa_mf <- function(model, data, fsT, fsL, fsb, prods = NULL) {
-  tspa_render(tspa_schema_mf(model, fsT, fsL, fsb, prods), style = "mf")
+tspa_mf <- function(model, data, fsT, fsL, fsb, prods = NULL,
+                    prod_ecov = NULL) {
+  tspa_render(tspa_schema_mf(model, fsT, fsL, fsb, prods, prod_ecov),
+              style = "mf")
 }
 
 # ---------------------------------------------------------------------------
@@ -1588,6 +1718,11 @@ tspa_mf <- function(model, data, fsT, fsL, fsb, prods = NULL) {
 # names in se_fs) whose names concatenate to `v` is copied into the working
 # data as `fs_v`. Old user models that pre-rename the product-score column
 # keep working because the alias is a no-op when `fs_v` already exists.
+# The matched (a, b) pair of every se entry `v` with a single matching
+# product-score column is also returned as `prod_map` (columns v, a, b;
+# NULL when none) — including the pre-renamed/replayed cases where the
+# alias itself is a no-op — because the product-indicator error
+# covariances (tspa_prod_ecov()) need the pair even then.
 # ---------------------------------------------------------------------------
 
 tspa_sf_alias <- function(data, se) {
@@ -1595,10 +1730,13 @@ tspa_sf_alias <- function(data, se) {
   dnames <- if (is_lst) names(data[[1]]) else names(data)
   se_names <- colnames(se)
   aliases <- character()
+  pm_v <- character()
+  pm_a <- character()
+  pm_b <- character()
   for (v in se_names) {
     tgt <- paste0("fs_", v)
-    if (tgt %in% dnames) next
     cand <- character()
+    cand_ab <- character()
     for (col in dnames) {
       pos <- regexpr(":", col, fixed = TRUE)
       if (pos < 1L) next
@@ -1609,10 +1747,14 @@ tspa_sf_alias <- function(data, se) {
       a <- sub("^fs_", "", a)
       b <- sub("^fs_", "", b)
       if (!(a %in% se_names) || !(b %in% se_names)) next
-      if (paste0(a, b) == v || paste0(b, a) == v) cand <- c(cand, col)
+      if (paste0(a, b) == v || paste0(b, a) == v) {
+        cand <- c(cand, col)
+        cand_ab <- c(cand_ab, a, b)
+      }
     }
     if (length(cand) == 0) next
     if (length(cand) > 1) {
+      if (tgt %in% dnames) next # pre-renamed: the no-op keeps working
       stop(
         "Cannot determine which product-score column in the input data ",
         "corresponds to the latent variable '", v, "': ",
@@ -1620,12 +1762,26 @@ tspa_sf_alias <- function(data, se) {
         ". Rename it to \"", tgt, "\" to disambiguate."
       )
     }
-    if (is_lst) {
-      for (i in seq_along(data)) data[[i]][[tgt]] <- data[[i]][[cand]]
+    if (tgt %in% dnames) {
+      # The score column already exists (a user pre-rename, or a replay of
+      # a previously aliased fit): no alias, but `v` is still the product
+      # of (a, b) — the error covariances need the pair.
     } else {
-      data[[tgt]] <- data[[cand]]
+      if (is_lst) {
+        for (i in seq_along(data)) data[[i]][[tgt]] <- data[[i]][[cand]]
+      } else {
+        data[[tgt]] <- data[[cand]]
+      }
+      aliases <- c(aliases, paste0(tgt, " <- ", cand))
     }
-    aliases <- c(aliases, paste0(tgt, " <- ", cand))
+    pm_v <- c(pm_v, v)
+    pm_a <- c(pm_a, cand_ab[1L])
+    pm_b <- c(pm_b, cand_ab[2L])
   }
-  list(data = data, aliases = aliases)
+  prod_map <- if (length(pm_v) > 0L) {
+    data.frame(v = pm_v, a = pm_a, b = pm_b, stringsAsFactors = FALSE)
+  } else {
+    NULL
+  }
+  list(data = data, aliases = aliases, prod_map = prod_map)
 }

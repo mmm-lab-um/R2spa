@@ -47,7 +47,9 @@ and fed into stage 2 two ways:
   latent named by concatenating two factor-score names, `xm`, or in lavaan's
   interaction syntax, `x:m`), computes the missing product columns on the
   fly from the data's stage-1 attributes, and wires the product standard
-  errors in automatically
+  errors in automatically; it also fixes the product indicators'
+  measurement-error covariances, computed from the stage-1 attributes
+  (products sharing a factor score have correlated measurement errors)
 
 Differences from `get_fs_int()`:
 
@@ -67,7 +69,7 @@ We will simulate a dataset with four first-order latent variables: `x`, `m`,
 latent interactions.
 
 ```{r data-simulation}
-set.seed(2116)
+set.seed(1211)
 ## Sample size:
 num_obs <- 5000
 
@@ -80,10 +82,14 @@ num_obs <- 5000
 
 # Data simulation:
 ## x, z, m, ey
+## The residual variance is chosen so that the population variance of the
+## `y` latent is exactly 1: under the correlations above,
+## Var(0.3x + 0.4m + 0.2z + 0.1xm + 0.15xz + 0.12mz) = 0.41109961, so the
+## residual variance is 1 - 0.41109961 = 0.58890039.
 cov_xmz_ey <- matrix(c(1, 0.1, 0.15, 0,
-                        0.1, 1, 0.12, 0,
-                        0.15, 0.12, 1, 0,
-                        0, 0, 0, 0.481351), nrow = 4)
+                       0.1, 1, 0.12, 0,
+                       0.15, 0.12, 1, 0,
+                       0, 0, 0, 0.58890039), nrow = 4)
 eta <- as.data.frame(
   MASS::mvrnorm(num_obs,
     mu = rep(0, 4), Sigma = cov_xmz_ey,
@@ -182,9 +188,16 @@ The product score columns (`fs_x:fs_m`, etc.) are aliased to the plain model
 names (`fs_xm`, etc.) automatically by `tspa()`.
 
 We report the unstandardized structural estimates: they are on the scale of
-the latent variables and of their DMC products, and approach the simulated
+the latent variables and of their DMC products, and agree with the simulated
 values (0.3, 0.4, 0.2 for the main effects; 0.1, 0.15, 0.12 for the
-interactions). The interaction terms are deliberately not standardized:
+interactions) for two reasons. First, the residual variance above was chosen
+so that the population variance of the `y` latent is exactly 1, so the
+`std.lv = TRUE` score scale is the simulated scale. Second, the product
+indicators' measurement errors are correlated — products sharing a factor
+score (e.g. `x:m` and `x:z`) both contain that score's error — and `tspa()`
+fixes those error covariances in the stage-2 model (computed from the
+stage-1 `fsL`/`fsT`/`psi` attributes), so the interaction estimates are not
+attenuated. The interaction terms are deliberately not standardized:
 `lavaan::standardizedSolution()` rescales each coefficient by the standard
 deviation of its predictor, but for the product indicator that standard
 deviation is the SD of the DMC product, not SD(x)·SD(m), so the conventional
@@ -203,9 +216,9 @@ standard errors need to be supplied:
 
 ```{r}
 fs_np <- get_fs(df, model = "x =~ x1 + x2 + x3
-                              m =~ m1 + m2 + m3
-                              z =~ z1 + z2 + z3
-                              y =~ y1 + y2 + y3",
+                             m =~ m1 + m2 + m3
+                             z =~ z1 + z2 + z3
+                             y =~ y1 + y2 + y3",
                 std.lv = TRUE,
                 method = "Bartlett")
 tspa_auto <- tspa("
@@ -237,9 +250,9 @@ omitted, `tspa(product = TRUE)` is fully automatic:
 
 ```{r}
 fs_np2 <- get_fs(df, model = "x =~ x1 + x2 + x3
-                               m =~ m1 + m2 + m3
-                               z =~ z1 + z2 + z3
-                               y =~ y1 + y2 + y3",
+                              m =~ m1 + m2 + m3
+                              z =~ z1 + z2 + z3
+                              y =~ y1 + y2 + y3",
                  method = "Bartlett")
 tspa_fit2 <- tspa("
   y ~ x + m + z + x:m + x:z + m:z

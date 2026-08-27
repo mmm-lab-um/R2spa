@@ -3,21 +3,25 @@
 ## Overview
 `R2spa` — an R package implementing **two-stage path analysis (2S-PA)**, a latent-variable /
 structural-equation-modeling (SEM) technique. Stage 1 extracts factor scores and their
-observation-specific SEs/reliability from a `lavaan` CFA (or `lme4` mixed model). Stage 2 feeds
-those scores and error-variance estimates into a `lavaan::sem()` path model that corrects for
-measurement error. Core machinery: factor-score computation, schema-driven stage-2 model
-assembly. The first-order delta-method SE correction (`vcov_corrected()`, also exposed
+observation-specific SEs/reliability from a `lavaan` CFA, `lme4` mixed model, or `mirt` IRT
+fit. Stage 2 feeds those scores and error-variance estimates into a `lavaan::sem()` path model
+that corrects for measurement error (or an OpenMx model via `tspa_mx_model()`). Core
+machinery: factor-score computation, schema-driven stage-2 model assembly. Both stage-2
+entrypoints auto-derive the measurement inputs (`fsT`/`fsL`/`fsb`/`se_fs`) from a `get_fs()`
+result when omitted (PLANs 13/15). The first-order delta-method SE correction (`vcov_corrected()`, also exposed
 in-place via `tspa(corrected_se = TRUE)`), multigroup grand standardization, and the
 `tspa_mx_model()` OpenMx path have all been **re-integrated** into `R/` (2026-08). The
 latent-interaction function `get_fs_int()` was **removed** and replaced by the
 joint-model `compute_fs_prod()` / `get_fs(product = )` (2026-08, branch
 `rejoin/fs-prod`); its column conventions (`fs_a:fs_b`, `fs_a:fs_b_se`,
-`fs_a:fs_b_ld`) are kept.
+`fs_a:fs_b_ld`) are kept, and `tspa()` fixes the product indicators'
+measurement-error covariances in the stage-2 model.
 
 ## Repository Facts
-- ~7,500 lines of R across 12 files in `R/`; 21 test files in `tests/testthat/`.
-- `.quarantine/` — quarantined consumers of `get_fs()`/`tspa()` (`R/`, `tests/`,
-  `vignettes/`), excluded from the package build via `^\.quarantine$` in `.Rbuildignore`.
+- ~7,900 lines of R across 12 files in `R/`; 25 test files in `tests/testthat/`.
+- `.quarantine/` — quarantined consumers of `get_fs()`/`tspa()` (`tests/` — only `_snaps/`
+  remains; `vignettes/`; the `R/` subdirectory was deleted when its last files were
+  re-integrated or removed), excluded from the package build via `^\.quarantine$` in `.Rbuildignore`.
   Not part of the build, tests, or docs — never modify package code to match it, and don't
   "fix" it unless working on re-integration. Re-integration: `git mv` files back, then
    `document()` → `test()` → `check()`. Its test files are self-contained with provenance
@@ -37,10 +41,11 @@ joint-model `compute_fs_prod()` / `get_fs(product = )` (2026-08, branch
    (the single `@vcov[["vcov"]]` write behind `corrected_se`) are staying-code features
    consumed by the now-package-internal `vcov_corrected()`.
 - `legacy/` — `tspa_plot.R` (diagnostic plotting, removed from package). `archive/` — 
-  `tspa-plot-vignette.Rmd` + completed plan files (`PLAN_01` … `PLAN_04`, `PLAN_QUARANTINE`).
-  Both directories are ignored for development.
-- **Unmaintained for ~2 years** — last commit Nov 2024 (version 0.0.4, still "developmental").
-  Do not assume CI is currently green; verify before trusting existing behavior as a spec.
+  `tspa-plot-vignette.Rmd` + completed plan files (`PLAN_01` … `PLAN_15`,
+  `PLAN_QUARANTINE`). Both directories are ignored for development.
+- **Actively developed** — intensive 2026-08 re-integration + plan work (PLAN 06–15; see
+  `STATUS.md` for the full issue log). Version 0.0.4 is still "developmental". Suite
+  ~3,985 expectations passing, `R CMD check` 0/0/0 as of 2026-08-26.
 - Target dev environment: Linux (WSL/Ubuntu-like), R 4.6.1.
 - No `TODO`/`FIXME`/`HACK` markers in the codebase.
 - No `library()`/`require()` in function bodies — only in roxygen `@examples` blocks.
@@ -90,9 +95,12 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
 
 ## Naming / Style
 - Exported: `snake_case` (current inventory: `get_fs`, `tspa`, `get_fs_lavaan`, `get_fs_lmer`,
-  `compute_fscore`, `compute_fs_prod`, `augment_lav_predict`, `fs_to_group_list`, `block_diag`,
-  `tspa_mx_model`, `vcov_corrected`, `grand_standardized_solution`/`grandStandardizedSolution`
-  — the legacy CamelCase alias pair is kept in sync).
+  `compute_fscore`, `compute_fs_prod`, `fs_indiv`, `augment_lav_predict`, `fs_to_group_list`,
+  `block_diag`, `tspa_mx_model`, `vcov_corrected`,
+  `grand_standardized_solution`/`grandStandardizedSolution`
+  — the legacy CamelCase alias pair is kept in sync). S3 methods on `get_fs()`:
+  `data.frame`, `default`, `lavaan`, `merMod`, and `mirt`'s `SingleGroupClass`/
+  `MultipleGroupClass` (`mirt` is `Suggests`-only, guarded by `require_mirt()`).
 - Column conventions from `get_fs()` — downstream functions parse by name:
   - `fs_<name>` score | `<name>_se` SE | `ev_<name>` error variance
   - `ecov_<name1>_<name2>` error covariance | `<indicator>_by_<name>` implied loading
@@ -101,21 +109,35 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
     `fs_a:fs_b` to the `fs_ab` model name)
   - Attributes: `fsT` (error cov), `fsL` (loadings), `fsb` (intercepts), `scoring_matrix`
     (lavaan: per-group score×item matrices; `merMod`: named list of per-cluster
-    `num_re × n_j` matrices)
+    `num_re × n_j` matrices), `psi`/`alpha` (effective latent covariance/mean —
+    `prior_cov`/`prior_mean` if supplied, else the model estimate; mirt MG: per-group
+    list), `fs_pattern` (per-case observed-indicator pattern; missing data),
+    `group_col` (merMod cluster / mirt group column name), `mirt_per_obs`/`per_obs`
+    markers (per-row attribute lists), `pooled_fs` (`tspa(reduce = )` marker)
 - Roxygen: markdown (`Roxygen: list(markdown = TRUE)` in `DESCRIPTION`).
 - Internal helpers: `snake_case`, co-located with their caller — don't move to shared `utils.R`.
 
 ## Prioritized `R/` File Reference
-1. **`get_fscore.R`** (~510 lines) — `get_fs()` S3 generic, legacy wrappers (`get_fs_lavaan()`,
-   `get_fs_lmer()`), `fs_to_group_list()`, helpers (`augment_fs()`, `check_blocks_identical()`,
-   `assemble_fs_blocks()`).
-2. **`get_fs_methods.R`** (~610 lines) — S3 methods (`get_fs.data.frame()`, `get_fs.default()`,
-   `get_fs.lavaan()`, `get_fs.merMod()`), block builders (`get_fs_blocks.lavaan()`,
-   `get_fs_blocks.merMod()`). Future `get_fs.mirt()` here.
-3. **`get_fscore_math.R`** (~540 lines) — `compute_fscore()`, `augment_lav_predict()`,
+1. **`get_fscore.R`** (~750 lines) — `get_fs()` S3 generic, legacy wrappers (`get_fs_lavaan()`,
+   `get_fs_lmer()`), `fs_to_group_list()`, helpers (`augment_fs()`, `assemble_fs_blocks()`;
+   `check_blocks_identical()` was deleted with PLAN 06 — per-pattern blocks are kept, not
+   dropped).
+2. **`get_fs_methods.R`** (~2,000 lines) — S3 methods (`get_fs.data.frame()`,
+   `get_fs.default()`, `get_fs.lavaan()`, `get_fs.merMod()`, `mirt`'s
+   `get_fs.SingleGroupClass()`/`get_fs.MultipleGroupClass()`), block builders
+   (`get_fs_blocks.lavaan()`, `get_fs_blocks.merMod()`); `local = TRUE` per-construct scoring
+   internals (`get_fs_local()`, `merge_local_fs()`, …; PLAN 14); `mirt` helpers
+   (`mirt_full_cov()`, `mirt_group_pars()`, `require_mirt()`).
+3. **`get_fscore_math.R`** (~760 lines) — `compute_fscore()`, `augment_lav_predict()`,
    `compute_a*`, `compute_fspars()`, `correct_evfs()`, `compute_evfs()`, `compute_ldfs()`,
    `compute_fsrel()`. Pure math, no S3. Touchpoint for SE bugs, missing data, multigroup.
-4. **`tspa.R`** (~1,500 lines) — `tspa()` entrypoint; owned partable stage-2 schema
+4. **`tspa.R`** (~1,630 lines) — `tspa()` entrypoint; auto-derivation of the measurement
+   inputs (PLAN 13: with `fsT`/`fsL` omitted, the multi-factor inputs are derived from a
+   `get_fs()` result's attributes via `derive_sf_se_fs()`/`fs_group_order()`, and a
+   single-factor `se_fs` from the `fs_<v>`/`fs_<v>_se` columns — explicit arguments always
+   win), per-unit pooling (PLAN 09: `reduce = "mean"/"median"` collapses per-pattern /
+   per-cluster attributes via `is_per_unit_fs()`/`pool_per_unit()`/`pool_se_fs()`); owned
+   partable stage-2 schema
    (`tspa_schema_sf()`/`tspa_schema_mf()` → `tspa_render()`), product-score auto-alias
     (`tspa_sf_alias()`), opt-in `product = TRUE` auto-compute (detects model
     latents naming the product of two factor scores — concatenated (`xm`) or
@@ -125,13 +147,21 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
     DMC product columns via `compute_fs_prod()` with
     `tspa_ensure_product_cols()`, joins the pooled product SE into `se_fs`
     on the sf path (an explicit product SE may be keyed by the `a:b`
-    token, stored check.names()-ed as `x.m`), and emits fixed
+    token, stored check.names()-ed as `x.m`), emits fixed
     `gamma`/`se_P^2` product rows on the mf path via `prods` in
-    `tspa_schema_mf()`); `tspa_sf()`/`tspa_mf()` emit the model string fed to
-    `lavaan::sem()`.
-5. **`lavaan_compat.R`** (~275 lines) — `tsp_*` wrappers, the only file that reads lavaan
-   internals (layout/partable probing, tested-up-to version canary). Currently consumed only
-   by its own canary tests (`test-lavaan_compat.R`); its package consumers are quarantined.
+    `tspa_schema_mf()`, and fixes the product-indicator
+    measurement-error covariances — pairs of product latents sharing a
+    factor score have correlated errors (the shared score's error enters
+    both) — on both the sf and mf paths, `product = TRUE` and manual flows
+    alike, via `tspa_prod_ecov()` → `fs_prod_ecov()` (the manual flow,
+    product columns pre-computed and listed in `se_fs`, is detected via
+    `tspa_sf_alias()`'s `prod_map`)); `tspa_sf()`/`tspa_mf()` emit the
+    model string fed to `lavaan::sem()`.
+5. **`lavaan_compat.R`** (~390 lines) — `tsp_*` wrappers, the only file that reads lavaan
+   internals (layout/partable probing, tested-up-to version canary). Consumed by its own
+   canary tests (`test-lavaan_compat.R`) plus in-package: `tsp_set_vcov()` (the in-place
+   `tspa(corrected_se = )` covariance overwrite) and `tsp_beta_names()` (fixed-slope
+   reporting in `grandStandardizedSolution()`, PLAN 12).
 6. **`helper.R`** / **`globals.R`** — `block_diag()`, NSE NOTE suppression. Low risk.
 7. **`tspa_corrected_se.R`** — `vcov_corrected()`, the first-order (delta-method) corrected-SE
    path (re-integrated 2026-08-23). Central-difference stage-2 Jacobian `J` over the free
@@ -151,10 +181,29 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
    `resolve_fs_per_row()`, shared `psi` attribute; joint-normal SE formula
    `se_P^2 = tau_a s_b^2 + tau_b s_a^2 + s_a^2 s_b^2 + c^2 + 2 tau_ab c`
    (derivation in roxygen `@details`; pure-matrix helpers `fs_prod_se2()`,
-   `fs_prod_gamma()`, spec parser `parse_product_spec()` co-located). Replaces
-   the removed quarantined `get_fs_int()`.
+   `fs_prod_ecov()` — the measurement-error covariance between two product
+   indicators, `tau_ik c_jl + tau_il c_jk + tau_jk c_il + tau_jl c_ik +
+   c_ik c_jl + c_il c_jk` with `tau_uv = L_u psi L_v'`, `c_uv = T[u,v]`
+   (a diagonal `T` reduces the shared-factor pair to `tau_jl s_i^2`) — and
+   `fs_prod_gamma()`, spec parser `parse_product_spec()` co-located).
+   Replaces the removed quarantined `get_fs_int()`.
+9. **`fs_indiv.R`** (~670 lines) — exported `fs_indiv()`: re-derives the individual-specific
+   columns per row (`_se`, `<lvs>_by_<lv>_*`, `ev_*`/`ecov_*`, per-pattern intercepts) from the
+   row's `fsL`/`fsT`/`fsb` via the shared value-only engine `fs_row_cols()` (also used by
+   `augment_lav_predict()`, so SEs are pattern-consistent); per-row (`mirt`) dispatch via
+   `resolve_per_obs()`.
+10. **`grandStandardizedSolution.R`** (~320 lines) — `grand_standardized_solution()` (+
+   legacy CamelCase alias kept in sync), multigroup grand standardization; reports
+   user-fixed structural slopes alongside free ones (PLAN 12: `out_idx` free-position anchor
+   + β-dimnames fallback for fixed cells). Threads the corrected covariance, so a
+   `tspa(corrected_se = TRUE)` fit reports corrected grand-standardized SEs.
+11. **`tspa_mx.R`** (~610 lines) — `tspa_mx_model()`, the OpenMx stage-2 route (exact, no
+   pooling); PLAN 15 `tspa_mx_derive_measurement()` auto-derives the measurement inputs from
+   a `get_fs()` result (per-row/per-pattern quantities become definition-variable matrices
+   over the result's own `_by_`/`ev_`/`ecov_` columns; `int_fs_*` intercept columns from the
+   `fsb` attribute); `tspa_mx_defvar_col()` handles `lavaanify()`'s reversed `~~` orientation.
 
-`.quarantine/R/` is now **empty** (its test file `test-get_fs_int.R` was deleted with it):
+`.quarantine/R/` no longer exists (both of its files were deleted in 2026-08):
 `get_fs_int.R` (latent interaction) was removed and replaced by
 `R/compute_fs_prod.R` (2026-08, branch `rejoin/fs-prod`);
 `tspa_corrected_se.R` (`vcov_corrected()`), `grandStandardizedSolution.R`
