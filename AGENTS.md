@@ -34,8 +34,9 @@ measurement-error covariances in the stage-2 model.
     and its test file were **deleted** (2026-08, branch `rejoin/fs-prod`) — superseded by
      `R/compute_fs_prod.R` / `get_fs(product = )` with the same column conventions; the
      quarantined `get_fs_int-vignette.Rmd` vignette was rewritten on top of
-     `compute_fs_prod()` / `get_fs(product = )` / `tspa(product = TRUE)` (2026-08-26) but
-     is still not built (pending re-integration); `categorical-interaction.Rmd` remains
+     `compute_fs_prod()` / `get_fs(product = )` / `tspa(product = TRUE)` (2026-08-26) and
+     re-integrated as `vignettes/product-factor-scores.Rmd` (2026-08-27, with the
+     product-indicator error-covariance fix); `categorical-interaction.Rmd` remains
      stale. The `tspa()` `tspa_args` attribute
    (self-contained evaluated argument list) and the `tsp_set_vcov()` lavaan-compat boundary
    (the single `@vcov[["vcov"]]` write behind `corrected_se`) are staying-code features
@@ -208,9 +209,10 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
 `R/compute_fs_prod.R` (2026-08, branch `rejoin/fs-prod`);
 `tspa_corrected_se.R` (`vcov_corrected()`), `grandStandardizedSolution.R`
 (multigroup standardization), and `tspa_mx.R`/`tspa_mx_model()` (OpenMx) were re-integrated
-to `R/` earlier in 2026-08. `.quarantine/vignettes/` holds the rewritten
-`get_fs_int-vignette.Rmd` (2026-08-26, pending re-integration), the still-stale
-`categorical-interaction.Rmd`, and `reliability.Rmd` (+ `sim_results_reliability.RDS`).
+to `R/` earlier in 2026-08. `.quarantine/vignettes/` holds the still-stale
+`categorical-interaction.Rmd` and `reliability.Rmd` (+ `sim_results_reliability.RDS`);
+the rewritten product vignette was re-integrated as
+`vignettes/product-factor-scores.Rmd` (2026-08-27).
 
 ## General Instruction
 Trust and follow the rules above exactly. Never hand-edit `NAMESPACE` or `man/*.Rd`, never call

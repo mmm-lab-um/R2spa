@@ -4,7 +4,7 @@ author: "Jimmy Zhang"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{product-fs-example}
+  %\VignetteIndexEntry{Product factor-score indicators (latent interactions)}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

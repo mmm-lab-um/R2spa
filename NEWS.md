@@ -19,6 +19,13 @@
   lacking the stage-1 attributes (e.g. a `cbind()`'d `get_fs()` result) with
   two or more product latents is rejected with an informative error (remedy:
   pass the un-`cbind()`'d result). Single-group models (v1).
+- Re-integrated the product factor-score vignette from `.quarantine/` as
+  `product-factor-scores` (`vignettes/product-factor-scores.Rmd`): the
+  rewritten `get_fs_int-vignette.Rmd` on `compute_fs_prod()` /
+  `get_fs(product = )` / `tspa(product = )` (including the fixed
+  product-indicator error covariances above; the example DGP is scaled so
+  the `y` latent has population variance exactly 1, so the estimates are
+  read directly against the simulated coefficients).
 - Add function `get_fs_int()` for estimating interaction effects in 2S-PA (#82).
 - Add computation of reliability function in `get_fscore()` (#81)
 - Add functions of obtaining tidy-ed factor scores data for `get_fscore()` (#79)
