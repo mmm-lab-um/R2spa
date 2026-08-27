@@ -48,8 +48,10 @@ measurement-error covariances in the stage-2 model.
    `vignette`; provenance: `archive/BRANCH_SALVAGE_2026-08-27.md`). Both directories
    are ignored for development.
 - **Actively developed** — intensive 2026-08 re-integration + plan work (PLAN 06–15; see
-  `STATUS.md` for the full issue log). Version 0.0.4 is still "developmental". Suite
-  ~4,050 expectations passing, 0 fail; `R CMD check` (as-cran) 0/0/0 as of 2026-08-27.
+   `STATUS.md` for the full issue log). Version 0.0.4 is still "developmental". Suite
+   ~4,060 expectations passing, 0 fail; `R CMD check` (as-cran, `--no-manual` on this
+   LaTeX-less machine) 0/0/1 NOTE (title case + CRAN-incoming URL 404, both pre-existing)
+   as of 2026-08-27.
 - Target dev environment: Linux (WSL/Ubuntu-like), R 4.6.1.
 - No `TODO`/`FIXME`/`HACK` markers in the codebase.
 - No `library()`/`require()` in function bodies — only in roxygen `@examples` blocks.
