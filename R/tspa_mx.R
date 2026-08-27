@@ -30,12 +30,14 @@
 #' Attributes are dispatched by shape: constant quantities (plain
 #' matrices --- complete-data, `local = TRUE`, and `format = "list"`
 #' results; a plain `fsb` vector) become fixed numeric matrices, while
-#' per-row quantities (`mirt_per_obs`/`per_obs`-marked results) and
-#' per-pattern quantities (single-group FIML, keyed by
-#' `fs_pattern$label`) become definition-variable matrices referencing
-#' the result's own `*_by_*`, `ev_*`, and `ecov_*` columns. A
-#' non-`NULL` `fsb` attribute appends `int_fs_*` intercept columns to a
-#' working copy of `data` (the `fs_indiv(include_intercept = TRUE)`
+#' per-row quantities (`mirt_per_obs`/`per_obs`-marked results),
+#' per-cluster quantities (`merMod` results: 3-D `fsL`/`fsT` arrays, one
+#' row per cluster), and per-pattern quantities (single-group FIML, keyed
+#' by `fs_pattern$label`) become definition-variable matrices referencing
+#' the result's own `*_by_*`, `ev_*`, and `ecov_*` columns. A `merMod`
+#' result carries no `fsb` attribute, so its score intercepts stay fixed
+#' at zero. A non-`NULL` `fsb` attribute appends `int_fs_*` intercept
+#' columns to a working copy of `data` (the `fs_indiv(include_intercept = TRUE)`
 #' equivalent); `NULL` keeps the default fixed-zero intercepts. Unlike
 #' [tspa()] (whose `reduce = ` argument pools per-unit quantities),
 #' there is no pooling here --- the OpenMx route is exact-or-fail. A
@@ -229,6 +231,9 @@ tspa_mx_unwrap <- function(x) {
 #   - per_obs/mirt_per_obs marker              -> D3 per-row: character
 #     definition-variable matrices (+ int_fs_<score> columns appended to a
 #     working copy of `data` when the fsb attribute is present);
+#   - merMod 3-D fsL/fsT arrays (per-cluster) -> D3 per-row: the same
+#     character definition-variable matrices (no fsb attribute -> the
+#     default fixed-zero score intercepts);
 #   - fs_pattern attribute present (SG FIML)   -> D3 per-pattern: the same
 #     character matrices (pattern-constant columns), int_fs_<score> values
 #     mapped row-wise through fs_pattern$label.
@@ -323,10 +328,15 @@ tspa_mx_derive_measurement <- function(data) {
   }
   b_char <- setNames(paste0("int_", scores), scores)
 
-  if (isTRUE(attr(data, "per_obs")) || isTRUE(attr(data, "mirt_per_obs"))) {
+  is_per_cluster <- is.array(L) && length(dim(L)) == 3L &&
+    is.array(T) && length(dim(T)) == 3L
+  if (is_per_cluster || isTRUE(attr(data, "per_obs")) ||
+      isTRUE(attr(data, "mirt_per_obs"))) {
     # D3 per-row: fsb is a per-row list (one q-vector per row; the legacy
     # single-value case falls back to a shared constant, cf.
     # resolve_per_obs()). All-NA elements stay NA -> the D6 NA guard fires.
+    # merMod per-cluster results (3-D fsL/fsT arrays, one row per cluster,
+    # no fsb attribute -> fixed-zero score intercepts) take the same path.
     if (!is.null(b) && !is.list(b)) b <- rep(list(b), nrow(data))
     if (!is.null(b)) {
       for (i in seq_len(q)) {

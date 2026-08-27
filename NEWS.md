@@ -1,6 +1,13 @@
 # R2spa 0.0.4
 
 ## New Features
+- `tspa_mx_model()` now auto-derives its measurement inputs from
+  `get_fs.merMod()` results as well: with `se_fs`/`fsL`/`fsT`/`fsb` all
+  omitted, the per-cluster 3-D `fsL`/`fsT` array attributes become
+  definition-variable matrices referencing the result's own per-cluster
+  `*_by_*`/`ev_*`/`ecov_*` columns (one row per cluster, exact
+  non-pooled correction); `merMod` results carry no `fsb`, so the score
+  intercepts stay fixed at zero.
 - Product factor-score indicators now carry fixed measurement-error
   covariances in the stage-2 model: products sharing a factor score (e.g.
   `xm` and `xz`) have correlated measurement errors (the shared score's

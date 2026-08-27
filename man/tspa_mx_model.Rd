@@ -97,12 +97,14 @@ with an informative error.
 Attributes are dispatched by shape: constant quantities (plain
 matrices --- complete-data, \code{local = TRUE}, and \code{format = "list"}
 results; a plain \code{fsb} vector) become fixed numeric matrices, while
-per-row quantities (\code{mirt_per_obs}/\code{per_obs}-marked results) and
-per-pattern quantities (single-group FIML, keyed by
-\code{fs_pattern$label}) become definition-variable matrices referencing
-the result's own \verb{*_by_*}, \verb{ev_*}, and \verb{ecov_*} columns. A
-non-\code{NULL} \code{fsb} attribute appends \verb{int_fs_*} intercept columns to a
-working copy of \code{data} (the \code{fs_indiv(include_intercept = TRUE)}
+per-row quantities (\code{mirt_per_obs}/\code{per_obs}-marked results),
+per-cluster quantities (\code{merMod} results: 3-D \code{fsL}/\code{fsT} arrays, one
+row per cluster), and per-pattern quantities (single-group FIML, keyed
+by \code{fs_pattern$label}) become definition-variable matrices referencing
+the result's own \verb{*_by_*}, \verb{ev_*}, and \verb{ecov_*} columns. A \code{merMod}
+result carries no \code{fsb} attribute, so its score intercepts stay fixed
+at zero. A non-\code{NULL} \code{fsb} attribute appends \verb{int_fs_*} intercept
+columns to a working copy of \code{data} (the \code{fs_indiv(include_intercept = TRUE)}
 equivalent); \code{NULL} keeps the default fixed-zero intercepts. Unlike
 \code{\link[=tspa]{tspa()}} (whose \verb{reduce = } argument pools per-unit quantities),
 there is no pooling here --- the OpenMx route is exact-or-fail. A

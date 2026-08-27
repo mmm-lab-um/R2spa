@@ -26,10 +26,10 @@ library(OpenMx)
 
 The EB (empirical-Bayes) random effects from `lmer()` are per-cluster, so the
 per-cluster loadings and error covariances are supplied to `tspa_mx_model()` as
-*definition variables* (column names). Each latent is given a name distinct
-from its score column (e.g. latent `u0` is measured by the score column
-`u0_eb`). A small helper pulls the implied latent covariance back out of the
-fitted RAM model by name:
+*definition variables* (column names), which it derives from the `get_fs()`
+result automatically. The score column of each latent carries an `fs_` prefix
+(e.g. latent `u0` is measured by the score column `fs_u0`). A small helper
+pulls the implied latent covariance back out of the fitted RAM model by name:
 
 ```{r}
 lat_cov <- function(fit, lat) {
@@ -93,17 +93,17 @@ y2 <- eta[clus_id2, 3] + time2 * eta[clus_id2, 4] + e2
 m1 <- lmer(y1 ~ time1 + (time1 | clus_id1),
            data = data.frame(y1, time1, clus_id1),
            REML = FALSE)
-fs_dat1 <- get_fs_lmer(m1)
+fs_dat1 <- get_fs(m1)
 # Empirical Bayes
 m2 <- lmer(y2 ~ time2 + (time2 | clus_id2),
            data = data.frame(y2, time2, clus_id2),
            REML = FALSE)
-fs_dat2 <- get_fs_lmer(m2)
+fs_dat2 <- get_fs(m2)
 ```
 
-`get_fs_lmer()` carries each EB score (`u0_eb`, `u1_eb`) alongside its
-per-cluster standard error (`u0_eb_se`), implied loadings (`u0_by_u0_eb`, …),
-error variances (`ev_u0_eb`) and error covariance (`ecov_u0_eb_u1_eb`):
+`get_fs()` carries each EB score (`fs_u0`, `fs_u1`) alongside its
+per-cluster standard error (`fs_u0_se`), implied loadings (`u0_by_fs_u0`, …),
+error variances (`ev_fs_u0`) and error covariance (`ecov_fs_u1_fs_u0`):
 
 ```{r}
 knitr::kable(head(fs_dat1), digits = 3)
@@ -112,8 +112,8 @@ knitr::kable(head(fs_dat1), digits = 3)
 The loading, error-variance and error-covariance column names are exactly the
 *definition variables* `tspa_mx_model()` reads in the model below.
 
-One caveat: because `get_fs_lmer()` does not attach a per-cluster score
-intercept (`fsb`), stage 2 fixes the score intercepts at zero. That does not
+One caveat: because `get_fs()` does not attach a per-cluster score intercept
+(`fsb`) for `lmer()` fits, stage 2 fixes the score intercepts at zero. That does not
 affect the latent *covariances* compared below (a covariance is separable from
 the mean), but it pins the latent *mean* estimates (`u0 + u1 ~ 1`) to the shrunk
 EB score means, so read those means with that caveat.
@@ -134,15 +134,7 @@ The numbers are quite different from the generating values.
 ### Process 1
 
 ```{r}
-# Unstructured model (latent names distinct from the score columns)
-cross_load <- matrix(c("u0_by_u0_eb", "u0_by_u1_eb",
-                       "u1_by_u0_eb", "u1_by_u1_eb"), nrow = 2) |>
-    `dimnames<-`(list(c("u0_eb", "u1_eb"), c("u0", "u1")))
-err_cov <- matrix(c("ev_u0_eb", "ecov_u0_eb_u1_eb",
-                    "ecov_u0_eb_u1_eb", "ev_u1_eb"), nrow = 2) |>
-    `dimnames<-`(rep(list(c("u0_eb", "u1_eb")), 2))
-tspa1_mx <- tspa_mx_model(model = "u0 ~~ u1\nu0 + u1 ~ 1",
-                          data = fs_dat1, fsL = cross_load, fsT = err_cov)
+tspa1_mx <- tspa_mx_model(model = "u0 ~~ u1\nu0 + u1 ~ 1", data = fs_dat1)
 # Run OpenMx
 tspa1_mx_fit <- mxRun(tspa1_mx)
 # Summarize the results
@@ -174,14 +166,7 @@ $$ -->
 ### Process 2
 
 ```{r}
-cross_load <- matrix(c("u0_by_u0_eb", "u0_by_u1_eb",
-                       "u1_by_u0_eb", "u1_by_u1_eb"), nrow = 2) |>
-    `dimnames<-`(list(c("u0_eb", "u1_eb"), c("u0", "u1")))
-err_cov <- matrix(c("ev_u0_eb", "ecov_u0_eb_u1_eb",
-                    "ecov_u0_eb_u1_eb", "ev_u1_eb"), nrow = 2) |>
-    `dimnames<-`(rep(list(c("u0_eb", "u1_eb")), 2))
-tspa2_mx <- tspa_mx_model(model = "u0 ~~ u1\nu0 + u1 ~ 1",
-                          data = fs_dat2, fsL = cross_load, fsT = err_cov)
+tspa2_mx <- tspa_mx_model(model = "u0 ~~ u1\nu0 + u1 ~ 1", data = fs_dat2)
 # Run OpenMx
 tspa2_mx_fit <- mxRun(tspa2_mx)
 # Summarize the results
@@ -206,18 +191,20 @@ fs_dat <- cbind(fs_dat1, fs_dat2)
 ```
 
 ```{r}
-# Unstructured model on the four growth-parameter latents
-cross_load <- matrix(c("u0_by_u0_eb_1", "u0_by_u1_eb_1", NA, NA,
-                       "u1_by_u0_eb_1", "u1_by_u1_eb_1", NA, NA,
-                       NA, NA, "u0_by_u0_eb_2", "u0_by_u1_eb_2",
-                       NA, NA, "u1_by_u0_eb_2", "u1_by_u1_eb_2"), nrow = 4) |>
-    `dimnames<-`(list(c("u0_eb_1", "u1_eb_1", "u0_eb_2", "u1_eb_2"),
+# Unstructured model on the four growth-parameter latents. Explicit fsL/fsT
+# here: auto-derivation yields one latent set per frame, so the two
+# processes' u0/u1 latents must be named apart (u0_1/u0_2, u1_1/u1_2).
+cross_load <- matrix(c("u0_by_fs_u0_1", "u0_by_fs_u1_1", NA, NA,
+                       "u1_by_fs_u0_1", "u1_by_fs_u1_1", NA, NA,
+                       NA, NA, "u0_by_fs_u0_2", "u0_by_fs_u1_2",
+                       NA, NA, "u1_by_fs_u0_2", "u1_by_fs_u1_2"), nrow = 4) |>
+    `dimnames<-`(list(c("fs_u0_1", "fs_u1_1", "fs_u0_2", "fs_u1_2"),
                       c("u0_1", "u1_1", "u0_2", "u1_2")))
-err_cov <- matrix(c("ev_u0_eb_1", "ecov_u0_eb_u1_eb_1", NA, NA,
-                    "ecov_u0_eb_u1_eb_1", "ev_u1_eb_1", NA, NA,
-                    NA, NA, "ev_u0_eb_2", "ecov_u0_eb_u1_eb_2",
-                    NA, NA, "ecov_u0_eb_u1_eb_2", "ev_u1_eb_2"), nrow = 4) |>
-    `dimnames<-`(rep(list(c("u0_eb_1", "u1_eb_1", "u0_eb_2", "u1_eb_2")), 2))
+err_cov <- matrix(c("ev_fs_u0_1", "ecov_fs_u1_fs_u0_1", NA, NA,
+                    "ecov_fs_u1_fs_u0_1", "ev_fs_u1_1", NA, NA,
+                    NA, NA, "ev_fs_u0_2", "ecov_fs_u1_fs_u0_2",
+                    NA, NA, "ecov_fs_u1_fs_u0_2", "ev_fs_u1_2"), nrow = 4) |>
+    `dimnames<-`(rep(list(c("fs_u0_1", "fs_u1_1", "fs_u0_2", "fs_u1_2")), 2))
 tspa3_mx <- tspa_mx_model(
     model = "u0_1 ~~ u1_1 + u0_2 + u1_2\n
              u1_1 ~~ u0_2 + u1_2\n
@@ -264,12 +251,12 @@ Model with missing data
 m1 <- lmer(y1 ~ time1 + (time1 | clus_id1),
            data = data.frame(y1, time1, clus_id1),
            REML = FALSE, subset = r1 == 1)
-fs_dat1 <- get_fs_lmer(m1)
+fs_dat1 <- get_fs(m1)
 # Empirical Bayes
 m2 <- lmer(y2 ~ time2 + (time2 | clus_id2),
            data = data.frame(y2, time2, clus_id2),
            REML = FALSE, subset = r2 == 1)
-fs_dat2 <- get_fs_lmer(m2)
+fs_dat2 <- get_fs(m2)
 colnames(fs_dat1) <- paste0(colnames(fs_dat1), "_1")
 colnames(fs_dat2) <- paste0(colnames(fs_dat2), "_2")
 fs_dat <- cbind(fs_dat1, fs_dat2)

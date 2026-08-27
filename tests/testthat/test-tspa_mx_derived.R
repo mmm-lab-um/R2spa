@@ -171,6 +171,21 @@ fit_e5 <- suppressWarnings(tspa_mx_model(model2, data = fs_ms,
                                          fsT = attr(fs_ms, "fsT"),
                                          fsb = attr(fs_ms, "fsb")))
 
+# --- 5c. merMod (per-cluster 3-D fsL/fsT arrays; no fsb attached) -----------
+fs_mer <- get_fs(lmer(Reaction ~ Days + (Days | Subject), sleepstudy))
+Lm_mer <- matrix(c("u0_by_fs_u0", "u0_by_fs_u1",
+                   "u1_by_fs_u0", "u1_by_fs_u1"),
+                 nrow = 2L,
+                 dimnames = list(c("fs_u0", "fs_u1"), c("u0", "u1")))
+Tm_mer <- matrix(c("ev_fs_u0", "ecov_fs_u1_fs_u0", NA, "ev_fs_u1"),
+                 nrow = 2L,
+                 dimnames = list(c("fs_u0", "fs_u1"), c("fs_u0", "fs_u1")))
+fit_d5c <- suppressWarnings(tspa_mx_model("u0 ~ u1\nu0 + u1 ~ 1",
+                                          data = fs_mer))
+fit_e5c <- suppressWarnings(tspa_mx_model("u0 ~ u1\nu0 + u1 ~ 1",
+                                          data = fs_mer,
+                                          fsL = Lm_mer, fsT = Tm_mer))
+
 # --- 6. Explicit-wins (D1) -------------------------------------------------
 se2 <- c(ind60 = 0.1213615, dem60 = 0.6756472)
 fit_6a_d <- suppressWarnings(tspa_mx_model(model2, data = fs1, se_fs = se2))
@@ -349,6 +364,30 @@ test_that("derived mean-structure CFA (nonzero constant fsb) equals the explicit
   der5 <- R2spa:::tspa_mx_derive_measurement(fs_ms)
   expect_true(is.numeric(der5$fsb))
   expect_equal(unname(der5$fsb), unname(b_ms), tolerance = 0)
+})
+
+test_that("derived merMod (per-cluster 3-D arrays, no fsb) equals the manual def-var fit", {
+  der5c <- R2spa:::tspa_mx_derive_measurement(fs_mer)
+  expect_null(der5c$prov_err)
+  # character defvar matrices over the frame's own per-cluster columns;
+  # merMod attaches no fsb -> fixed-zero score intercepts, frame untouched
+  expect_identical(der5c$fsL, Lm_mer)
+  expect_identical(der5c$fsT, Tm_mer)
+  expect_null(der5c$fsb)
+  expect_identical(der5c$data, fs_mer)
+  dv <- c(unlist(der5c$fsL), unlist(der5c$fsT))
+  dv <- dv[!is.na(dv)]
+  expect_true(all(dv %in% names(fs_mer)))
+  expect_true(all(!is.na(fs_mer[, dv, drop = FALSE])))
+  expect_identical(unname(coef(fit_d5c)), unname(coef(fit_e5c)))
+  expect_equal(mx_path_val(fit_d5c, "u0", "u1"),
+               mx_path_val(fit_e5c, "u0", "u1"), tolerance = 1e-10)
+  expect_equal(mx_var_val(fit_d5c, "u0"), mx_var_val(fit_e5c, "u0"),
+               tolerance = 1e-10)
+  expect_equal(mx_var_val(fit_d5c, "u1"), mx_var_val(fit_e5c, "u1"),
+               tolerance = 1e-10)
+  expect_equal(vcov(fit_d5c), vcov(fit_e5c), tolerance = 1e-10,
+               ignore_attr = TRUE)
 })
 
 test_that("explicit arguments always win over derivation (D1)", {
