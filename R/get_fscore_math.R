@@ -72,7 +72,7 @@ create_fsL_names <- function(lv_names, fs_names) {
 get_fs_mat_names <- function(lv_names, int = TRUE) {
   # Initialize data frame
   fs_names <- paste0("fs_", lv_names)
-  se_names <- paste0("se_", fs_names)
+  se_names <- paste0(fs_names, "_se")
   ev_names <- create_fsT_names(fs_names)
   dimnames(ev_names) <- rep(list(fs_names), 2)
   ld_names <- create_fsL_names(lv_names, fs_names = fs_names)
@@ -117,15 +117,15 @@ get_fs_mat_names <- function(lv_names, int = TRUE) {
 #'         scores as indicators of the latent variables, the
 #'         error variance-covariance matrix of the factor scores,
 #'         and the measurement intercepts (legacy column layout:
-#'         `fs_*`, `se_*`, `<indicator>_by_fs_*`, `ev_*`/`ecov_*` in
+#'         `fs_*`, `fs_*_se`, `<indicator>_by_fs_*`, `ev_*`/`ecov_*` in
 #'         upper-triangular order, and `int_*`). The per-row values are
 #'         identical to those returned by `fs_indiv(get_fs(lavobj, method =
-#'         method))`; this function differs only in column naming (the
-#'         `se_*` standard-error columns here, versus the `*_se` columns of
-#'         `get_fs()`/`fs_indiv()`) and in the ordering of the `ev_*`/`ecov_*`
-#'         columns (upper-triangular here, lower-triangular in `get_fs()` and
-#'         `fs_indiv()`), together with the three character-matrix attributes
-#'         below.
+#'         method))`; the standard-error columns share the canonical
+#'         `fs_*_se` naming of `get_fs()`/`fs_indiv()`, and the only
+#'         difference from them is the ordering of the `ev_*`/`ecov_*`
+#'         columns (upper-triangular here, lower-triangular in `get_fs()`
+#'         and `fs_indiv()`), together with the three character-matrix
+#'         attributes below.
 #'         In addition, three character matrices are added as attributes
 #'         that can be used as input to `tspa_mx_model()`:
 #' * `ld`: cross-loading matrix

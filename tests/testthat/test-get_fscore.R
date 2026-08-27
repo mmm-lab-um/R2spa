@@ -1214,6 +1214,21 @@ cfa_fiml <- cfa(
 )
 a2 <- augment_lav_predict(cfa_fiml, method = "Bartlett")
 
+test_that("augment_lav_predict() SE columns use the canonical fs_*_se names (#85)",
+  code = {
+    f85 <- cfa(model = "visual =~ x1 + x2 + x3; speed =~ x4 + x5 + x6",
+               data = HolzingerSwineford1939)
+    a85 <- augment_lav_predict(f85)
+    se_cols <- grep("_se$", colnames(a85), value = TRUE)
+    expect_equal(se_cols, c("fs_visual_se", "fs_speed_se"))
+    expect_false(any(grepl("^se_", colnames(a85))))
+    # agrees with get_fs_lavaan() (list format), which already uses the
+    # canonical convention
+    expect_setequal(se_cols,
+                    grep("_se$", colnames(get_fs_lavaan(f85)), value = TRUE))
+  }
+)
+
 test_that("augment_lav_predict() works for missing data",
   code = {
     cfa_lw <- cfa(model = hs_model_2, data = hs, bounds = TRUE,

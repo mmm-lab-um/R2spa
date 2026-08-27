@@ -362,12 +362,12 @@ test_that("fs_indiv(): per-row values == augment_lav_predict() after reconciling
     ind_e <- fs_indiv(get_fs(fit_sg, method = m))
     alp <- augment_lav_predict(fit_sg, method = m)
 
-    # SE: fs_<f>_se (r2spa) == se_<f> (legacy), in the same score order
+    # SE: canonical fs_<f>_se columns, now the same names in both
     se_ind <- grep("_se$", names(ind_e), value = TRUE)
-    se_alp <- grep("^se_", names(alp), value = TRUE)
-    expect_equal(length(se_ind), length(se_alp))
+    se_alp <- grep("_se$", names(alp), value = TRUE)
+    expect_setequal(se_ind, se_alp)
     expect_equal(
-      unname(as.matrix(ind_e[, se_ind])), unname(as.matrix(alp[, se_alp])),
+      unname(as.matrix(ind_e[, se_ind])), unname(as.matrix(alp[, se_ind])),
       tolerance = 1e-8
     )
 

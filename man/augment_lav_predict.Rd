@@ -34,14 +34,14 @@ standard errors, the loadings and cross-loadings of the factor
 scores as indicators of the latent variables, the
 error variance-covariance matrix of the factor scores,
 and the measurement intercepts (legacy column layout:
-\verb{fs_*}, \verb{se_*}, \verb{<indicator>_by_fs_*}, \verb{ev_*}/\verb{ecov_*} in
+\verb{fs_*}, \verb{fs_*_se}, \verb{<indicator>_by_fs_*}, \verb{ev_*}/\verb{ecov_*} in
 upper-triangular order, and \verb{int_*}). The per-row values are
-identical to those returned by \code{fs_indiv(get_fs(lavobj, method = method))}; this function differs only in column naming (the
-\verb{se_*} standard-error columns here, versus the \verb{*_se} columns of
-\code{get_fs()}/\code{fs_indiv()}) and in the ordering of the \verb{ev_*}/\verb{ecov_*}
-columns (upper-triangular here, lower-triangular in \code{get_fs()} and
-\code{fs_indiv()}), together with the three character-matrix attributes
-below.
+identical to those returned by \code{fs_indiv(get_fs(lavobj, method = method))}; the standard-error columns share the canonical
+\verb{fs_*_se} naming of \code{get_fs()}/\code{fs_indiv()}, and the only
+difference from them is the ordering of the \verb{ev_*}/\verb{ecov_*}
+columns (upper-triangular here, lower-triangular in \code{get_fs()}
+and \code{fs_indiv()}), together with the three character-matrix
+attributes below.
 In addition, three character matrices are added as attributes
 that can be used as input to \code{tspa_mx_model()}:
 \itemize{

@@ -118,6 +118,12 @@
   `compute_fs_prod()`, which keep its column-naming convention
   (`fs_a:fs_b`, `fs_a:fs_b_se`, `fs_a:fs_b_ld`) but use the corrected
   joint-model SE formula.
+- `augment_lav_predict()`'s factor-score standard-error columns are renamed
+  from the legacy `se_fs_*` to the canonical `fs_*_se` used by `get_fs()`,
+  `get_fs_lavaan()`, and `fs_indiv()` (#85), so all per-row APIs now agree
+  on column names. The documented `ev_*`/`ecov_*` ordering difference
+  (upper-triangular in `augment_lav_predict()`, lower-triangular elsewhere)
+  is intentional and unchanged.
 
 ## Improvements
 - The stage-2 model string attached to `tspa()` fits (the `tspaModel`
