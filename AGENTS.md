@@ -41,9 +41,12 @@ measurement-error covariances in the stage-2 model.
    (self-contained evaluated argument list) and the `tsp_set_vcov()` lavaan-compat boundary
    (the single `@vcov[["vcov"]]` write behind `corrected_se`) are staying-code features
    consumed by the now-package-internal `vcov_corrected()`.
-- `legacy/` — `tspa_plot.R` (diagnostic plotting, removed from package). `archive/` — 
-  `tspa-plot-vignette.Rmd` + completed plan files (`PLAN_01` … `PLAN_15`,
-  `PLAN_QUARANTINE`). Both directories are ignored for development.
+ - `legacy/` — `tspa_plot.R` (diagnostic plotting, removed from package). `archive/` — 
+   `tspa-plot-vignette.Rmd` + completed plan files (`PLAN_01` … `PLAN_15`,
+   `PLAN_QUARANTINE`) + `branch-*/` — unique drafts salvaged from the stale remote
+   branches deleted 2026-08-27 (`marklhc/issue83`, `marklhc/issue87`, `openmx`,
+   `vignette`; provenance: `archive/BRANCH_SALVAGE_2026-08-27.md`). Both directories
+   are ignored for development.
 - **Actively developed** — intensive 2026-08 re-integration + plan work (PLAN 06–15; see
   `STATUS.md` for the full issue log). Version 0.0.4 is still "developmental". Suite
   ~4,050 expectations passing, 0 fail; `R CMD check` (as-cran) 0/0/0 as of 2026-08-27.

@@ -1,0 +1,160 @@
+---
+title: "my-vignette"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{my-vignette}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+# library(R2spa)
+library(lavaan)
+```
+
+The example is from https://lavaan.ugent.be/tutorial/sem.html. 
+
+## A three-variable example
+
+```{r}
+# CFA
+cfa_3var <- '
+   # latent variables
+     ind60 =~ x1 + x2 + x3
+     dem60 =~ y1 + y2 + y3 + y4
+     dem65 =~ y5 + y6 + y7 + y8
+   # residual correlations
+     y1 ~~ y5
+     y2 ~~ y4 + y6
+     y3 ~~ y7
+     y4 ~~ y8
+     y6 ~~ y8
+'
+cfa_3var_fit <- cfa(model = cfa_3var,
+                    data  = PoliticalDemocracy)
+semPlot::semPaths(cfa_3var_fit)
+# Compute factor scores using lavPredict
+lavPredict(cfa_3var_fit, se = "standard")
+# reliability of factor scores
+# 1 - fx_se^2 / fx_psi
+1 - unlist(attributes(lavPredict(cfa_3var_fit, se = "standard"))$se)^2 / 
+  parameterestimates(cfa_3var_fit)[23:25, ]$est
+rel_ind60 <- 0.9968282
+rel_dem60 <- 0.8503460
+rel_dem65 <- 0.8430526
+```
+
+
+```{r}
+# Put factor scores to data set
+fs_3var_dat <- lavPredict(cfa_3var_fit, se = "standard")
+colnames(fs_3var_dat) <- c("fs_ind60", "fs_dem60", "fs_dem65")
+my2spa_3var <- '
+   # latent variables (indicated by factor scores)
+     ind60 =~ 1 * fs_ind60
+     dem60 =~ 1 * fs_dem60
+     dem65 =~ 1 * fs_dem65
+   # constrain the errors
+     fs_ind60 ~~ ev1 * fs_ind60
+     fs_dem60 ~~ ev2 * fs_dem60
+     fs_dem65 ~~ ev3 * fs_dem65
+   # latent variances
+     ind60 ~~ v1 * ind60
+     dem60 ~~ v2 * dem60
+     dem65 ~~ v3 * dem65
+   # regressions
+     dem60 ~ ind60
+     dem65 ~ ind60 + dem60
+   # reliability constraints (reliability = v / (v + ev))
+   # v = reliability / (1 - reliability) * ev
+     v1 == 0.9968282 / (1 - 0.9968282) * ev1
+     v2 == 0.8503460 / (1 - 0.8503460) * ev2
+     v3 == 0.8430526 / (1 - 0.8430526) * ev3
+'
+tspa_3var_fit <- sem(model = my2spa_3var,
+                     data  = fs_3var_dat)
+summary(tspa_3var_fit)
+semPlot::semPaths(tspa_3var_fit)
+standardizedSolution(tspa_3var_fit)
+```
+
+### Including covariances
+
+```{r}
+# Put factor scores to data set
+fs_3var_dat <- lavPredict(cfa_3var_fit, acov = "standard")
+# Compute reliability (with error covariances)
+cfa_3var_psi <- lavInspect(cfa_3var_fit, what = "est")$psi
+# Error proportion (i.e., 1 - reliability)
+attr(fs_3var_dat, "se")[[1]]^2 / diag(cfa_3var_psi)
+# Error correlation
+cov2cor(attr(fs_3var_dat, "acov")[[1]])
+colnames(fs_3var_dat) <- c("fs_ind60", "fs_dem60", "fs_dem65")
+my2spa_3var <- '
+   # latent variables (indicated by factor scores)
+     ind60 =~ 1 * fs_ind60
+     dem60 =~ 1 * fs_dem60
+     dem65 =~ 1 * fs_dem65
+   # constrain the errors
+     fs_ind60 ~~ ev1 * fs_ind60 + ecov12 * fs_dem60 + ecov13 * fs_dem65
+     fs_dem60 ~~ ev2 * fs_dem60 + ecov23 * fs_dem65
+     fs_dem65 ~~ ev3 * fs_dem65
+   # latent variances
+     ind60 ~~ v1 * ind60
+     dem60 ~~ v2 * dem60
+     dem65 ~~ v3 * dem65
+   # regressions
+     dem60 ~ ind60
+     dem65 ~ ind60 + dem60
+   # reliability constraints (reliability = v / (v + ev))
+   # v = reliability / (1 - reliability) * ev
+     ev1 == 0.0358421365 / (1 - 0.0358421365) * v1
+     ev2 == 0.0953198255 / (1 - 0.0953198255) * v2
+     ev3 == 0.083440568 / (1 - 0.083440568) * v3
+     ecov12 == -0.007237295 * sqrt(ev1 * ev2)
+     ecov13 == 0.088285662 * sqrt(ev1 * ev3)
+     ecov23 == 0.789491689 * sqrt(ev2 * ev3)
+'
+tspa_3var_fit <- sem(model = my2spa_3var,
+                     data  = fs_3var_dat)
+summary(tspa_3var_fit)
+semPlot::semPaths(tspa_3var_fit)
+standardizedSolution(tspa_3var_fit)
+```
+
+```{r}
+# Put factor scores to data set
+fs_3var_dat <- lavPredict(cfa_3var_fit, acov = "standard")
+# Compute reliability (with error covariances)
+attr(fs_3var_dat, "acov")[[1]]
+colnames(fs_3var_dat) <- c("fs_ind60", "fs_dem60", "fs_dem65")
+my2spa_3var <- '
+   # latent variables (indicated by factor scores)
+     ind60 =~ 1 * fs_ind60
+     dem60 =~ 1 * fs_dem60
+     dem65 =~ 1 * fs_dem65
+   # constrain the errors
+     fs_ind60 ~~ 0.0160729552 * fs_ind60 + -0.0006297659 * fs_dem60 + 0.0067989012 * fs_dem65
+     fs_dem60 ~~ 0.4710966981 * fs_dem60 + 0.3291571382 * fs_dem65
+     fs_dem65 ~~ 0.368978762 * fs_dem65
+   # latent variances
+     ind60 ~~ ind60
+     dem60 ~~ dem60
+     dem65 ~~ dem65
+   # regressions
+     dem60 ~ ind60
+     dem65 ~ ind60 + dem60
+'
+tspa_3var_fit <- sem(model = my2spa_3var,
+                     data  = fs_3var_dat)
+summary(tspa_3var_fit)
+semPlot::semPaths(tspa_3var_fit)
+standardizedSolution(tspa_3var_fit)
+```

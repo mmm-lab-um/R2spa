@@ -1,0 +1,273 @@
+---
+title: "Using Two-Stage Path Analysis with Definition Variables for Latent Interactions with Categorical Indicators"
+author: "Mark Lai"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{categorical-interaction}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r}
+library(mirt)  # for IRT
+library(OpenMx)
+library(umx)
+library(R2spa)
+set.seed(591028)
+```
+
+## Simulate Data
+
+```{r}
+#' Population parameters
+num_obs <- 5000 # relatively large sample
+cov_xm <- .7
+betas <- c(.15, .4, .1)
+# Results seem more accurate with more items
+lambdax <- 1.7 * c(.6, .7, .8, .5, .5, .3, .9, .7, .6)  # on normal ogive metric
+lambdam <- 1.7 * c(.8, .7, .7, .6, .5)  # on normal ogive metric
+lambday <- c(.5, .7, .9)
+thresx <- matrix(c(1, 1.5, 1.3, 0.5, 2, -0.5, -1, 0.5, 0.8), nrow = 1)  # binary
+thresm <- matrix(c(-2, -2, -0.4, -0.5, 0,
+                   -1.5, -0.5, 0, 0, 0.5,
+                   -1, 1, 1.5, 0.8, 1), nrow = 3,
+                 byrow = TRUE)  # ordinal with 4 categories
+inty <- 1.5  # intercept of y
+# error variance of y
+r2y <- crossprod(
+    betas,
+    matrix(c(1, cov_xm, 0, cov_xm, 1, 0, 0, 0, 1 + cov_xm^2), nrow = 3)
+    ) %*% betas
+evar <- as.numeric(1 - r2y)
+
+#' Simulate latent variables X and M with variances of 1, and the disturbance of
+#' Y
+cov_xm_ey <- matrix(c(1, cov_xm, 0,
+                      cov_xm, 1, 0,
+                      0, 0, evar), nrow = 3)
+eta <- MASS::mvrnorm(num_obs, mu = rep(0, 3), Sigma = cov_xm_ey,
+                     empirical = TRUE)
+# Add product term
+eta <- cbind(eta, eta[, 1] * eta[, 2])
+
+#' Compute latent y (standardized)
+etay <- inty + eta[, -3] %*% betas + eta[, 3]
+# Verify the structural coefficients with eta known
+lm(etay ~ eta[, -3])
+
+#' Simulate y (continuous)
+y <- t(
+    lambday %*% t(etay) +
+        rnorm(num_obs * length(lambday), sd = sqrt(1 - lambday^2))
+)
+
+#' Simulate latent continuous responses for X and M
+xstar <- eta[, 1] %*% t(lambdax) + rnorm(num_obs * length(lambdax))
+mstar <- eta[, 2] %*% t(lambdam) + rnorm(num_obs * length(lambdam))
+#' Obtain categorical items
+x <- vapply(
+    seq_along(lambdax),
+    FUN = \(i) {
+        findInterval(xstar[, i], thresx[, i])
+    },
+    FUN.VALUE = numeric(num_obs))
+m <- vapply(
+    seq_along(lambdam),
+    FUN = \(i) {
+        findInterval(mstar[, i], thresm[, i])
+    },
+    FUN.VALUE = numeric(num_obs))
+```
+
+## Directly Using Factor Scores
+
+```{r}
+
+fsy <- get_fs(data = y, std.lv = TRUE)
+
+irtx <- mirt(data.frame(x), itemtype = "2PL",
+             verbose = FALSE)  # IRT (2-PL) for x
+marginal_rxx(irtx)  # marginal reliability
+fsx <- fscores(irtx, full.scores.SE = TRUE)
+empirical_rxx(fsx)  # empirical reliability
+
+irtm <- mirt(data.frame(m), itemtype = "graded",
+             verbose = FALSE)  # IRT (GRM) for m
+marginal_rxx(irtm)  # marginal reliability
+fsm <- fscores(irtm, full.scores.SE = TRUE)
+empirical_rxx(fsm)  # empirical reliability
+
+# Assemble data
+fs_dat <- data.frame(fsy[c(1, 3, 4)], fsx, fsm) |>
+    setNames(c(
+        "fsy", "rel_fsy", "ev_fsy",
+        "fsx", "se_fsx", "fsm", "se_fsm"
+    )) |>
+    # Compute reliability; only needed for 2S-PA
+    within(expr = {
+        rel_fsx <- 1 - se_fsx^2
+        rel_fsm <- 1 - se_fsm^2
+        ev_fsx <- se_fsx^2 * (1 - se_fsx^2)
+        ev_fsm <- se_fsm^2 * (1 - se_fsm^2)
+    }) |>
+    # Add interaction
+    within(expr = {
+        fsxm <- fsx * fsm
+        ld_fsxm <- rel_fsx * rel_fsm
+        ev_fsxm <- rel_fsx^2 * ev_fsm + rel_fsm^2 * ev_fsx + ev_fsm * ev_fsx
+    })
+
+lm(fsy ~ fsx * fsm, data = fs_dat)  # some bias
+a <- summary(lm(fsy ~ fsx * fsm, data = fs_dat))
+round(unname(a$coefficients[,"Estimate"]), 3)
+```
+
+## Two-Stage Path Analysis
+
+1. Create OpenMx model without latent variables
+
+```{r}
+fsreg_mx <- mxModel("str",
+    type = "RAM",
+    manifestVars = c("fsy", "fsx", "fsm", "fsxm"),
+    # Path coefficients
+    mxPath(
+        from = c("fsx", "fsm", "fsxm"), to = "fsy",
+        values = 0
+    ),
+    # Variances
+    mxPath(
+        from = c("fsy", "fsx", "fsm", "fsxm"),
+        to = c("fsy", "fsx", "fsm", "fsxm"),
+        arrows = 2,
+        values = c(0.6, 1, 1, 1)
+    ),
+    # Covariances
+    mxPath(
+        from = c("fsx", "fsm", "fsxm"),
+        to = c("fsx", "fsm", "fsxm"),
+        arrows = 2, connect = "unique.pairs",
+        values = 0
+    ),
+    mxPath(
+        from = "one", to = c("fsy", "fsx", "fsm", "fsxm"),
+        values = 0
+    )
+)
+fsreg_umx <- umxLav2RAM(
+    "
+      fsy ~ fsx + fsm + fsxm
+      fsy + fsx + fsm + fsxm ~ 1
+      fsx ~~ fsm + fsxm
+      fsm ~~ fsxm
+    ",
+    printTab = FALSE)
+
+# Loading
+matL <- mxMatrix(
+    type = "Diag", nrow = 4, ncol = 4,
+    free = FALSE,
+    labels = c("data.rel_fsy", "data.rel_fsx", "data.rel_fsm", "data.ld_fsxm"),
+    name = "L"
+)
+# Error
+matE <- mxMatrix(
+    type = "Diag", nrow = 4, ncol = 4,
+    free = FALSE,
+    labels = c("data.ev_fsm", "data.ev_fsx", "data.ev_fsm", "data.ev_fsxm"),
+    name = "E"
+)
+
+tspa_mx <-
+    R2spa:::tspa_mx_model(fsreg_umx, data = fs_dat,
+                          mat_ld = matL, mat_vc = matE)
+# Run OpenMx
+tspa_mx_fit <- mxRun(tspa_mx)
+# Summarize the results (takes 20 seconds or so)
+summary(tspa_mx_fit)
+# Standardize coefficients (not for interaction)
+b <- mxStandardizeRAMpaths(tspa_mx_fit)
+b <- b$m1
+b <- round(b[b$label %in% c("one_to_fsy", "fsx_to_fsy", "fsm_to_fsy", "fsxm_to_fsy"), ]$Raw.Value, 3)
+b <- c(b[4], b[-4])
+```
+
+# Table for Testing
+
+```{r factor scores}
+table_fs <- 
+rbind(c(250, 0.2, ".2, .3, -.4", .065, .163, .236, -.404),
+      c(250, 0.2, ".15, .4, .1", -.019, .137, .343, .167),
+      c(250, 0.45, ".2, .3, -.4", .126, .169, .265, -.429),
+      c(250, 0.45, ".15, .4, .1", -.011, .103, .448, .039),
+      c(250, 0.7, ".2, .3, -.4", .171, .209, .286, -.429),
+      c(250, 0.7, ".15, .4, .1", -.062, .127, .412, .139),
+      
+      c(500, 0.2, ".2, .3, -.4", .052, .117, .272, -.336),
+      c(500, 0.2, ".15, .4, .1", -0.014, 0.198, 0.372, 0.144),
+      c(500, 0.45, ".2, .3, -.4", 0.089, 0.172, 0.278, -0.328),
+      c(500, 0.45, ".15, .4, .1", -0.029, 0.123, 0.316, 0.115),
+      c(500, 0.7, ".2, .3, -.4", 0.170, 0.172, 0.240, -0.417),
+      c(500, 0.7, ".15, .4, .1", -0.030, 0.211, 0.323, 0.076),
+
+      c(1000, 0.2, ".2, .3, -.4", 0.044, 0.171, 0.238, -0.365),
+      c(1000, 0.2, ".15, .4, .1", -0.006, 0.163, 0.342, 0.058),
+      c(1000, 0.45, ".2, .3, -.4", 0.103, 0.216, 0.243, -0.363),
+      c(1000, 0.45, ".15, .4, .1", -0.027, 0.146, 0.366, 0.092),
+      c(1000, 0.7, ".2, .3, -.4", 0.177, 0.182, 0.287, -0.407),
+      c(1000, 0.7, ".15, .4, .1", -0.022, 0.180, 0.320, 0.049),
+      
+      c(5000, 0.2, ".2, .3, -.4", 0.043, 0.188, 0.270, -0.352),
+      c(5000, 0.2, ".15, .4, .1", -0.009, 0.148, 0.341, 0.082),
+      c(5000, 0.45, ".2, .3, -.4", 0.100, 0.205, 0.263, -0.364),
+      c(5000, 0.45, ".15, .4, .1", -0.028, 0.166, 0.335, 0.102),
+      c(5000, 0.7, ".2, .3, -.4", 0.174, 0.195, 0.258, -0.407),
+      c(5000, 0.7, ".15, .4, .1", -0.045, 0.165, 0.343, 0.100))
+
+colnames(table_fs) <- c("n", "cov_xm", "beta", "intercept", "fsx", "fsm", "fsxm")
+table_fs <- as.data.frame(table_fs)
+```
+
+```{r 2spa}
+table_2spa <- rbind(
+c(250, 0.2, ".2, .3, -.4", .129, .160, .323, -.481),
+c(250, 0.2, ".15, .4, .1", -.031, .130, .380, .181),
+c(250, 0.45, ".2, .3, -.4", .215, .149, .328, -.470),
+c(250, 0.45, ".15, .4, .1", -.010, .064, .480, .021),
+c(250, 0.7, ".2, .3, -.4", .254, .197, .272, -.389),
+c(250, 0.7, ".15, .4, .1", -.089, .004, .462, .116),
+
+c(500, 0.2, ".2, .3, -.4", 0.103, 0.162, 0.324, -0.453),
+c(500, 0.2, ".15, .4, .1", -0.023, 0.216, 0.420, 0.151),
+c(500, 0.45, ".2, .3, -.4", 0.185, 0.199, 0.328, -0.417),
+c(500, 0.45, ".15, .4, .1", -0.060, 0.103, 0.376, 0.148),
+c(500, 0.7, ".2, .3, -.4", 0.319, 0.187, 0.260, -0.488),
+c(500, 0.7, ".15, .4, .1", -0.052, 0.218, 0.368, 0.079),
+
+c(1000, 0.2, ".2, .3, -.4", 0.091, 0.176, 0.281, -0.439),
+c(1000, 0.2, ".15, .4, .1", -0.011, 0.174, 0.392, 0.068),
+c(1000, 0.45, ".2, .3, -.4", 0.193, 0.224, 0.259, -0.408),
+c(1000, 0.45, ".15, .4, .1", -0.046, 0.127, 0.429, 0.095),
+c(1000, 0.7, ".2, .3, -.4", 0.293, 0.179, 0.323, -0.409),
+c(1000, 0.7, ".15, .4, .1", -0.044, 0.160, 0.406, 0.060),
+
+c(5000, 0.2, ".2, .3, -.4", 0.081, 0.198, 0.291, -0.402),
+c(5000, 0.2, ".15, .4, .1", -0.017, 0.159, 0.396, 0.089),
+c(5000, 0.45, ".2, .3, -.4", 0.100, 0.205, 0.263, -0.364),
+c(5000, 0.45, ".15, .4, .1", -0.052, 0.164, 0.396, 0.112),
+c(5000, 0.7, ".2, .3, -.4", 0.306, 0.212, 0.283, -0.432),
+c(5000, 0.7, ".15, .4, .1", -0.078, 0.119, 0.423, 0.107))
+
+colnames(table_2spa) <- c("n", "cov_xm", "beta", "intercept", "fsx", "fsm", "fsxm")
+table_2spa <- as.data.frame(table_2spa)
+```
+
+
