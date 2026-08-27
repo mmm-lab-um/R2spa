@@ -3,7 +3,7 @@
 
 <!-- badges: start -->
 
-[![R-CMD-check](https://github.com/Gengrui-Zhang/R2spa/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/Gengrui-Zhang/R2spa/actions/workflows/R-CMD-check.yaml)
+[![R-CMD-check](https://github.com/mmm-lab-um/R2spa/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/mmm-lab-um/R2spa/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
 `R2spa` is a free and open-source R package that performs two-stage path
@@ -24,7 +24,7 @@ GitHub with:
 
 ``` r
 # install.packages("remotes")
-remotes::install_github("Gengrui-Zhang/R2spa")
+remotes::install_github("mmm-lab-um/R2spa")
 ```
 
 ## Example
