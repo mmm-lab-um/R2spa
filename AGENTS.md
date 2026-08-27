@@ -46,8 +46,7 @@ measurement-error covariances in the stage-2 model.
   `PLAN_QUARANTINE`). Both directories are ignored for development.
 - **Actively developed** — intensive 2026-08 re-integration + plan work (PLAN 06–15; see
   `STATUS.md` for the full issue log). Version 0.0.4 is still "developmental". Suite
-  ~4,050 expectations passing, 0 fail (2026-08-27); last full `R CMD check` 0/0/0 was
-  2026-08-26 — re-run after code changes.
+  ~4,050 expectations passing, 0 fail; `R CMD check` (as-cran) 0/0/0 as of 2026-08-27.
 - Target dev environment: Linux (WSL/Ubuntu-like), R 4.6.1.
 - No `TODO`/`FIXME`/`HACK` markers in the codebase.
 - No `library()`/`require()` in function bodies — only in roxygen `@examples` blocks.
