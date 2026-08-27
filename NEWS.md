@@ -26,7 +26,6 @@
   product-indicator error covariances above; the example DGP is scaled so
   the `y` latent has population variance exactly 1, so the estimates are
   read directly against the simulated coefficients).
-- Add function `get_fs_int()` for estimating interaction effects in 2S-PA (#82).
 - Add computation of reliability function in `get_fscore()` (#81)
 - Add functions of obtaining tidy-ed factor scores data for `get_fscore()` (#79)
 - `get_fs()` now supports multi-group `mirt` models (`MultipleGroupClass`):
@@ -134,11 +133,10 @@
   solution. Free slopes are unchanged (still anchored by free position); a
   structural regression outside the beta matrix (e.g. observed-on-observed)
   is still rejected.
-- Add examples for `get_fs_int()` (#82).
 - Update naming for `get_fscore()` (#79)
     * Rename `vc` to `ev` (error variance-covariance) for better consistency
 
- ## Bug Fixes
+## Bug Fixes
 - `tspa_mx_model()` no longer mis-specifies off-diagonal factor-score
   covariances when `lavaanify()` presents a `~~` row with the (lhs, rhs)
   pair reversed relative to the score order: the definition-variable lookup
@@ -159,12 +157,17 @@
 ## Documentation
 - Updated vignettes for:
     * tspa-growth-vignette (#50)
-    * get_fs_int-vignette (#82)
-    * reliability (#81)
-     * missing-data (#79)
-     * 2S-PA with OpenMx and IRT (mirt): the multidimensional example now
-       uses the auto-derived measurement inputs (no hand-rolled
-       `cross_load`/`err_cov` matrices)
+    * missing-data (#79) — re-integrated and modernized: the per-row
+      scoring of missing-data fits is explained, and the stage-2 examples
+      use `tspa_mx_model()` (per-row definition variables) with
+      `tspa(reduce = )` pooling contrasted
+    * 2S-PA with OpenMx and IRT (mirt): the multidimensional example now
+      uses the auto-derived measurement inputs (no hand-rolled
+      `cross_load`/`err_cov` matrices)
+    * efa-score: complete-case (listwise) correlation instead of FIML
+      `lavCor`, so stage 1 (EFA) and stage 2 share one data basis;
+      `n.rotations = 1` pins `psych::fa()` against the psych 2.6.5
+      `faRotations()` bug
 
 ## Other
 - General code clean-up (#82).
