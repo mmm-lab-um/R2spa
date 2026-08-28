@@ -123,6 +123,13 @@ test_that("prior input validation errors", {
                               dimnames = list(c("a", "b"), c("a", "b")))),
     "names must match"
   )
+  # an unnamed q x q (q > 1) matrix is ambiguous (its row/column order might
+  # not be the model's latent order), so it is rejected rather than fitted
+  # silently in whatever order it happens to carry
+  expect_error(
+    get_fs(prior_fit, prior_cov = matrix(c(1.2, 0.25, 0.25, 0.8), 2, 2)),
+    "must be a named matrix"
+  )
 })
 
 test_that("priors are rejected for Bartlett scoring", {

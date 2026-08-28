@@ -62,8 +62,15 @@ validate_fs_priors <- function(prior_mean, prior_cov, lv_names) {
     if (!isTRUE(all.equal(pcv, t(pcv)))) {
       stop("'prior_cov' must be symmetric.", call. = FALSE)
     }
-    eig_vals <- eigen(pcv, symmetric = TRUE, only.values = TRUE)$values
-    if (any(eig_vals <= 0)) {
+    # chol() instead of eigen(): it is the standard positive-definiteness
+    # test, is faster than a full eigendecomposition, and does not reject a
+    # valid covariance whose smallest eigenvalue is within floating-point
+    # noise of zero (an eigen() check with `<= 0` can).
+    is_pd <- tryCatch({
+      chol(pcv)
+      TRUE
+    }, error = function(e) FALSE)
+    if (!is_pd) {
       stop("'prior_cov' must be positive definite.", call. = FALSE)
     }
     rn <- rownames(prior_cov)
@@ -75,6 +82,15 @@ validate_fs_priors <- function(prior_mean, prior_cov, lv_names) {
       if (is.null(cn) && !is.null(rn)) {
         cn <- rn
       }
+    }
+    if (q > 1L && (is.null(rn) || is.null(cn))) {
+      stop(
+        "'prior_cov' must be a named matrix (row and column names matching ",
+        "the latent variable names: ", paste(lv_names, collapse = ", "),
+        ") when the model has more than one latent variable; an unnamed ",
+        "matrix's row and column order is ambiguous.",
+        call. = FALSE
+      )
     }
     if (!is.null(rn) || !is.null(cn)) {
       if (!setequal(rn, lv_names) || !setequal(cn, lv_names)) {
@@ -386,6 +402,15 @@ parse_local_statement <- function(txt, line) {
   if (grepl("(", rhs, fixed = TRUE) || grepl(")", rhs, fixed = TRUE)) {
     local_model_syntax_error(line, txt, "'c(...)' calls are not allowed")
   }
+  # strsplit() drops a trailing empty field, so a dangling '+' would be
+  # silently ignored (fitted as if it were not there); reject it explicitly.
+  if (endsWith(rhs, "+")) {
+    local_model_syntax_error(
+      line,
+      txt,
+      "a dangling '+' operator at the end of the right-hand side"
+    )
+  }
   toks <- trimws(strsplit(rhs, "+", fixed = TRUE)[[1L]])
   bad <- toks[!grepl("^[A-Za-z._][A-Za-z0-9._]*$", toks)]
   if (length(bad) > 0L) {
@@ -656,10 +681,9 @@ merge_local_fs <- function(
     }
     items_by_latent[[k]] <- rownames(fp$pat)
   }
-  item_names <- character(0)
-  for (k in seq_len(q)) {
-    item_names <- c(item_names, setdiff(items_by_latent[[k]], item_names))
-  }
+   # unique() keeps first occurrences, i.e. first appearance across the
+   # per-latent vectors in latent order (the old setdiff accumulation).
+   item_names <- unique(unlist(items_by_latent, use.names = FALSE))
   p_all <- length(item_names)
   item_pos <- lapply(items_by_latent, match, item_names)
 
@@ -824,9 +848,13 @@ merge_local_fs <- function(
     # data frame (a trailing group column + group_col attribute for MG).
     k3 <- q + q * q + q * (q + 1L) / 2L
     vals <- matrix(NA_real_, nrow = n, ncol = k3)
+    # fs_row_cols() only reads nrow(fs) (always 1 here): reuse one 1-row
+    # token for every row instead of allocating a fresh data frame per
+    # iteration (measured ~83% of this loop's runtime at n = 50k).
+    dummy_fs <- data.frame(x = 0L)
     for (r in seq_len(n)) {
       vals[r, ] <- fs_row_cols(
-        data.frame(x = 0L),
+        dummy_fs,
         L_row_list[[r]],
         T_row_list[[r]],
         B_row_list[[r]]
@@ -1387,7 +1415,17 @@ get_fs_blocks.merMod <- function(
       # (e.g. a random slope on a within-cluster constant predictor) with the
       # minimum-norm solution.
       rj <- y[idx] - as.numeric(X[idx, , drop = FALSE] %*% beta)
-      Gz <- MASS::ginv(Kz)
+      # ginv() runs a full SVD per cluster. For the single-coefficient case Kz
+      # is a non-negative scalar, so its Moore-Penrose inverse is just 1/Kz
+      # (exact, and far cheaper than the SVD); only the multi-coefficient,
+      # possibly rank-deficient case keeps ginv's minimum-norm solution. A
+      # plain solve() is NOT a safe substitute: it errors only on
+      # exactly-singular Kz and silently returns garbage on near-singular Kz.
+      Gz <- if (num_re == 1L && Kz[1L, 1L] > 0) {
+        matrix(1 / Kz[1L, 1L], 1L, 1L)
+      } else {
+        MASS::ginv(Kz)
+      }
       fs_row <- t(Gz %*% crossprod(zj, rj))
       fsL_j <- diag(num_re)
       fsT_j <- s^2 * Gz
@@ -1396,7 +1434,8 @@ get_fs_blocks.merMod <- function(
       DKz <- D %*% Kz
       inv_W <- solve(DKz + diag(nrow(Kz)))
       fsL_j <- DKz - DKz %*% inv_W %*% DKz
-      fsT_j <- s^2 * inv_W %*% DKz %*% D %*% t(inv_W)
+      # tcrossprod(A, B) == A %*% t(B) without materializing the transpose.
+      fsT_j <- s^2 * tcrossprod(inv_W %*% DKz %*% D, inv_W)
       fs_row <- u_b[j, , drop = FALSE]
       scoring_matrix_j <- inv_W %*% D %*% t(zj)
     }
@@ -1670,14 +1709,22 @@ require_mirt <- function() {
 }
 
 # Full factor variance-covariance matrix estimated by a mirt model, q x q,
-# dimnames = factor names. mirt keeps the latent means (MEAN_i) and the
-# (lower-triangular) covariances (COV_ij) in the single-row
-# coef()$GroupPars table. Variances (COV_ii) are always present and fixed at 1
-# for a 1-factor model; between-factor covariances (COV_ij, i > j) are present
-# only when the model estimates them (independent factors leave the entry 0).
+# dimnames = factor names. Preferred route: coef(simplify = TRUE)$cov, mirt's
+# own reconstruction, which fills the lower triangle positionally from the
+# GroupPars parameter row (COV_11, COV_21, COV_22, ...) -- no parameter-name
+# parsing, so it works for any number of factors. The fallback parses the
+# COV_ij names from coef()$GroupPars; that scheme is unambiguous only for
+# q < 10 (COV_111 could be factor (11, 1) or (1, 11)), so the fallback keeps
+# the guard. simplify omits the `cov` element only for custom-density models,
+# where the fallback still applies.
 mirt_full_cov <- function(fit) {
   fn <- mirt::extract.mirt(fit, "factorNames")
   q <- length(fn)
+  sc <- tryCatch(coef(fit, simplify = TRUE)$cov, error = function(e) NULL)
+  if (is.matrix(sc) && all(dim(sc) == q) && all(is.finite(sc))) {
+    dimnames(sc) <- list(fn, fn)
+    return(sc)
+  }
   gp1 <- coef(fit)$GroupPars[1L, , drop = TRUE]
   V <- matrix(0, q, q)
   for (nm in names(gp1)[grepl("^COV_", names(gp1))]) {
@@ -1732,11 +1779,14 @@ get_fs.SingleGroupClass <- function(object, prior_mean = NULL,
   # scores and the posterior covariances come from the same prior.
   fs_prior <- if (is.null(prior_mean)) list() else list(mean = alpha)
 
-  # EAP posterior means (+ per-observation SEs). mirt re-adds completely-
-  # missing rows here, so `full` has one row per observation with NA scores
-  # for the rows it could not score.
-  full <- do.call(mirt::fscores, c(list(object = object, full.scores = TRUE,
-    full.scores.SE = TRUE), fs_prior))
+  # EAP posterior means. mirt re-adds completely-missing rows here, so `full`
+  # has one row per observation with NA scores for the rows it could not
+  # score. full.scores.SE is deliberately NOT requested: it would only add
+  # mirt's per-observation posterior-covariance pass on this call (the SE
+  # column is not used -- the emitted `_se` columns are the regression-form
+  # sqrt(diag(fsT_i)) built from the acov call below).
+  full <- do.call(mirt::fscores, c(list(object = object, full.scores = TRUE),
+    fs_prior))
   full <- as.data.frame(full)
 
   # Per-observation EAP posterior covariance (acov). This early-returns BEFORE
@@ -1809,10 +1859,12 @@ get_fs.SingleGroupClass <- function(object, prior_mean = NULL,
   # scores_df, so this width excludes them.
   K <- q + q * q + q * (q + 1L) / 2L
   vals <- matrix(NA_real_, nrow = n, ncol = K)
+  # fs_row_cols() only reads nrow(fs) (always 1 here): one shared token.
+  dummy_fs <- data.frame(x = 0L)
   for (k in seq_len(length(scorsc))) {
     i <- scorsc[k]
     vals[i, ] <- fs_row_cols(
-      as.data.frame(score_mx[i, , drop = FALSE]),
+      dummy_fs,
       fsL_list[[i]], fsT_list[[i]], NULL
     )[1L, , drop = FALSE]
   }
@@ -1902,11 +1954,14 @@ get_fs.MultipleGroupClass <- function(object, prior_mean = NULL,
   }
   fs_prior <- if (is.null(prior_mean)) list() else list(mean = alpha)
 
-  # EAP posterior means (+ per-observation SEs). mirt re-adds completely-
-  # missing rows here, so `full` has one row per observation with NA scores for
-  # the rows it could not score.
-  full <- do.call(mirt::fscores, c(list(object = object, full.scores = TRUE,
-    full.scores.SE = TRUE), fs_prior))
+  # EAP posterior means. mirt re-adds completely-missing rows here, so `full`
+  # has one row per observation with NA scores for the rows it could not
+  # score. full.scores.SE is deliberately NOT requested: it would only add
+  # mirt's per-observation posterior-covariance pass on this call (the SE
+  # column is not used -- the emitted `_se` columns are the regression-form
+  # sqrt(diag(fsT_i)) built from the acov call below).
+  full <- do.call(mirt::fscores, c(list(object = object, full.scores = TRUE),
+    fs_prior))
   full <- as.data.frame(full)
   n <- nrow(full)
   # Plain numeric score matrix (one row per observation).
@@ -1989,10 +2044,12 @@ get_fs.MultipleGroupClass <- function(object, prior_mean = NULL,
   # fs_indiv() may emit them via include_intercept = TRUE using the fsb attr).
   K <- q + q * q + q * (q + 1L) / 2L
   vals <- matrix(NA_real_, nrow = n, ncol = K)
+  # fs_row_cols() only reads nrow(fs) (always 1 here): one shared token.
+  dummy_fs <- data.frame(x = 0L)
   for (k in seq_len(length(scorsc))) {
     i <- scorsc[k]
     vals[i, ] <- fs_row_cols(
-      as.data.frame(score_mx[i, , drop = FALSE]),
+      dummy_fs,
       fsL_list[[i]], fsT_list[[i]], NULL
     )[1L, , drop = FALSE]
   }
