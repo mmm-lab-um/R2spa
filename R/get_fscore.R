@@ -147,14 +147,14 @@
 #'        shared across all lavaan groups. For `mirt` `SingleGroupClass`
 #'        objects it instead sets the factor prior mean used for the EAP
 #'        scores; the factor-score intercepts (`fsb`) then vary per observation
- #'        as `Vpost_i %*% solve(psi) %*% prior_mean`, i.e. the latent mean
- #'        scaled by the per-observation shrinkage factor (zero when
- #'        `prior_mean = NULL`), where `psi` is the mirt model's estimated
- #'        factor covariance. For `mirt` `MultipleGroupClass` objects a
- #'        non-NULL `prior_mean` (length `q`) is applied as the factor prior
- #'        mean to every group (mirt's per-group EAP is otherwise centred on a
- #'        zero-mean standard-normal prior); each observation's regression form
- #'        uses the factor covariance of its own group.
+#'        as `Vpost_i %*% solve(psi) %*% prior_mean`, i.e. the latent mean
+#'        scaled by the per-observation shrinkage factor (zero when
+#'        `prior_mean = NULL`), where `psi` is the mirt model's estimated
+#'        factor covariance. For `mirt` `MultipleGroupClass` objects a
+#'        non-NULL `prior_mean` (length `q`) is applied as the factor prior
+#'        mean to every group (mirt's per-group EAP is otherwise centred on a
+#'        zero-mean standard-normal prior); each observation's regression form
+#'        uses the factor covariance of its own group.
 #'        Only supported for lavaan objects with regression (EB) scoring (and
 #'        for mirt); `reliability = TRUE` is not supported together with
 #'        user-supplied `prior_mean`/`prior_cov`, and `prior_cov` is not
@@ -197,13 +197,13 @@
 #'        groups it carries a `group` column and attributes `fsT`, `fsL`,
 #'        `fsb`, and `scoring_matrix` are named lists keyed by group
 #'        label. `"list"` returns the legacy shape: a named list of data
- #'        frames (one per group) with per-group matrix attributes. Use
- #'        [fs_to_group_list()] to convert between the two. For `mirt`
- #'        `SingleGroupClass` and `MultipleGroupClass` objects `format` is
- #'        accepted but the output is always a single per-observation data
- #'        frame; the multi-group result additionally carries a trailing
- #'        `group` column (the model's group levels, `NA` for
- #'        completely-missing rows) and a per-group (`list`) `psi` attribute.
+#'        frames (one per group) with per-group matrix attributes. Use
+#'        [fs_to_group_list()] to convert between the two. For `mirt`
+#'        `SingleGroupClass` and `MultipleGroupClass` objects `format` is
+#'        accepted but the output is always a single per-observation data
+#'        frame; the multi-group result additionally carries a trailing
+#'        `group` column (the model's group levels, `NA` for
+#'        completely-missing rows) and a per-group (`list`) `psi` attribute.
 #' @param ... additional arguments passed to \code{\link[lavaan]{cfa}}
 #'            (when `object` is a data frame). See \code{\link[lavaan]{lavOptions}}
 #'            for a complete list.
@@ -429,6 +429,32 @@ fs_to_group_list <- function(fs) {
                  "psi", "alpha")
 
   if (is.data.frame(fs)) {
+    # Per-observation results (mirt fits, local = TRUE with missing data)
+    # carry PER-ROW list attributes, not per-group values: converting them
+    # would attach the whole per-row list to every group (or silently drop
+    # NA-group rows in split()), so reject them like tspa()/tspa_mx_model()/
+    # compute_fs_prod() do.
+    if (isTRUE(attr(fs, "per_obs")) || isTRUE(attr(fs, "mirt_per_obs"))) {
+      stop(
+        "'fs' is a per-observation result (marked 'per_obs'/'mirt_per_obs'): ",
+        "its 'fsT'/'fsL'/'fsb'/'scoring_matrix' attributes are per-row ",
+        "lists, not per-group values, so the unified <-> group-list ",
+        "conversion is not defined for it.",
+        call. = FALSE
+      )
+    }
+
+    # A single-group unified result wraps its attributes in one-element
+    # lists; unwrap them. Shared by the two single-group branches below.
+    unwrap_single <- function(out) {
+      for (ak in attr_keys) {
+        outer <- attr(fs, ak)
+        attr(out, ak) <-
+          if (is.list(outer) && length(outer) == 1L) outer[[1L]] else outer
+      }
+      out
+    }
+
     grp_col <- attr(fs, "group_col")
     if (is.null(grp_col)) {
       grp_col <- "group"
@@ -436,31 +462,15 @@ fs_to_group_list <- function(fs) {
 
     if (!grp_col %in% names(fs)) {
       # Single-group unified result without group column — unwrap attributes
-      out <- fs
-      for (ak in attr_keys) {
-        outer <- attr(fs, ak)
-        if (is.list(outer) && length(outer) == 1L) {
-          attr(out, ak) <- outer[[1L]]
-        } else {
-          attr(out, ak) <- outer
-        }
-      }
-      return(out)
+      return(unwrap_single(fs))
     }
 
     group_labels <- unique(fs[[grp_col]])
 
     if (length(group_labels) == 1) {
-      out <- fs[, !names(fs) %in% grp_col, drop = FALSE]
-      for (ak in attr_keys) {
-        outer <- attr(fs, ak)
-        if (is.list(outer) && length(outer) == 1L) {
-          attr(out, ak) <- outer[[1L]]
-        } else {
-          attr(out, ak) <- outer
-        }
-      }
-      return(out)
+      return(unwrap_single(
+        fs[, !names(fs) %in% grp_col, drop = FALSE]
+      ))
     }
 
     grp_dfs <- split(fs, fs[[grp_col]])
@@ -566,6 +576,9 @@ assemble_fs_blocks <- function(
     group_labels <- rep("", length(blocks_by_group))
   }
   attr_keys <- c("fsT", "fsL", "fsb", "scoring_matrix", "fs_pattern")
+  # fs_pattern is attached explicitly below (per-pattern label/pat list);
+  # the per-block attribute lists do not carry a fs_pattern element.
+  grp_attr_keys <- setdiff(attr_keys, "fs_pattern")
 
   group_dfs <- vector("list", length(group_labels))
   names(group_dfs) <- group_labels
@@ -579,8 +592,10 @@ assemble_fs_blocks <- function(
     })
 
     template_cols <- names(aug_list[[1]])
+    # All aug_list columns are numeric (scores / SEs / loadings / error
+    # terms), so the NA scaffold is numeric from the start.
     grp_df <- as.data.frame(
-      matrix(NA, nrow = n_cases, ncol = length(template_cols))
+      matrix(NA_real_, nrow = n_cases, ncol = length(template_cols))
     )
     colnames(grp_df) <- template_cols
 
@@ -622,7 +637,7 @@ assemble_fs_blocks <- function(
     if (length(blocks) > 1) {
       # One attribute value per observed-indicator pattern, keyed by the
       # pattern label.
-      for (ak in attr_keys) {
+      for (ak in grp_attr_keys) {
         attr(grp_df, ak) <- setNames(lapply(block_attrs, `[[`, ak), pat_labels)
       }
       if (all(vapply(blocks, function(b) !is.null(b$pat), logical(1)))) {
@@ -634,7 +649,7 @@ assemble_fs_blocks <- function(
         attr(grp_df, "fs_pattern") <- list(label = label_vec, pat = NULL)
       }
     } else {
-      for (ak in attr_keys) {
+      for (ak in grp_attr_keys) {
         attr(grp_df, ak) <- block_attrs[[1]][[ak]]
       }
       pat1 <- blocks[[1]]$pat
