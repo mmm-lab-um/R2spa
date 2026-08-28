@@ -64,10 +64,11 @@ test_that("T1b: 3-var se_fs model matches lavaan::tspa() (A/B)", {
 
 # --- fixed fsL/fsT (identity loadings + diag se^2) is the same model --------
 test_that("T2: fixed fsL/fsT (identity + diag se^2) matches the se_fs form", {
-  Lm <- diag(2) |> `dimnames<-`(list(c("fs_ind60", "fs_dem60"),
-                                      c("ind60", "dem60")))
-  Tm <- diag(unname(se2)^2) |> `dimnames<-`(
-    rep(list(c("fs_ind60", "fs_dem60")), 2))
+  Lm <- `dimnames<-`(diag(2),
+                     list(c("fs_ind60", "fs_dem60"),
+                          c("ind60", "dem60")))
+  Tm <- `dimnames<-`(diag(unname(se2)^2),
+                     rep(list(c("fs_ind60", "fs_dem60")), 2))
   m_fix <- suppressWarnings(tspa_mx_model(model2, data = fsd2,
                                           fsL = Lm, fsT = Tm))
   m_se  <- suppressWarnings(tspa_mx_model(model2, data = fsd2, se_fs = se2))
@@ -85,8 +86,9 @@ cfa2fit <- cfa(paste(cfa_ind, cfa_dem, sep = "\n"),
                data = lavaan::PoliticalDemocracy)
 fs2 <- get_fs(cfa2fit)
 dat2 <- fs_indiv(fs2, include_intercept = TRUE)
-L2 <- diag(2) |> `dimnames<-`(list(c("fs_ind60", "fs_dem60"),
-                                   c("ind60", "dem60")))
+L2 <- `dimnames<-`(diag(2),
+                   list(c("fs_ind60", "fs_dem60"),
+                        c("ind60", "dem60")))
 T2dv <- matrix(c("ev_fs_ind60", NA, NA, "ev_fs_dem60"),
                nrow = 2, dimnames = list(c("fs_ind60", "fs_dem60"),
                                          c("fs_ind60", "fs_dem60")))
@@ -133,8 +135,9 @@ fs_hs <- get_fs(cfa_hs)
 dat_hs <- fs_indiv(fs_hs, include_intercept = TRUE)
 
 test_that("T8: missing-data per-row def-var fit runs via fs_indiv (FIML over scores)", {
-  Lh <- diag(2) |> `dimnames<-`(list(c("fs_visual", "fs_speed"),
-                                     c("visual", "speed")))
+  Lh <- `dimnames<-`(diag(2),
+                     list(c("fs_visual", "fs_speed"),
+                          c("visual", "speed")))
   Th <- matrix(c("ev_fs_visual", NA, NA, "ev_fs_speed"), nrow = 2,
                dimnames = list(c("fs_visual", "fs_speed"),
                                c("fs_visual", "fs_speed")))

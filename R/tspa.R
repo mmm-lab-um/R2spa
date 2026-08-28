@@ -171,7 +171,9 @@
 #'            or per-observation values from a `mirt` fit, are collapsed to a
 #'            single representative value per group for
 #'            stage 2. A no-op when the per-unit quantities are constant within
-#'            the group (e.g. complete single-group data). One of `"mean"`
+#'            the group (e.g. complete single-group data). A group (or the
+#'            whole data) with no scorable rows at all (every row missing) is
+#'            an error: there is nothing to pool. One of `"mean"`
 #'            (the default) or `"median"`. With `"mean"` the pooled `fsT` is a
 #'            convex combination of the per-unit (positive semi-definite)
 #'            matrices and so remains positive semi-definite; with `"median"`
@@ -445,6 +447,10 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
   if (!is.data.frame(se_fs)) {
     se_fs <- as.data.frame(as.list(se_fs))
   }
+  if (ncol(se_fs) > 0L &&
+      any(vapply(se_fs, function(x) !is.numeric(x), logical(1)))) {
+    stop("'se_fs' must contain numeric standard errors.", call. = FALSE)
+  }
   if (xor(is.null(fsT), is.null(fsL))) {
     stop("Please provide both or none of fsT and fsL.")
   }
@@ -581,10 +587,24 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
       fs_names <- if (is.list(fsT)) colnames(fsT[[1]]) else colnames(fsT)
       dat_names <- names(data)
     }
-    names_match <- lapply(fs_names, function(x) x %in% dat_names) |> unlist()
+    names_match <- fs_names %in% dat_names
     if (any(!names_match)) {
       stop(
         "Names of factor score variables do not match those in the input data."
+      )
+    }
+    # The schema reads the score names from fsT's column names and the
+    # indicator names from fsL's row names; missing dimnames would render
+    # NA names into the model string (a cryptic rbind failure downstream,
+    # not an error here).
+    L1n <- if (is.list(fsL)) fsL[[1L]] else fsL
+    T1n <- if (is.list(fsT)) fsT[[1L]] else fsT
+    if (is.null(rownames(T1n)) || is.null(colnames(T1n)) ||
+        is.null(rownames(L1n)) || is.null(colnames(L1n))) {
+      stop(
+        "'fsT' and 'fsL' must carry both row and column names (the ",
+        "factor-score names); the stage-2 model is built from them.",
+        call. = FALSE
       )
     }
   }
@@ -602,9 +622,28 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     # columns. A group whose se column is constant within the group gives
     # no signal, so complete-data (homogeneous) behavior is unchanged, and
     # data without the se columns (not a get_fs() result) is left as-is.
+    # A list of per-group data frames (a get_fs(format = "list") result)
+    # is coerced to a single frame first: lavaan's data= must be a
+    # data.frame. The coercion lives here rather than at the top of
+    # tspa() because rbind drops the data's custom attributes (group_col,
+    # and the per-group fsT/fsL/fsb the multi-factor per-unit pooling
+    # above needs un-rbind'd); on this branch fsT is NULL, so per-unit
+    # pooling cannot apply. The group column is resolved with the
+    # derivation's convention (attribute, else the group= argument, else
+    # a literal "group" column); the attribute is read pre-rbind, since
+    # rbind drops it.
     sf_group_col <- attr(data, "group_col")
-    if (is.null(sf_group_col) && "group" %in% names(data)) {
-      sf_group_col <- "group"
+    if (inherits(data, "list")) {
+      data <- do.call(rbind, data)
+    }
+    if (is.null(sf_group_col)) {
+      g_arg <- list(...)[["group"]]
+      if (is.character(g_arg) && length(g_arg) == 1L &&
+          g_arg %in% names(data)) {
+        sf_group_col <- g_arg
+      } else if ("group" %in% names(data)) {
+        sf_group_col <- "group"
+      }
     }
     if (!is.null(sf_group_col) && sf_group_col %in% names(data) &&
         !is.null(se_fs) && nrow(se_fs) > 0 && ncol(se_fs) > 0) {
@@ -651,13 +690,19 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
         model <- tspa_rewrite_product_toks(model, prods)
         # An explicit product SE keyed by the model token (`x:m`) is
         # renamed to the render name (`xm`) the generated model uses.
-        # The token column survived the as.data.frame() coercion as a
-        # check.names() name (`x.m`), so match that form.
+        # The token column may arrive as the check.names() form (`x.m`,
+        # from the as.data.frame() coercion or data.frame()'s default) or
+        # as the literal token (a data.frame built with check.names =
+        # FALSE).
         for (k in seq_len(nrow(prods))) {
+          if (prods$tok[k] == prods$v[k]) next
           tk <- make.names(prods$tok[k])
-          if (prods$tok[k] != prods$v[k] && tk %in% colnames(se_fs)) {
-            se_fs[[prods$v[k]]] <- se_fs[[tk]]
-            se_fs[[tk]] <- NULL
+          for (nm in unique(c(tk, prods$tok[k]))) {
+            if (nm %in% colnames(se_fs)) {
+              se_fs[[prods$v[k]]] <- se_fs[[nm]]
+              se_fs[[nm]] <- NULL
+              break
+            }
           }
         }
         data <- tspa_ensure_product_cols(data, prods)
@@ -710,6 +755,32 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
       T1 <- if (is.list(fsT_a)) fsT_a[[1L]] else fsT_a
       psi1 <- fs_psi_matrix(psi_a)
       prod_ecov <- tspa_prod_ecov(prod_pairs, L1, T1, psi1)
+      # The schema emits the ecov rows for group 1 only (single-group
+      # v1); a multigroup fit would leave the other groups' product
+      # indicators' correlated errors unmodeled. A get_fs() multigroup
+      # result already errors above (its per-group psi list is rejected
+      # by fs_psi_matrix()); this catches hand-built plain-matrix
+      # attributes.
+      if (multigroup && !is.null(prod_ecov)) {
+        stop(
+          "The product-indicator error covariances are not supported for ",
+          "multigroup models (v1: single-group only).",
+          call. = FALSE
+        )
+      }
+    }
+    # A non-finite SE (an all-NA fs_<v>_se group, a degenerate product SE
+    # computation, or user input) would become a fixed NaN in the stage-2
+    # model: fail with an actionable message instead of lavaan's parse
+    # failure on the NaN. (Column-wise: is.finite() has no data.frame
+    # method.)
+    if (any(vapply(se_fs, function(cl) !all(is.finite(cl)), logical(1)))) {
+      stop(
+        "The 'se_fs' values fed to the stage-2 model are not all finite ",
+        "(check the 'fs_<v>_se' columns of 'data' and any product SE ",
+        "computation).",
+        call. = FALSE
+      )
     }
     tspaModel <- tspa_sf(model, data, se_fs, prod_ecov)
   } else { # multi-factor measurement model
@@ -752,6 +823,19 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
           ld_vals[k] <- fs_prod_gamma(L1, i, j)
           se2_vals[k] <- fs_prod_se2(L1, T1, psi, i, j)
         }
+        # A non-positive se_P^2 is a degenerate stage-1 (the single-factor
+        # path's sqrt_or_na() maps it to NA and the finiteness guard there
+        # errors); a fixed negative error variance would otherwise be
+        # silently fitted.
+        bad_se2 <- !is.finite(se2_vals) | se2_vals < 0
+        if (any(bad_se2)) {
+          stop(
+            "The implied product error variance (se_P^2) for the product ",
+            "latent(s) ", paste(prods$v[bad_se2], collapse = ", "),
+            " is not positive and finite; check the stage-1 fit.",
+            call. = FALSE
+          )
+        }
         prods_mf <- data.frame(
           v = prods$v, ld = ld_vals, se2 = se2_vals,
           stringsAsFactors = FALSE
@@ -776,6 +860,19 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
         # pair set with no nonzero covariances).
         prods_ecov <- tspa_prod_ecov(prods, L1, T1, psi)
       }
+    }
+    # A non-finite fsT/fsL/fsb (hand-built input; the pooled inputs are
+    # already guarded) would be rendered as "NA" in the model string,
+    # which lavaan parses as a parameter label: the fixed measurement
+    # value would silently become a free estimate.
+    if (!all_finite_values(fsT) || !all_finite_values(fsL) ||
+        (!is.null(fsb) && !all_finite_values(fsb))) {
+      stop(
+        "'fsT', 'fsL', or 'fsb' contains non-finite values; the stage-2 ",
+        "model cannot be built from them (an 'NA' fixed value would be ",
+        "parsed by lavaan as a parameter label, silently unfixing it).",
+        call. = FALSE
+      )
     }
     tspaModel <- tspa_mf(model, data, fsT, fsL, fsb, prods_mf, prods_ecov)
     if (inherits(data, "list")) {
@@ -864,9 +961,12 @@ is_per_unit_fs <- function(fsT, fsL, mirt_per_obs = FALSE) {
 # or "median" (element-wise; may break PSD, guarded by a warning). Returns
 # list(fsT, fsL, fsb): for a multi-group result (group_vals non-null) the
 # reduction is done within each group and each component is a list of one
-# value per group, named by group label (in the data's group order -- the
-# same order the stage-1 attribute lists use); otherwise each component is
-# a single matrix/vector (SG FIML, merMod). The returned shapes are exactly
+# value per group, named by group label in the group column's
+# first-appearance order (the lavaan stage-2 group order, verified for
+# character and factor columns; for lavaan/merMod input this equals the
+# stage-1 attribute list order, for mirt input the stage-1 list is in
+# mirt's level order, which can differ); otherwise each component is a
+# single matrix/vector (SG FIML, merMod). The returned shapes are exactly
 # what the existing stage-2 schema accepts.
 pool_per_unit <- function(fs, reduce, have_int) {
   resolved <- resolve_fs_per_row(fs)
@@ -901,10 +1001,13 @@ pool_per_unit <- function(fs, reduce, have_int) {
 
   # Same block loop as fs_indiv(): expand every unit's per-pattern/
   # per-cluster matrices once per member row (the per-observation-equal
-  # reading), na.rm in the reduction below drops the all-NA rows.
+  # reading), na.rm in the reduction below drops the all-NA rows. A block
+  # no row maps to (inconsistent hand-built input) is skipped rather than
+  # warning on the empty assignment.
   for (b in seq_along(resolved$blocks)) {
     blk <- resolved$blocks[[b]]
     rows_b <- which(resolved$pattern_idx == b)
+    if (length(rows_b) == 0L) next
     vals <- fs_row_cols(
       resolved$scores[rows_b, , drop = FALSE],
       blk$fsL,
@@ -961,6 +1064,20 @@ pool_per_unit <- function(fs, reduce, have_int) {
     list(fsT = fsT_p, fsL = fsL_p, fsb = fsb_p)
   }
   psd_guard <- function(res, label) {
+    # A reduction over no scorable rows (a group whose rows are all
+    # missing, or an unused level of the group column) yields an all-NA
+    # pooled fsT: fail with an actionable message instead of the
+    # misleading PSD warning (which would suggest switching reduce while
+    # the real problem is the absence of data).
+    if (all(!is.finite(res$fsT))) {
+      stop(
+        "tspa() pooling found no scorable rows in ",
+        if (is.null(label)) "the data" else paste0("group '", label, "'"),
+        " (all rows are missing or unscorable), so the pooled 'fsT' is ",
+        "empty. Check the missing data and the group column.",
+        call. = FALSE
+      )
+    }
     emin <- pooled_fsT_min_eigen(res$fsT)
     if (!is.finite(emin) || emin < -.Machine$double.eps^0.5) {
       warning(
@@ -981,14 +1098,18 @@ pool_per_unit <- function(fs, reduce, have_int) {
     glabs <- if (!is.null(g_col) &&
                 is.data.frame(fs) &&
                 g_col %in% names(fs)) {
-      # Unique values of the data's own group column: a factor's level
-      # order (the lavaan stage-2 group order), a character vector's
-      # first-appearance order -- matching the stage-1 attribute list
-      # order. mirt's `group` is a factor; use the full level set (not
-      # unique()) so the pooled list always has K entries, one per mirt
-      # group, matching lavaan's `group=` levels.
+      # First-appearance order of the data's own group column: verified
+      # on lavaan 0.7-2 to be lavaan's `group =` stage-2 order for BOTH
+      # character and factor columns (a factor's LEVEL order is not used
+      # by lavaan). For a factor this also drops NA (the completely-
+      # missing rows of a mirt result), which pool_rows() would
+      # otherwise turn into an empty "group"; every mirt group has at
+      # least one scorable row, so all K groups appear exactly once.
+      # (A mirt stage-1 attribute list is in mirt's groupNames/level
+      # order; the pooled list must match the stage-2 order instead,
+      # which differs when the data rows are not in level order.)
       gc <- fs[[g_col]]
-      if (isTRUE(mirt_mg) && is.factor(gc)) levels(gc) else unique(gc)
+      if (is.factor(gc)) unique(gc[!is.na(gc)]) else unique(gc)
     } else {
       # list-format input (no group column in the named list): group order
       # of the list, which the per-row values follow.
@@ -1027,6 +1148,15 @@ pooled_fsT_min_eigen <- function(T_mat) {
     return(NA_real_)
   }
   min(eigen(T_mat, symmetric = TRUE, only.values = TRUE)$values)
+}
+
+# TRUE when every value of a matrix/vector (or of each element of a list of
+# them, the per-group form) is finite. Non-finite fixed values would be
+# rendered as "NA"/"NaN" in the model string, which lavaan parses as a
+# parameter label: the fixed value would silently become a free estimate.
+all_finite_values <- function(x) {
+  all(vapply(if (is.list(x)) x else list(x),
+             function(e) !is.null(e) && all(is.finite(e)), logical(1)))
 }
 
 # Per-group reduction of one materialized `<se_col>` column of a get_fs()
@@ -1701,7 +1831,7 @@ tspa_render <- function(sch, style = c("sf", "mf")) {
 }
 
 tspa_sf <- function(model, data, se = NULL, prod_ecov = NULL) {
-  if (nrow(se) != 0) {
+  if (!is.null(se) && nrow(se) > 0L) {
     return(tspa_render(tspa_schema_sf(model, se, prod_ecov), style = "sf"))
   }
 }

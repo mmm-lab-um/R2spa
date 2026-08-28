@@ -271,6 +271,33 @@ test_that("mf: product = FALSE (default) is a no-op (the product latent is not c
   expect_no_match(attr(fit_ok, "tspaModel"), "xm", fixed = TRUE)
 })
 
+test_that("mf: a non-positive implied product error variance (se_P^2) is an error", {
+  df <- prod_setup()
+  fs <- get_fs(df, model = "x =~ x1 + x2 + x3
+                            m =~ m1 + m2 + m3",
+               std.lv = TRUE, method = "Bartlett")
+  # Degenerate stage-1: with this fixture's Bartlett + std.lv L = I,
+  # se_P^2 = s_a^2 + s_b^2 + s_a^2 s_b^2 + c^2 + 2 q c (q = psi[1, 2],
+  # c = T[1, 2]); c < 0 with a large q drives it negative. A fixed
+  # negative error variance would otherwise be silently fitted.
+  L0 <- attr(fs, "fsL")[[1L]]
+  T0 <- attr(fs, "fsT")[[1L]]
+  T0[1L, 1L] <- T0[2L, 2L] <- 0.1
+  T0[1L, 2L] <- T0[2L, 1L] <- -10
+  q <- 6
+  psi <- diag(2L)
+  psi[1L, 2L] <- psi[2L, 1L] <- q
+  # premise: the crafted attributes are genuinely degenerate
+  expect_lt(fs_prod_se2(L0, T0, psi, 1L, 2L), 0)
+  # the unified-SG fsT attribute is a length-1 list named ""
+  attr(fs, "fsT") <- setNames(list(T0), "")
+  attr(fs, "psi") <- psi
+  expect_error(
+    suppressWarnings(tspa("y ~ x + m + x:m", data = fs, product = TRUE)),
+    "implied product error variance"
+  )
+})
+
 # ---------------------------------------------------------------------------
 # Group 4: FIML (per-pattern) behavior
 # ---------------------------------------------------------------------------
@@ -476,6 +503,28 @@ test_that("sf: an explicit product se_fs may be keyed by the a:b token", {
   # the renamed entry is what the schema (and the replay) sees
   expect_equal(attr(fit_tok, "tspa_args")$se_fs[["xm"]], 0.11)
   expect_false("x.m" %in% colnames(attr(fit_tok, "tspa_args")$se_fs))
+})
+
+test_that("sf: an explicit product se_fs keyed by the literal a:b token (check.names = FALSE) is renamed", {
+  df <- prod_setup()
+  fs_prod <- get_fs(df, model = prod_model, std.lv = TRUE,
+                    method = "Bartlett", product = "x:m")
+  se_reg <- c(y = fs_prod[1, "fs_y_se"], x = fs_prod[1, "fs_x_se"],
+              m = fs_prod[1, "fs_m_se"], z = fs_prod[1, "fs_z_se"])
+  # a data.frame built with check.names = FALSE keeps the literal token
+  se_lit <- as.data.frame(as.list(c(se_reg, `x:m` = 0.11)),
+                          check.names = FALSE)
+  expect_true("x:m" %in% colnames(se_lit))
+  fit_lit <- suppressWarnings(tspa(
+    "y ~ x + m + z + x:m", data = fs_prod, se_fs = se_lit, product = TRUE))
+  fit_nm <- suppressWarnings(tspa(
+    "y ~ x + m + z + xm", data = fs_prod,
+    se_fs = c(se_reg, xm = 0.11), product = TRUE))
+  expect_identical(attr(fit_lit, "tspaModel"), attr(fit_nm, "tspaModel"))
+  expect_equal(coef(fit_lit), coef(fit_nm))
+  # the literal column was renamed, not kept as an extra latent
+  expect_equal(attr(fit_lit, "tspa_args")$se_fs[["xm"]], 0.11)
+  expect_false("x:m" %in% colnames(attr(fit_lit, "tspa_args")$se_fs))
 })
 
 test_that("mf: a:b syntax fits identically to the concatenated syntax", {
