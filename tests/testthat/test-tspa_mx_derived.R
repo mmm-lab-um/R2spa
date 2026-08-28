@@ -30,6 +30,7 @@
 # =====================================================================
 
 library(lavaan)
+library(lme4)
 library(OpenMx)
 
 # --- coefficient extraction by (from -> to), robust to RAM var ordering ----
