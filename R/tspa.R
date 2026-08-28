@@ -197,6 +197,11 @@
 #'            `fsL`/`fsT` free elements to propagate through the corrected
 #'            covariance (see [vcov_corrected()]); used only when
 #'            `corrected_se = TRUE`.
+#' @param engine The Jacobian engine passed to [vcov_corrected()] when
+#'            `corrected_se = TRUE`: `"fd"` (the default, finite
+#'            differences) or `"analytic"` (the refit-free saturated closed
+#'            form, which transparently falls back to `"fd"` when it does not
+#'            apply). Ignored unless `corrected_se = TRUE`.
 #' @param product A logical; when `TRUE`, [tspa()] automatically computes
 #'            the double-mean-centered product indicators (via
 #'            [compute_fs_prod()]) for every latent in `model` that names
@@ -407,9 +412,9 @@
 tspa <- function(model, data, reliability = NULL, se = "standard",
                  se_fs = NULL, fsT = NULL, fsL = NULL, fsb = NULL,
                  reduce = c("mean", "median"),
-                 vfsLT = NULL, corrected_se = FALSE, which_free = NULL,
-                 product = FALSE,
-                 ...) {
+                  vfsLT = NULL, corrected_se = FALSE, which_free = NULL,
+                  product = FALSE, engine = "fd",
+                  ...) {
   reduce <- match.arg(reduce)
   # Set when the per-unit fsT/fsL/fsb attributes were collapsed to a single
   # representative per-group set via `reduce` (PLAN 09); attached to the
@@ -900,9 +905,9 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
   attr(tspa_fit, "tspa_args") <- c(
     list(model = model, data = data, reliability = reliability, se = se,
          se_fs = se_fs, fsT = fsT, fsL = fsL, fsb = fsb, reduce = reduce,
-         vfsLT = vfsLT, corrected_se = corrected_se,
-         which_free = which_free, product = product),
-    list(...)
+          vfsLT = vfsLT, corrected_se = corrected_se,
+          which_free = which_free, engine = engine, product = product),
+     list(...)
   )
   attr(tspa_fit, "tspa_call") <- match.call()
   # First-order (delta-method) SE correction: replace the lavaan covariance
@@ -918,7 +923,7 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
       )
     }
     corrected <- vcov_corrected(tspa_fit, vfsLT = vfsLT,
-                                which_free = which_free)
+                                which_free = which_free, engine = engine)
     # The @vcov slot write goes through the lavaan-internal boundary
     # (single point of coupling, canary-covered).
     tspa_fit <- tsp_set_vcov(tspa_fit, corrected)

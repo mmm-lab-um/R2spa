@@ -1,6 +1,16 @@
 # R2spa 0.0.4
 
 ## New Features
+- `vcov_corrected()` and `tspa(corrected_se = TRUE)` gain an `engine`
+  argument. `"fd"` (the default) is the original central finite-difference
+  Jacobian; `"analytic"` evaluates the same Jacobian refit-free and
+  deterministically via a closed form for the saturated single-group path
+  model (PLAN 16; free structural regressions and latent variances only),
+  transparently falling back to `"fd"` otherwise — multigroup, a model that
+  is not exactly saturated (df > 0), or a saturated model with other free
+  parameters (e.g. free latent covariances or means). The two engines agree
+  to the finite-difference noise floor whenever `"analytic"` applies, and
+  the analytic result is bit-reproducible (no refits, no optimizer jitter).
 - `tspa_mx_model()` now auto-derives its measurement inputs from
   `get_fs.merMod()` results as well: with `se_fs`/`fsL`/`fsT`/`fsb` all
   omitted, the per-cluster 3-D `fsL`/`fsT` array attributes become

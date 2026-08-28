@@ -94,6 +94,8 @@ vcov(tspa_fit)
 sqrt(diag(vc_cor))
 ```
 
+The `engine` argument of `vcov_corrected()` (and of `tspa(corrected_se = TRUE)`) selects how the Jacobian is evaluated. The default `"fd"` uses central finite differences (one stage-2 refit on each side of each free element); `"analytic"` evaluates the same Jacobian refit-free and deterministically for the saturated single-group path model (the free structural parameters exactly span the score covariances, df = 0, and are limited to structural regressions and latent variances), transparently falling back to `"fd"` otherwise (multigroup, a model that is not exactly saturated, or a saturated model with other free parameters such as free latent covariances or means). The two agree to the finite-difference noise floor whenever `"analytic"` applies, and the analytic result is bit-reproducible.
+
 Standardized solution
 
 The corrected standard error of the `dem60 ~ ind60` coefficient, derived by hand as the standard error of the standardized coefficient plus a first-order delta-method term:

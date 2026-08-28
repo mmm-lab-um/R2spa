@@ -2,10 +2,11 @@
 
 **Date:** 2026-08-28 (updated after the Phase-2 gate)
 **Owner roles:** `r-architect` (code), `r-tester` (tests), `r-doc` (roxygen/NEWS)
-**Status:** **gate passed (saturated case)** — not yet implemented. The Hessian-free closed form
-(§2.4) reproduces the FD corrected vcov to `max|diff| = 0.0049` (the FD's own precision) on the
-T3 fixture, fully analytically. Remaining: wire it into `vcov_corrected()`, and extend to the
-general (non-saturated) structural model (§4.3).
+**Status:** **implemented** (saturated / df = 0 case). The Hessian-free closed form (§2.4) is
+wired into `vcov_corrected()` behind `engine = "analytic"`, gated on formal saturation
+(df = 0, converged) with transparent fallback to the FD otherwise; it reproduces the FD
+corrected vcov to `max|diff| = 0.0049` (the FD's own precision) on the T3 fixture, fully
+analytically. Remaining: the general (non-saturated) analytic path and the multigroup path (§4.3).
 **Blocked by / relates to:** none. Extends the first-order corrected-SE path (re-integrated
 2026-08-23, `R/tspa_corrected_se.R`); does not change the public contract of
 `vcov_corrected()` or `tspa(corrected_se = )` — only the way the Jacobian `J` is computed.

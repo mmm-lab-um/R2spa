@@ -18,6 +18,7 @@ tspa(
   corrected_se = FALSE,
   which_free = NULL,
   product = FALSE,
+  engine = "fd",
   ...
 )
 }
@@ -155,6 +156,12 @@ models only (v1); not supported with \code{corrected_se = TRUE}.
 Default \code{FALSE}, which leaves the manual workflow
 (\code{\link[=get_fs]{get_fs()}} with \code{product} set, or \code{\link[=compute_fs_prod]{compute_fs_prod()}}, up
 front, the product SE in \code{se_fs}) unchanged.}
+
+\item{engine}{The Jacobian engine passed to \code{\link[=vcov_corrected]{vcov_corrected()}} when
+\code{corrected_se = TRUE}: \code{"fd"} (the default, finite
+differences) or \code{"analytic"} (the refit-free saturated closed
+form, which transparently falls back to \code{"fd"} when it does not
+apply). Ignored unless \code{corrected_se = TRUE}.}
 
 \item{...}{Additional arguments passed to \code{\link[lavaan]{sem}}. See
 \code{\link[lavaan]{lavOptions}} for a complete list.}

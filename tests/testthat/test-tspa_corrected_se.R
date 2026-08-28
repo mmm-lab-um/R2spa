@@ -92,6 +92,20 @@ tspa_joint3 <- tspa("dem60 ~ ind60
                     dem65 ~ ind60 + dem60", data = fs_joint3,
                     fsT = attr(fs_joint3, "fsT"), fsL = attr(fs_joint3, "fsL"))
 
+## PLAN 16 (engine = "analytic", feeds T10-T13, IT9): the T3 saturated fit
+## (tspa_joint3, df = 0) is the A/B reference. The FD correction (vc_fd_sat)
+## is the expensive side (30 stage-2 refits) and is computed once; the analytic
+## (vc_an_sat) is refit-free and deterministic. A restricted fit on the same
+## 3-factor data (tspa_joint3_nsat, df > 0) drives the saturated-only -> FD
+## fallback (the closed form is exact only for a df = 0 structural model).
+vc_an_sat <- vcov_corrected(tspa_joint3, vfsLT = attr(fs_joint3, "vfsLT"),
+                            engine = "analytic")
+vc_fd_sat <- vcov_corrected(tspa_joint3, vfsLT = attr(fs_joint3, "vfsLT"),
+                            engine = "fd")
+tspa_joint3_nsat <- tspa("dem65 ~ ind60", data = fs_joint3,
+                         fsT = attr(fs_joint3, "fsT"),
+                         fsL = attr(fs_joint3, "fsL"))
+
 ########## Tests ##########
 
 test_that("T1: vcov_corrected() works with prior-adjusted factor scores (no globalenv)", {
@@ -452,5 +466,67 @@ test_that("T9: MG Jacobian wiring — independent central differences reproduce 
   vfsLT <- attr(fs_mg, "vfsLT")
   cor_pkg <- vcov_corr_mg - vcov(tspa_mg)
   expect_equal(cor_pkg, J_test %*% vfsLT %*% t(J_test), tolerance = 1e-4)
+})
+
+########## PLAN 16: engine = "analytic" (refit-free Jacobian) ##########
+## The saturated closed form (PLAN 16, section 2.4) is A/B'd against the
+## finite-difference engine on the T3 saturated fit (the common 2S-PA case)
+## and must agree to the FD's own noise floor. The gate also routes a
+## restricted (df > 0) structural model back to the FD.
+
+test_that("T10: engine = 'analytic' matches the FD engine on the saturated fit", {
+  expect_equal(vc_an_sat, vc_fd_sat, tolerance = 1e-2)
+  # The analytic correction is non-trivial, symmetric, and PSD.
+  expect_gt(sum((vc_an_sat - vcov(tspa_joint3))^2), 0)
+  expect_equal(vc_an_sat, t(vc_an_sat), tolerance = 1e-10)
+})
+
+test_that("T11: engine = 'analytic' is deterministic (bit-identical, no refits)", {
+  # No finite differences and no optimizer jitter, so the result reproduces
+  # bit-for-bit (the FD engine is only deterministic to ~1e-8 cross-run).
+  expect_identical(
+    vcov_corrected(tspa_joint3, vfsLT = attr(fs_joint3, "vfsLT"),
+                   engine = "analytic"),
+    vc_an_sat)
+})
+
+test_that("T12: engine = 'analytic' honours which_free exactly as the FD", {
+  wl <- c(1, 10)  # one loading (fsL) + the first error variance (fsT)
+  sub <- attr(fs_joint3, "vfsLT")[wl, wl]
+  va <- vcov_corrected(tspa_joint3, vfsLT = sub, which_free = wl,
+                       engine = "analytic")
+  vf <- vcov_corrected(tspa_joint3, vfsLT = sub, which_free = wl,
+                       engine = "fd")
+  expect_equal(va, vf, tolerance = 1e-2)
+})
+
+test_that("T13: the saturation gate routes saturated -> analytic, restricted -> FD", {
+  # Saturated single-group fit: the closed form applies (a p x nfree matrix,
+  # nfree = q^2 loadings + q(q+1)/2 error terms = 15 for q = 3).
+  j_sat <- R2spa:::vcov_jacobian_analytic(tspa_joint3, names(coef(tspa_joint3)),
+                                          seq_len(15))
+  expect_true(is.matrix(j_sat))
+  expect_equal(dim(j_sat), c(length(coef(tspa_joint3)), 15))
+  # Restricted fit (df > 0, not exactly saturated): the closed form does not
+  # apply -> NULL -> FD.
+  j_nsat <- R2spa:::vcov_jacobian_analytic(
+    tspa_joint3_nsat, names(coef(tspa_joint3_nsat)), seq_len(15))
+  expect_null(j_nsat)
+  # The public path still yields a finite corrected covariance (the FD).
+  vc_nsat <- vcov_corrected(tspa_joint3_nsat, vfsLT = attr(fs_joint3, "vfsLT"),
+                            engine = "analytic")
+  expect_true(all(is.finite(vc_nsat)))
+  expect_equal(dim(vc_nsat), dim(vcov(tspa_joint3_nsat)))
+})
+
+test_that("IT9: in-place corrected_se = TRUE, engine = 'analytic' matches the FD", {
+  fa <- tspa("dem60 ~ ind60\ndem65 ~ ind60 + dem60", data = fs_joint3,
+             fsT = attr(fs_joint3, "fsT"), fsL = attr(fs_joint3, "fsL"),
+             vfsLT = attr(fs_joint3, "vfsLT"), corrected_se = TRUE,
+             engine = "analytic")
+  expect_true(isTRUE(attr(fa, "tspa_corrected")))
+  # In-place analytic == standalone FD (IT1: in-place == standalone to 1e-8;
+  # T10: standalone analytic == standalone FD to 1e-2).
+  expect_equal(vcov(fa), vc_fd_sat, tolerance = 1e-2)
 })
 
