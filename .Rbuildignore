@@ -21,3 +21,4 @@
 ^dependency_analysis\.md$
 ^_PLAN_.*\.md$
 ^\.quarantine$
+^R2spa_*\.tar\.gz$
