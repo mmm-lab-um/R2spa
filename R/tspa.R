@@ -411,7 +411,7 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
                  se_fs = NULL, fsT = NULL, fsL = NULL, fsb = NULL,
                  reduce = c("mean", "median"),
                   vfsLT = NULL, corrected_se = FALSE, which_free = NULL,
-                  engine = "fd", product = FALSE,
+                  product = FALSE, engine = "fd",
                   ...) {
   reduce <- match.arg(reduce)
   # Set when the per-unit fsT/fsL/fsb attributes were collapsed to a single

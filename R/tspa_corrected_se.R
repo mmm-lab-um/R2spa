@@ -330,13 +330,21 @@ vcov_jacobian_analytic <- function(tspa_fit, args0, names0, which_free) {
     if (nrow(L) != q || ncol(L) != q) return(NULL)
     lat <- rownames(psi)
     if (is.null(lat) || any(is.na(lat))) return(NULL)
-    # Sample covariance of the score columns (saturation check only).
+    # Observation count (the closed form scales by n).
     data0 <- args0$data
-    if (is.null(data0) || !all(rownames(L) %in% names(data0))) return(NULL)
-    S_ml <- try(stats::cov(as.matrix(data0[, rownames(L), drop = FALSE])),
-                silent = TRUE)
-    if (inherits(S_ml, "try-error") || !all(is.finite(S_ml))) return(NULL)
+    if (is.null(data0)) return(NULL)
     n <- nrow(data0)
+    # Sample covariance of the score columns, taken from lavaan's own
+    # observed covariance (the ML estimator, consistent with the fit's
+    # objective — the n vs n-1 scaling, weights, and FIML handled exactly as
+    # in the fit), used only for the near-saturation gate below. Using
+    # stats::cov() here would inject a systematic n-1 scaling bias into the
+    # gate (a saturated fit then reads as non-saturated at ~ (1/n) * scale).
+    cov_ov <- try(lavaan::lavInspect(tspa_fit, "cov.ov"), silent = TRUE)
+    if (inherits(cov_ov, "try-error") ||
+        !all(rownames(L) %in% rownames(cov_ov))) return(NULL)
+    S_ml <- cov_ov[rownames(L), rownames(L), drop = FALSE]
+    if (!all(is.finite(S_ml))) return(NULL)
     # Geometry: F = (I-beta)^{-1} psi (I-beta)^{-1}' (full latent cov, not
     # est$psi, which is exogenous-only), Sigma = L F L' + T.
     M <- try(solve(diag(q) - beta), silent = TRUE)
@@ -350,10 +358,10 @@ vcov_jacobian_analytic <- function(tspa_fit, args0, names0, which_free) {
     # (the structural part saturates the score covariance); it degrades
     # gracefully when the fit is only close. A restricted structural model
     # that cannot reproduce S_ml leaves the second-order term in the
-    # cross-Hessian non-negligible, so fall back to the FD there. The
-    # relative non-saturation max|Sigma - S_ml| / mean(diag(S_ml)) is ~0.02
-    # for (near-)saturated stage-2 path models and ~0.5 for clearly
-    # restricted ones, so 0.1 cleanly separates the two.
+    # cross-Hessian non-negligible, so fall back to the FD there. Because
+    # S_ml is lavaan's own ML observed covariance, a (near-)saturated fit
+    # reads as ~0 while a clearly restricted one reads as ~0.5, so the
+    # relative threshold 0.1 * mean(diag(S_ml)) cleanly separates the two.
     if (max(abs(Sigma - S_ml)) > 0.1 * mean(diag(S_ml))) return(NULL)
     # Delta_theta: one q x q matrix per free structural param (coef order).
     dFb <- function(i, j) M[, i] %o% F[j, ] + F[, j] %o% M[, i]
