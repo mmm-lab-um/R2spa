@@ -28,11 +28,10 @@
 #'
 #' The `engine` argument selects how the Jacobian is evaluated. The default
 #' `"fd"` uses central finite differences (one stage-2 refit on each side of
-#' each free element). `"analytic"` instead uses a refit-free,
-#' deterministic closed form for the (approximately) saturated single-group
-#' case (PLAN 16, section 2.4) and transparently falls back to `"fd"`
-#' otherwise (multigroup, or a restricted structural model that does not
-#' approximately saturate the score covariance); the two agree to the
+#' each free element). `"analytic"` instead uses a refit-free, deterministic
+#' closed form for the saturated single-group case (PLAN 16, section 2.4) and
+#' transparently falls back to `"fd"` otherwise (multigroup, or a structural
+#' model that is not exactly saturated, df > 0); the two agree to the
 #' finite-difference noise floor whenever `"analytic"` applies, and the
 #' analytic result is bit-reproducible.
 #'
@@ -76,12 +75,11 @@
 #'              d(thetahat)/d(eta)`. `"fd"` (the default) uses central
 #'              finite differences (one stage-2 refit on each side of each
 #'              free element). `"analytic"` uses a refit-free, deterministic
-#'              closed form for the (approximately) saturated single-group
-#'              case (PLAN 16, section 2.4) and transparently falls back to
-#'              `"fd"` otherwise (multigroup, or a structural model that does
-#'              not approximately saturate the score covariance). The two
-#'              engines agree to the finite-difference noise floor whenever
-#'              `"analytic"` applies.
+#'              closed form for the saturated single-group case (PLAN 16,
+#'              section 2.4) and transparently falls back to `"fd"` otherwise
+#'              (multigroup, or a structural model that is not exactly
+#'              saturated, df > 0). The two engines agree to the
+#'              finite-difference noise floor whenever `"analytic"` applies.
 #' @param ... Currently not used.
 #' @return A corrected covariance matrix in the same dimension as
 #'     `vcov(tspa_fit)` (symmetric).
@@ -262,9 +260,9 @@ vcov_corrected <- function(tspa_fit, vfsLT, which_free = NULL,
     # Jacobian J = d(thetahat)/d(eta). engine = "analytic" evaluates it
     # refit-free via the saturated closed form (PLAN 16, section 2.4) and
     # silently falls back to the finite-difference engine when the analytic
-    # form is not applicable (multigroup, or a non-saturated structural
-    # model). engine = "fd" (the default) is byte-identical to the original
-    # central-difference implementation below.
+    # form is not applicable (multigroup, or a structural model that is not
+    # exactly saturated, df > 0). engine = "fd" (the default) is
+    # byte-identical to the original central-difference implementation below.
     J <- if (engine == "analytic")
         vcov_jacobian_analytic(tspa_fit, args0, names0, which_free) else NULL
     if (is.null(J)) {
@@ -308,9 +306,9 @@ check_refit_convergence <- function(fit, k) {
 # saturated single-group stage-2 model (PLAN 16, section 2.4). Returns a
 # p x nfree matrix (rows = free structural params in coef order, columns =
 # the which_free positions) or NULL when the analytic form is not applicable
-# (multigroup, a non-saturated structural model, or any geometry the closed
-# form does not cover), in which case the caller falls back to the
-# finite-difference Jacobian.
+# (multigroup, a structural model that is not exactly saturated (df > 0), or
+# any geometry the closed form does not cover), in which case the caller
+# falls back to the finite-difference Jacobian.
 #
 # The saturated cross-Hessian is Hessian-free (no log-likelihood Hessian, no
 # finite differences, no refits):
@@ -318,9 +316,10 @@ check_refit_convergence <- function(fit, k) {
 #   J = vcov(fit) %*% H_theta_eta
 # where Sigma = L F L' + T, F = (I-beta)^{-1} psi (I-beta)^{-1}', Sinv is
 # the inverse of Sigma, and the dSigma/dtheta_k, dSigma/deta_j are the
-# analytic derivatives below. It is exact when the structural part saturates
-# the score covariance (Sigma = the sample score covariance at the MLE), which
-# is checked against the data before the closed form is used.
+# analytic derivatives below. It is exact only for a saturated structural
+# model (the free params span the q(q+1)/2 score covariances, df = 0, at the
+# MLE); that saturation is checked before the closed form is used, otherwise
+# the caller falls back to the FD.
 vcov_jacobian_analytic <- function(tspa_fit, args0, names0, which_free) {
     if (tsp_ngroups(tspa_fit) != 1L) return(NULL)
     est <- try(lavaan::lavInspect(tspa_fit, "est"), silent = TRUE)
@@ -330,21 +329,22 @@ vcov_jacobian_analytic <- function(tspa_fit, args0, names0, which_free) {
     if (nrow(L) != q || ncol(L) != q) return(NULL)
     lat <- rownames(psi)
     if (is.null(lat) || any(is.na(lat))) return(NULL)
+    # Formal saturation gate. The closed form is exact only when the free
+    # structural parameters exactly span the q(q+1)/2 score covariances
+    # (df = 0): then the MLE reproduces the sample score covariance and the
+    # log-likelihood score vanishes, dropping the second-order cross-Hessian
+    # term. A restricted model (df > 0) keeps that term, so fall back to the
+    # FD. (A near-saturation test against the sample covariance is NOT a
+    # reliable proxy for the closed form's accuracy — a df > 0 model can have
+    # a tiny implied-vs-sample discrepancy yet a large second-order term —
+    # so gate on df instead.) The fit must also be at its MLE (converged).
+    p <- length(names0)
+    if (p != q * (q + 1L) / 2L) return(NULL)
+    if (!isTRUE(tsp_converged(tspa_fit))) return(NULL)
     # Observation count (the closed form scales by n).
     data0 <- args0$data
     if (is.null(data0)) return(NULL)
     n <- nrow(data0)
-    # Sample covariance of the score columns, taken from lavaan's own
-    # observed covariance (the ML estimator, consistent with the fit's
-    # objective — the n vs n-1 scaling, weights, and FIML handled exactly as
-    # in the fit), used only for the near-saturation gate below. Using
-    # stats::cov() here would inject a systematic n-1 scaling bias into the
-    # gate (a saturated fit then reads as non-saturated at ~ (1/n) * scale).
-    cov_ov <- try(lavaan::lavInspect(tspa_fit, "cov.ov"), silent = TRUE)
-    if (inherits(cov_ov, "try-error") ||
-        !all(rownames(L) %in% rownames(cov_ov))) return(NULL)
-    S_ml <- cov_ov[rownames(L), rownames(L), drop = FALSE]
-    if (!all(is.finite(S_ml))) return(NULL)
     # Geometry: F = (I-beta)^{-1} psi (I-beta)^{-1}' (full latent cov, not
     # est$psi, which is exogenous-only), Sigma = L F L' + T.
     M <- try(solve(diag(q) - beta), silent = TRUE)
@@ -353,20 +353,9 @@ vcov_jacobian_analytic <- function(tspa_fit, args0, names0, which_free) {
     Sigma <- L %*% F %*% t(L) + T0
     Sinv <- try(solve(Sigma), silent = TRUE)
     if (inherits(Sinv, "try-error")) return(NULL)
-    # Near-saturation gate. The closed form is exact when the implied score
-    # covariance Sigma equals the sample score covariance S_ml at the MLE
-    # (the structural part saturates the score covariance); it degrades
-    # gracefully when the fit is only close. A restricted structural model
-    # that cannot reproduce S_ml leaves the second-order term in the
-    # cross-Hessian non-negligible, so fall back to the FD there. Because
-    # S_ml is lavaan's own ML observed covariance, a (near-)saturated fit
-    # reads as ~0 while a clearly restricted one reads as ~0.5, so the
-    # relative threshold 0.1 * mean(diag(S_ml)) cleanly separates the two.
-    if (max(abs(Sigma - S_ml)) > 0.1 * mean(diag(S_ml))) return(NULL)
     # Delta_theta: one q x q matrix per free structural param (coef order).
     dFb <- function(i, j) M[, i] %o% F[j, ] + F[, j] %o% M[, i]
     dFp <- function(k) M[, k] %o% M[, k]
-    p <- length(names0)
     dSigTheta <- vector("list", p)
     for (kk in seq_len(p)) {
         nm <- names0[kk]

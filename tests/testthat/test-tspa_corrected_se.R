@@ -93,11 +93,11 @@ tspa_joint3 <- tspa("dem60 ~ ind60
                     fsT = attr(fs_joint3, "fsT"), fsL = attr(fs_joint3, "fsL"))
 
 ## PLAN 16 (engine = "analytic", feeds T10-T13, IT9): the T3 saturated fit
-## (tspa_joint3) is the A/B reference. The FD correction (vc_fd_sat) is the
-## expensive side (30 stage-2 refits) and is computed once; the analytic
+## (tspa_joint3, df = 0) is the A/B reference. The FD correction (vc_fd_sat)
+## is the expensive side (30 stage-2 refits) and is computed once; the analytic
 ## (vc_an_sat) is refit-free and deterministic. A restricted fit on the same
-## 3-factor data (tspa_joint3_nsat) cannot reproduce the score covariance, so
-## it drives the non-saturated -> FD fallback.
+## 3-factor data (tspa_joint3_nsat, df > 0) drives the saturated-only -> FD
+## fallback (the closed form is exact only for a df = 0 structural model).
 vc_an_sat <- vcov_corrected(tspa_joint3, vfsLT = attr(fs_joint3, "vfsLT"),
                             engine = "analytic")
 vc_fd_sat <- vcov_corrected(tspa_joint3, vfsLT = attr(fs_joint3, "vfsLT"),
@@ -436,7 +436,7 @@ test_that("T9: MG Jacobian wiring — independent central differences reproduce 
 ## The saturated closed form (PLAN 16, section 2.4) is A/B'd against the
 ## finite-difference engine on the T3 saturated fit (the common 2S-PA case)
 ## and must agree to the FD's own noise floor. The gate also routes a
-## restricted (non-saturated) structural model back to the FD.
+## restricted (df > 0) structural model back to the FD.
 
 test_that("T10: engine = 'analytic' matches the FD engine on the saturated fit", {
   expect_equal(vc_an_sat, vc_fd_sat, tolerance = 1e-2)
@@ -471,7 +471,8 @@ test_that("T13: the saturation gate routes saturated -> analytic, restricted -> 
                                   names(coef(tspa_joint3)), seq_len(15))
   expect_true(is.matrix(j_sat))
   expect_equal(dim(j_sat), c(length(coef(tspa_joint3)), 15))
-  # Restricted fit (cannot reproduce the score covariance): NULL -> FD.
+  # Restricted fit (df > 0, not exactly saturated): the closed form does not
+  # apply -> NULL -> FD.
   j_nsat <- vcov_jacobian_analytic(
     tspa_joint3_nsat, attr(tspa_joint3_nsat, "tspa_args"),
     names(coef(tspa_joint3_nsat)), seq_len(15))
