@@ -106,6 +106,16 @@ tspa_mx_fit <- mxRun(tspa_mx)
 summary(tspa_mx_fit)
 ```
 
+The two routes fit the same model, so the path, variance, and covariance
+estimates (and their SEs) agree. They differ only in the unidentifiable split
+of the mean structure between the corrected latents and their (observed)
+factor-score indicators: `tspa()` fixes the exogenous latent mean at zero and
+lets the factor-score mean estimate the data value, whereas
+`tspa_mx_model()` fixes the score residual means at zero and estimates the
+latent means (the latent mean carries the data value). Read the means
+accordingly — compare the two routes on the covariance quantities, not on how
+the mean is split.
+
 ## Compare to joint model
 
 ```{r}

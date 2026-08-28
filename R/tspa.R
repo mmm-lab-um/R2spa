@@ -104,6 +104,17 @@
 #' the same pair named twice (`x:m` and `xm`), or a render name colliding
 #' with another model variable, is an error.
 #'
+#' ## OpenMx route and mean structure
+#'
+#' The OpenMx counterpart is [tspa_mx_model()]. Both routes fit the same
+#' model (the covariance/structural quantities agree to optimizer tolerance);
+#' they differ only in the unidentifiable mean split between the corrected
+#' latents and their (observed) factor-score indicators: [tspa()] fixes the
+#' exogenous latent mean at zero and estimates the factor-score mean, whereas
+#' [tspa_mx_model()] does the opposite. Compare the two on the covariance
+#' quantities, not on how the mean is split (see `tspa_mx_model()` under
+#' "Mean structure").
+#'
 #' @param model A string variable describing the structural path model,
 #'              in \code{lavaan} syntax.
 #' @param data A data frame containing factor scores. When `data` is a

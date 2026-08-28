@@ -48,8 +48,23 @@
 #' inert). A `get_fs(product = )` result derives identically: its extra
 #' `fs_a:fs_b` (and `_se`/`_ld`) columns are inert to derivation, but the
 #' `:` they carry is illegal in `OpenMx::mxData()` column names, so the
-#' frame is un-fittable until the product columns are dropped (a
-#' pre-existing limitation that affects the explicit-argument route too).
+#'   frame is un-fittable until the product columns are dropped (a
+#'   pre-existing limitation that affects the explicit-argument route too).
+#'
+#' ## Mean structure
+#'
+#' Both routes fit the same model, so the covariance/structural quantities
+#' (paths, latent variances/covariances, and their SEs) agree to optimizer
+#' tolerance. The two differ only in the unidentifiable split of the mean
+#' structure between the corrected latents and their (observed) factor-score
+#' indicators: [tspa()] fixes the exogenous latent mean at zero and lets the
+#' factor-score mean estimate the data value, whereas this OpenMx route fixes
+#' the score residual means at zero and estimates the latent means (the
+#' latent mean carries the data value). Read the means accordingly --- compare
+#' the two routes on the covariance quantities, not on how the mean is split
+#' between latent and indicator. (In the no-mean-structure case the
+#' difference is flat: the split is arbitrary and only the total is
+#' identifiable.)
 #'
 #' @param model A character string describing the structural path model in
 #'   `lavaan` syntax, using the **latent** (factor) names. Phase 1 restricts

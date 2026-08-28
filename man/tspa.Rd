@@ -296,6 +296,18 @@ result). A model variable matching two different factor-score pairs,
 the same pair named twice (\code{x:m} and \code{xm}), or a render name colliding
 with another model variable, is an error.
 }
+
+\subsection{OpenMx route and mean structure}{
+
+The OpenMx counterpart is \code{\link[=tspa_mx_model]{tspa_mx_model()}}. Both routes fit the same
+model (the covariance/structural quantities agree to optimizer tolerance);
+they differ only in the unidentifiable mean split between the corrected
+latents and their (observed) factor-score indicators: \code{\link[=tspa]{tspa()}} fixes the
+exogenous latent mean at zero and estimates the factor-score mean, whereas
+\code{\link[=tspa_mx_model]{tspa_mx_model()}} does the opposite. Compare the two on the covariance
+quantities, not on how the mean is split (see \code{tspa_mx_model()} under
+"Mean structure").
+}
 }
 \examples{
 library(lavaan)

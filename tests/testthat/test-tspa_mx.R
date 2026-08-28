@@ -254,3 +254,39 @@ test_that("auto-seed release is user-gated (user == 0): a user-fixed zero mean s
   j <- vcol(m_free, "ind60")
   expect_true(sprintf("m1.M[1,%d]", j) %in% names(coef(m_free)))
 })
+
+# --- mean-structure convention (documented): same model, different split ----
+# Both routes fit the same model, so the covariance/structural quantities
+# (paths, latent variances) agree. The unidentifiable mean split differs:
+# tspa() (lavaan) fixes the exogenous latent mean at 0 and estimates the
+# factor-score mean, whereas tspa_mx_model() (OpenMx) fixes the score
+# residual mean at 0 and estimates the latent mean. The same data value ends
+# up in the latent mean (OpenMx) vs. the factor-score mean (lavaan).
+test_that("mean-structure convention: same model, latent vs score mean split", {
+  set.seed(11)
+  n <- 2000
+  fa <- rnorm(n, 1.5, 1)
+  a  <- fa + rnorm(n, 0.5)
+  b  <- 2*a + rnorm(n, 0.8)
+  dat <- data.frame(fs_a = fa, fs_b = b)
+  se  <- c(a = 0.5, b = 0.8)
+  mod <- "b ~ a; b ~ 1"
+  # only the mean split is overparameterized (the total is identifiable), so
+  # lavaan warns on vcov(); the point estimates are deterministic and tested.
+  la <- suppressWarnings(tspa(model = mod, data = dat, se_fs = se))
+  m  <- suppressWarnings(tspa_mx_model(mod, data = dat, se_fs = se))
+  v  <- c(m$manifestVars, m$latentVars)
+  # covariance/structural quantities agree to optimizer tolerance:
+  expect_equal(mx_path_val(m, "a", "b"),
+               as.numeric(coef(la)["b~a"]), tolerance = 1e-4)
+  expect_equal(mx_var_val(m, "a"),
+               as.numeric(coef(la)["a~~a"]), tolerance = 1e-4)
+  expect_equal(mx_var_val(m, "b"),
+               as.numeric(coef(la)["b~~b"]), tolerance = 1e-4)
+  # the mean split: the data value (~1.5) is the LATENT mean in OpenMx and
+  # the factor-SCORE mean in lavaan:
+  expect_equal(unname(m$M$values[1, match("a", v)]),
+               as.numeric(coef(la)["fs_a~1"]), tolerance = 1e-4)
+  # ...and OpenMx pins the score's own (residual) mean at zero:
+  expect_equal(unname(m$M$values[1, match("fs_a", v)]), 0)
+})

@@ -178,6 +178,13 @@
   wrong rows.
 
 ## Documentation
+- Documented the mean-structure convention difference between `tspa()`
+  (lavaan, which fixes the exogenous latent mean at zero and estimates the
+  factor-score mean) and `tspa_mx_model()` (OpenMx, which fixes the score
+  residual means at zero and estimates the latent means): the two routes fit
+  the same model, so only the unidentifiable mean split differs — compare on
+  the covariance quantities. Noted in both functions' docs, the OpenMx
+  vignette, and a regression test.
 - Updated vignettes for:
     * tspa-growth-vignette (#50)
     * missing-data (#79) — re-integrated and modernized: the per-row
