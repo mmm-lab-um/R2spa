@@ -71,9 +71,11 @@
 #                                             elements named `<group>.<block>`
 #   lavInspect(fit, what = "est")$beta         per-group `beta` matrix with
 #     row/col variable dimnames. SG: flat block list ($beta directly); MG:
-#     one list per group (in group order). THE fixed-slope anchor consumed by
-#     tsp_beta_names() (R/grandStandardizedSolution.R); lavTech(est) strips
-#     these names, so the dimname source stays lavInspect(est).
+#     one list per group (in group order). Absent from the est list (NULL)
+#     when the model has no structural regression — tsp_beta_names() then
+#     reports empty dimnames for that group. THE fixed-slope anchor consumed
+#     by tsp_beta_names() (R/grandStandardizedSolution.R); lavTech(est)
+#     strips these names, so the dimname source stays lavInspect(est).
 #   coef(fit) / vcov(fit)                      named vector / name-indexed
 #                                             matrix — the stable name-based
 #                                             anchor for tests (no positional
@@ -183,16 +185,20 @@ tsp_resolve_layout <- function(pt) {
 # (`free` now, `fix` historically), the fixed-value column (`start` now,
 # `fix` historically), the user-row flag, and the group/label/value columns
 # from one partable view. Unknown shape -> explicit error naming the
-# installed and tested-up-to versions (never silent guessing).
+# installed and tested-up-to versions (never silent guessing). The version
+# string itself is pinned on first use: `packageVersion()` re-reads the
+# installed package metadata from disk on every call, and the installed
+# version cannot change mid-session.
 tsp_layout <- function(fit) {
-  ver <- as.character(utils::packageVersion("lavaan"))
-  if (identical(tsp_compat_env$version, ver) &&
-      !is.null(tsp_compat_env$layout)) {
+  if (is.null(tsp_compat_env$version)) {
+    tsp_compat_env$version <-
+      as.character(utils::packageVersion("lavaan"))
+  }
+  if (!is.null(tsp_compat_env$layout)) {
     return(tsp_compat_env$layout)
   }
   layout <- tsp_resolve_layout(tsp_partable_raw(fit))
   tsp_compat_env$layout <- layout
-  tsp_compat_env$version <- ver
   layout
 }
 
@@ -310,6 +316,11 @@ tsp_beta_names <- function(fit) {
   est <- suppressWarnings(lavInspect(fit, what = "est"))
   lapply(seq_len(ng), function(g) {
     b <- if (ng == 1L) est[["beta"]] else est[[g]][["beta"]]
+    if (is.null(b)) {
+      # the est list has no beta block at all (not even a 0 x 0 matrix)
+      # when the model has no structural regression
+      return(list(rnm = character(0), clm = character(0)))
+    }
     rn <- rownames(b)
     cm <- colnames(b)
     if (is.null(rn) || is.null(cm)) {
@@ -321,10 +332,16 @@ tsp_beta_names <- function(fit) {
   })
 }
 
-# Flatten a nested per-group lavaan.list (elements named `<group>.<block>`)
-# to the flat `lavTech` shape, rebuilding plain block names in the same
-# within-group order.
+# Flatten a nested per-group lavaan.list (one list element per group, each a
+# block list) to the flat `lavTech` shape, rebuilding plain block names in
+# the same within-group order. A flat single-group block list (block matrices
+# directly, no per-group nesting) is already in the `lavTech` shape and is
+# returned as-is (`unlist(recursive = FALSE)` on a list of matrices would
+# concatenate them into one flat vector).
 tsp_flatten_grouped_est <- function(li) {
+  if (!all(vapply(li, is.list, logical(1)))) {
+    return(li)
+  }
   out <- unlist(li, recursive = FALSE)
   names(out) <- unlist(lapply(li, names), use.names = FALSE)
   out

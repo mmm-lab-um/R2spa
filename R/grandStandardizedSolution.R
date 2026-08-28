@@ -131,6 +131,11 @@ grand_standardized_solution <- function(object, model_list = NULL,
   out <- partable[i_struct, c("lhs", "op", "rhs", "exo", "group",
                               "block", "label")]
   out_positions <- positions[i_struct]
+  if (!length(i_struct)) {
+    stop("grand_standardized_solution(): the model contains no structural (",
+         "'~') parameters, so there is nothing to standardize.",
+         call. = FALSE)
+  }
 
   # Get standardized betas
   if (is.null(ns)) {

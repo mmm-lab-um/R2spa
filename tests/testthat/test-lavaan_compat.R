@@ -120,6 +120,29 @@ test_that("tsp_partable_mats matches lavTech(what = 'partable', list.by.group = 
                    lavTech(mg_fit, what = "partable", list.by.group = TRUE))
 })
 
+test_that("tsp_beta_names: a model without structural regression reports empty dimnames", {
+  # 0.7-2: the est list has no beta block at all for a no-regression model
+  # (not even a 0 x 0 matrix), so est[["beta"]] is NULL
+  fit0 <- cfa("ind60 =~ x1 + x2 + x3", data = PoliticalDemocracy)
+  expect_null(lavInspect(fit0, what = "est")[["beta"]])
+  bn <- tsp_beta_names(fit0)
+  expect_identical(bn, list(list(rnm = character(0), clm = character(0))))
+})
+
+test_that("tsp_flatten_grouped_est: flat single-group block list passes through", {
+  est <- lavInspect(canon_fit, what = "est")
+  expect_false(any(vapply(est, is.list, logical(1))))
+  expect_identical(tsp_flatten_grouped_est(est), est)
+})
+
+test_that("tsp_flatten_grouped_est: nested per-group list flattens to the lavTech shape", {
+  est <- lavInspect(mg_fit, what = "est")
+  out <- tsp_flatten_grouped_est(est)
+  lt <- lavTech(mg_fit, what = "est")
+  expect_identical(names(out), names(lt))
+  expect_true(all(mapply(function(a, b) identical(dim(a), dim(b)), out, lt)))
+})
+
 test_that("tsp_nobs / tsp_ngroups / tsp_norig match slots and lavInspect", {
   for (fit in list(canon_fit, mg_fit)) {
     expect_identical(tsp_nobs(fit), unlist(fit@Data@nobs))
