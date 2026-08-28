@@ -56,10 +56,13 @@
 #                                          combined free-parameter vector in
 #                                          a single call; verified 0.7-2,
 #                                          SG + MG); read via tsp_converged()
-#   lavTech(fit, what = "est" | "free")        flat list of 6 matrices
-#                                             (lambda, theta, psi, beta, nu,
-#                                             alpha) repeated per group; no
-#                                             dimnames
+#   lavTech(fit, what = "est" | "free")        flat list of the model's block
+#                                             matrices (subset of lambda,
+#                                             theta, psi, beta, nu, alpha —
+#                                             blocks absent from the model are
+#                                             omitted, e.g. no beta without a
+#                                             structural regression) repeated
+#                                             per group; no dimnames
 #   lavTech(fit, what = "partable",
 #           list.by.group = TRUE)              named list of lists, one per
 #                                             group; per-group free-position
