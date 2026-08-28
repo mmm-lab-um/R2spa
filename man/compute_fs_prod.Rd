@@ -46,50 +46,55 @@ attributes — the general joint-model formula below, instead of the
 separate-single-factor special case the old function used.
 }
 \details{
-Let \verb{fs_k = L_k' xi + b_k + e_k} for \verb{k = 1..q}, where \code{L} is the
-block's \code{fsL} (\verb{q x q}, rows = scores, cols = latents), \code{T} is the
-block's \code{fsT} (score error covariance), \code{Psi} is the latent
-(co)variance (the \code{psi} attribute), and \code{e} is the score error. The
-derivation relies on: \code{E[e] = 0} (absorbed in \code{b}); \code{Cov(e, xi) = 0}
-elementwise for ALL latents (true for both regression and Bartlett
-scoring, where \code{e} is linear in the indicator errors); and joint
-normality of \verb{(xi, e)}.
+Let \eqn{fs_k = L_k \xi + b_k + e_k} for \eqn{k = 1, \ldots, q}, where
+\eqn{L} is the block's \code{fsL} (\eqn{q \times q}, rows = scores, cols =
+latents), \eqn{T} is the block's \code{fsT} (score error covariance),
+\eqn{\Psi} is the latent (co)variance (the \code{psi} attribute), and
+\eqn{e} is the score error. The derivation relies on: \eqn{E[e] = 0}
+(absorbed in \eqn{b}); \eqn{Cov(e, \xi) = 0} elementwise for ALL latents
+(true for both regression and Bartlett scoring, where \eqn{e} is linear
+in the indicator errors); and joint normality of \eqn{(\xi, e)}.
 
-For a pair of distinct latents \verb{(a, b)}, the DMC product indicator is
+For a pair of distinct latents \eqn{(a, b)}, the double-mean centered
+(DMC) product indicator is
 
-\code{P = (fs_a - mi_a)(fs_b - mi_b) - mi_P}
+\deqn{P = (fs_a - mi_a)(fs_b - mi_b) - mi_P}
 
-where \code{mi_a} and \code{mi_b} are the SAMPLE means of the score columns and
-\code{mi_P} the sample mean of the (component-centered) product. Its
-conditional expectation is
+where \eqn{mi_a} and \eqn{mi_b} are the SAMPLE means of the score
+columns and \eqn{mi_P} the sample mean of the (component-centered)
+product. Its conditional expectation is
 
-\code{E[P | xi] = (L_a (xi - alpha))(L_b (xi - alpha))}
+\deqn{E[P \mid \xi] = (L_a (\xi - \alpha))(L_b (\xi - \alpha))}
 
 (the centering constants cancel in the error), so the measurement error
 is
 
-\verb{u = P - E[P | xi] = L_a (xi - alpha) e_b + L_b (xi - alpha) e_a + e_a e_b}.
+\deqn{u = P - E[P \mid \xi] = L_a (\xi - \alpha) e_b + L_b (\xi - \alpha) e_a + e_a e_b}
 
-Under joint normality (Isserlis), for \verb{tau_k = L_k Psi L_k'} (a scalar:
-row k of \code{L} times \code{Psi} times row k'), \verb{tau_ab = L_a Psi L_b'},
-\code{s_k^2 = T[k, k]}, and \code{c = T[a, b]}:
+Under joint normality (Isserlis), for \eqn{\tau_k = L_k \Psi L_k'}
+(a scalar: row \eqn{k} of \eqn{L} times \eqn{\Psi} times its
+transpose), \eqn{\tau_{ab} = L_a \Psi L_b'}, \eqn{s_k^2 = T[k, k]}, and
+\eqn{c = T[a, b]}:
 
-\verb{se_P^2 = tau_a s_b^2 + tau_b s_a^2 + s_a^2 s_b^2 + c^2 + 2 tau_ab c}
+\deqn{se_P^2 = \tau_a s_b^2 + \tau_b s_a^2 + s_a^2 s_b^2 + c^2 + 2 \tau_{ab} c}
 
-(the \code{c^2} coefficient is 1, not 2: \verb{Var(e_a e_b) = E[e_a^2 e_b^2] - c^2 = (s_a^2 s_b^2 + 2 c^2) - c^2 = s_a^2 s_b^2 + c^2}).
+(the \eqn{c^2} coefficient is 1, not 2: \eqn{Var(e_a e_b) = E[e_a^2 e_b^2] -
+c^2 = (s_a^2 s_b^2 + 2 c^2) - c^2 = s_a^2 s_b^2 + c^2}).
 
 The implied loading is
 
-\verb{gamma = L[a, a] L[b, b] + L[a, b] L[b, a]}
+\deqn{\gamma = L[a, a] L[b, b] + L[a, b] L[b, a]}
 
-— the coefficient of \verb{xi_a xi_b} in \code{E[P | xi]} (Bartlett joint model:
-\code{gamma = 1}; separate single-factor models: \verb{gamma = lambda_a lambda_b}).
+— the coefficient of \eqn{\xi_a \xi_b} in \eqn{E[P \mid \xi]} (Bartlett
+joint model: \eqn{\gamma = 1}; separate single-factor models:
+\eqn{\gamma = \lambda_a \lambda_b}).
 
-Sanity check: with diagonal \code{L} and \code{T} (separate single-factor
-measurement models, \code{lambda_k = L[k, k]}) the formula reduces to the
-classic \verb{lambda_a^2 Psi[a, a] s_b^2 + lambda_b^2 Psi[b, b] s_a^2 + s_a^2 s_b^2} — the formula the old (quarantined) \code{get_fs_int()} had.
-The terms \code{c^2} and \verb{2 tau_ab c} are exactly what the old code
-dropped; they are nonzero in joint models (correlated factors,
+Sanity check: with diagonal \eqn{L} and \eqn{T} (separate single-factor
+measurement models, \eqn{\lambda_k = L[k, k]}) the formula reduces to
+the classic \eqn{\lambda_a^2 \Psi[a, a] s_b^2 + \lambda_b^2 \Psi[b, b] s_a^2 +
+s_a^2 s_b^2} — the formula the old (quarantined) \code{get_fs_int()} had.
+The terms \eqn{c^2} and \eqn{2 \tau_{ab} c} are exactly what the old
+code dropped; they are nonzero in joint models (correlated factors,
 cross-loadings, error covariances).
 
 Per-row values are pattern-resolved: under FIML each
@@ -115,4 +120,12 @@ head(fs[c("fs_ind60", "fs_dem60", "fs_ind60:fs_dem60",
 # The same columns, computed directly from a get_fs() result
 fs2 <- compute_fs_prod(get_fs(fit), product = "ind60:dem60")
 head(fs2[c("fs_ind60:fs_dem60", "fs_ind60:fs_dem60_se")])
+}
+\references{
+The joint-normal moment expansion (Isserlis's theorem) used to derive
+\code{se_P^2} and the measurement-error covariances is:
+
+Isserlis, L. (1918). On a formula for the product-moment coefficient of any
+order of a normal frequency distribution in any number of variables.
+\emph{Biometrika}, 12(1-2), 134-139. \doi{10.1093/biomet/12.1-2.134}.
 }
