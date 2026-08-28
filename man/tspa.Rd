@@ -17,6 +17,7 @@ tspa(
   vfsLT = NULL,
   corrected_se = FALSE,
   which_free = NULL,
+  engine = "fd",
   product = FALSE,
   ...
 )
@@ -124,6 +125,12 @@ are the per-group list attributes from \code{get_fs()}). Default
 \code{fsL}/\code{fsT} free elements to propagate through the corrected
 covariance (see \code{\link[=vcov_corrected]{vcov_corrected()}}); used only when
 \code{corrected_se = TRUE}.}
+
+\item{engine}{The Jacobian engine passed to \code{\link[=vcov_corrected]{vcov_corrected()}} when
+\code{corrected_se = TRUE}: \code{"fd"} (the default, finite
+differences) or \code{"analytic"} (the refit-free saturated closed
+form, which transparently falls back to \code{"fd"} when it does not
+apply). Ignored unless \code{corrected_se = TRUE}.}
 
 \item{product}{A logical; when \code{TRUE}, \code{\link[=tspa]{tspa()}} automatically computes
 the double-mean-centered product indicators (via

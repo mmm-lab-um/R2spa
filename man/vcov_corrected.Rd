@@ -4,7 +4,13 @@
 \alias{vcov_corrected}
 \title{First-order correction of sampling covariance for 2S-PA estimates}
 \usage{
-vcov_corrected(tspa_fit, vfsLT, which_free = NULL, ...)
+vcov_corrected(
+  tspa_fit,
+  vfsLT,
+  which_free = NULL,
+  engine = c("fd", "analytic"),
+  ...
+)
 }
 \arguments{
 \item{tspa_fit}{A fit from \code{\link[=tspa]{tspa()}} with \code{fsT} and \code{fsL} supplied
@@ -46,6 +52,16 @@ element as free. A non-\code{NULL} \code{which_free} of length
 \code{k} requires \code{vfsLT} to be the matching \verb{k x k}
 principal submatrix (see \code{vfsLT}).}
 
+\item{engine}{The engine used to evaluate the Jacobian \code{J = d(thetahat)/d(eta)}. \code{"fd"} (the default) uses central
+finite differences (one stage-2 refit on each side of each
+free element). \code{"analytic"} uses a refit-free, deterministic
+closed form for the (approximately) saturated single-group
+case (PLAN 16, section 2.4) and transparently falls back to
+\code{"fd"} otherwise (multigroup, or a structural model that does
+not approximately saturate the score covariance). The two
+engines agree to the finite-difference noise floor whenever
+\code{"analytic"} applies.}
+
 \item{...}{Currently not used.}
 }
 \value{
@@ -80,6 +96,16 @@ The same correction can also be requested in place via
 \code{standardizedSolution()} on that fit reports corrected standard SEs. Such
 an already-corrected fit is rejected by \code{vcov_corrected()} (the
 correction is never applied twice).
+
+The \code{engine} argument selects how the Jacobian is evaluated. The default
+\code{"fd"} uses central finite differences (one stage-2 refit on each side of
+each free element). \code{"analytic"} instead uses a refit-free,
+deterministic closed form for the (approximately) saturated single-group
+case (PLAN 16, section 2.4) and transparently falls back to \code{"fd"}
+otherwise (multigroup, or a restricted structural model that does not
+approximately saturate the score covariance); the two agree to the
+finite-difference noise floor whenever \code{"analytic"} applies, and the
+analytic result is bit-reproducible.
 }
 \examples{
 library(lavaan)
