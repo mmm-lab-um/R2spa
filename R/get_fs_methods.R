@@ -1074,9 +1074,15 @@ get_fs.lavaan <- function(
   # the full observed-indicator set, so they cannot be applied to lavaan's
   # per-missing-data-pattern blocks; fail here instead of deep inside
   # compute_fspars()/correct_evfs().
+  # A FIML fit stores a (single, all-TRUE) pattern in @Data@Mp even for
+  # complete data, so "has missing patterns" must mean "some observed
+  # indicator is actually missing", i.e. a non-NULL pattern that is not
+  # all-TRUE -- the same test the method = "mean" guard above uses. Using
+  # !is.null(m) alone would wrongly lock out these SE paths on complete
+  # FIML fits.
   has_miss_patterns <- any(vapply(
     object@Data@Mp,
-    function(m) !is.null(m),
+    function(m) !is.null(m) && !all(m$pat),
     logical(1)
   ))
   if (has_miss_patterns && (corrected_fsT || reliability || vfsLT)) {
@@ -1522,7 +1528,16 @@ get_fs.merMod <- function(
   aug_list <- lapply(blocks, function(b) {
     augment_fs(b$fs, b$fsT)
   })
-  out <- do.call(rbind, aug_list)
+  # Bind at the matrix level rather than via rbind.data.frame: each block is
+  # a 1-row, all-numeric data frame, and rbind.data.frame does expensive
+  # per-frame name/class/factor matching that degrades as the (large) number
+  # of clusters grows. as.matrix() reduces to plain numeric matrices, the
+  # matrix rbind is a single C-level allocation, and as.data.frame() runs
+  # exactly once. augment_fs() remains the single source of column names.
+  out <- as.data.frame(
+    do.call(rbind, lapply(aug_list, `as.matrix`)),
+    check.names = FALSE
+  )
   rownames(out) <- NULL
 
   # Legacy `u<k>_eb`-style names are not produced by augment_fs() (which
