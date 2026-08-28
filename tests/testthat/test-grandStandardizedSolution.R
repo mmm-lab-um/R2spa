@@ -23,6 +23,11 @@ test_that("Test for single group warning message", {
   expect_message(grandStandardizedSolution(fit1))
 })
 
+test_that("Model without structural regression errors clearly", {
+  fit0 <- cfa("ind60 =~ x1 + x2 + x3", data = PoliticalDemocracy)
+  expect_error(grandStandardizedSolution(fit0), "no structural")
+})
+
 test_that("Standardized beta in a model with single group, two factors",
           { expect_equal(s2_std_beta$est.std, s2_std_beta_lav$est.std) })
 test_that("SE of standardized beta in a model with single group, two-factors",

@@ -4,8 +4,10 @@
 # double-mean-centered (DMC) product indicator of each requested pair of
 # distinct latents, together with its per-row standard error and implied
 # loading. The derivation is in the roxygen @details of
-# compute_fs_prod(); the pure-matrix helpers fs_prod_se2() and
-# fs_prod_gamma() carry the two formulas for unit tests. Per-row values are
+# compute_fs_prod(); the pure-matrix helpers fs_prod_se2(),
+# fs_prod_ecov(), and fs_prod_gamma() carry the SE, error-covariance, and
+# implied-loading formulas for unit tests (fs_prod_ecov() is also consumed
+# by tspa()). Per-row values are
 # resolved through resolve_fs_per_row() (R/fs_indiv.R), so complete data
 # (one block) and FIML (one block per observed-indicator pattern) share the
 # same code path.
@@ -27,53 +29,55 @@
 #' separate-single-factor special case the old function used.
 #'
 #' @details
-#' Let `fs_k = L_k' xi + b_k + e_k` for `k = 1..q`, where `L` is the
-#' block's `fsL` (`q x q`, rows = scores, cols = latents), `T` is the
-#' block's `fsT` (score error covariance), `Psi` is the latent
-#' (co)variance (the `psi` attribute), and `e` is the score error. The
-#' derivation relies on: `E[e] = 0` (absorbed in `b`); `Cov(e, xi) = 0`
-#' elementwise for ALL latents (true for both regression and Bartlett
-#' scoring, where `e` is linear in the indicator errors); and joint
-#' normality of `(xi, e)`.
+#' Let \eqn{fs_k = L_k \xi + b_k + e_k} for \eqn{k = 1, \ldots, q}, where
+#' \eqn{L} is the block's `fsL` (\eqn{q \times q}, rows = scores, cols =
+#' latents), \eqn{T} is the block's `fsT` (score error covariance),
+#' \eqn{\Psi} is the latent (co)variance (the `psi` attribute), and
+#' \eqn{e} is the score error. The derivation relies on: \eqn{E[e] = 0}
+#' (absorbed in \eqn{b}); \eqn{Cov(e, \xi) = 0} elementwise for ALL latents
+#' (true for both regression and Bartlett scoring, where \eqn{e} is linear
+#' in the indicator errors); and joint normality of \eqn{(\xi, e)}.
 #'
-#' For a pair of distinct latents `(a, b)`, the DMC product indicator is
+#' For a pair of distinct latents \eqn{(a, b)}, the double-mean centered
+#' (DMC) product indicator is
 #'
-#' `P = (fs_a - mi_a)(fs_b - mi_b) - mi_P`
+#' \deqn{P = (fs_a - mi_a)(fs_b - mi_b) - mi_P}
 #'
-#' where `mi_a` and `mi_b` are the SAMPLE means of the score columns and
-#' `mi_P` the sample mean of the (component-centered) product. Its
-#' conditional expectation is
+#' where \eqn{mi_a} and \eqn{mi_b} are the SAMPLE means of the score
+#' columns and \eqn{mi_P} the sample mean of the (component-centered)
+#' product. Its conditional expectation is
 #'
-#' `E[P | xi] = (L_a (xi - alpha))(L_b (xi - alpha))`
+#' \deqn{E[P \mid \xi] = (L_a (\xi - \alpha))(L_b (\xi - \alpha))}
 #'
 #' (the centering constants cancel in the error), so the measurement error
 #' is
 #'
-#' `u = P - E[P | xi] = L_a (xi - alpha) e_b + L_b (xi - alpha) e_a + e_a e_b`.
+#' \deqn{u = P - E[P \mid \xi] = L_a (\xi - \alpha) e_b + L_b (\xi - \alpha) e_a + e_a e_b}
 #'
-#' Under joint normality (Isserlis), for `tau_k = L_k Psi L_k'` (a scalar:
-#' row k of `L` times `Psi` times row k'), `tau_ab = L_a Psi L_b'`,
-#' `s_k^2 = T[k, k]`, and `c = T[a, b]`:
+#' Under joint normality (Isserlis), for \eqn{\tau_k = L_k \Psi L_k'}
+#' (a scalar: row \eqn{k} of \eqn{L} times \eqn{\Psi} times its
+#' transpose), \eqn{\tau_{ab} = L_a \Psi L_b'}, \eqn{s_k^2 = T[k, k]}, and
+#' \eqn{c = T[a, b]}:
 #'
-#' `se_P^2 = tau_a s_b^2 + tau_b s_a^2 + s_a^2 s_b^2 + c^2 + 2 tau_ab c`
+#' \deqn{se_P^2 = \tau_a s_b^2 + \tau_b s_a^2 + s_a^2 s_b^2 + c^2 + 2 \tau_{ab} c}
 #'
-#' (the `c^2` coefficient is 1, not 2: `Var(e_a e_b) = E[e_a^2 e_b^2] -
-#' c^2 = (s_a^2 s_b^2 + 2 c^2) - c^2 = s_a^2 s_b^2 + c^2`).
+#' (the \eqn{c^2} coefficient is 1, not 2: \eqn{Var(e_a e_b) = E[e_a^2 e_b^2] -
+#' c^2 = (s_a^2 s_b^2 + 2 c^2) - c^2 = s_a^2 s_b^2 + c^2}).
 #'
 #' The implied loading is
 #'
-#' `gamma = L[a, a] L[b, b] + L[a, b] L[b, a]`
+#' \deqn{\gamma = L[a, a] L[b, b] + L[a, b] L[b, a]}
 #'
-#' — the coefficient of `xi_a xi_b` in `E[P | xi]` (Bartlett joint model:
-#' `gamma = 1`; separate single-factor models: `gamma = lambda_a
-#' lambda_b`).
+#' — the coefficient of \eqn{\xi_a \xi_b} in \eqn{E[P \mid \xi]} (Bartlett
+#' joint model: \eqn{\gamma = 1}; separate single-factor models:
+#' \eqn{\gamma = \lambda_a \lambda_b}).
 #'
-#' Sanity check: with diagonal `L` and `T` (separate single-factor
-#' measurement models, `lambda_k = L[k, k]`) the formula reduces to the
-#' classic `lambda_a^2 Psi[a, a] s_b^2 + lambda_b^2 Psi[b, b] s_a^2 +
-#' s_a^2 s_b^2` — the formula the old (quarantined) `get_fs_int()` had.
-#' The terms `c^2` and `2 tau_ab c` are exactly what the old code
-#' dropped; they are nonzero in joint models (correlated factors,
+#' Sanity check: with diagonal \eqn{L} and \eqn{T} (separate single-factor
+#' measurement models, \eqn{\lambda_k = L[k, k]}) the formula reduces to
+#' the classic \eqn{\lambda_a^2 \Psi[a, a] s_b^2 + \lambda_b^2 \Psi[b, b] s_a^2 +
+#' s_a^2 s_b^2} — the formula the old (quarantined) `get_fs_int()` had.
+#' The terms \eqn{c^2} and \eqn{2 \tau_{ab} c} are exactly what the old
+#' code dropped; they are nonzero in joint models (correlated factors,
 #' cross-loadings, error covariances).
 #'
 #' Per-row values are pattern-resolved: under FIML each
@@ -105,6 +109,14 @@
 #'        `gamma` (pattern-specific under FIML because `fsL` varies by
 #'        pattern). All existing columns and attributes are untouched.
 #' @export
+#'
+#' @references
+#' The joint-normal moment expansion (Isserlis's theorem) used to derive
+#' `se_P^2` and the measurement-error covariances is:
+#'
+#' Isserlis, L. (1918). On a formula for the product-moment coefficient of any
+#' order of a normal frequency distribution in any number of variables.
+#' \emph{Biometrika}, 12(1-2), 134-139. \doi{10.1093/biomet/12.1-2.134}.
 #'
 #' @examples
 #' library(lavaan)

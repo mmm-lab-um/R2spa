@@ -159,7 +159,11 @@ parser_bad <- list(
   rhs_tilde  = "a =~ x1 + y1 ~ x2",
   rhs_star   = "a =~ x1 * 1 + x2",
   call_rhs   = "a =~ c(x1, x2)",
-  bad_item   = "a =~ x1 + 1x2"
+  bad_item   = "a =~ x1 + 1x2",
+  # dangling '+' (strsplit would drop the trailing empty field and the typo
+  # would be fitted silently); the ';' form is the non-EOF case -- a dangling
+  # '+' at the end of the input is already caught by the continuation check
+  dangling_plus = "a =~ x1 + x2 +; b =~ y1"
 )
 
 test_that("parser: every unsupported-syntax class is rejected with the syntax prefix", {
@@ -199,6 +203,10 @@ test_that("parser: the class-specific detail fragments name the offending syntax
   expect_error(
     R2spa:::split_local_models(parser_bad[["empty_rhs"]]),
     "an empty right-hand side", fixed = TRUE
+  )
+  expect_error(
+    R2spa:::split_local_models(parser_bad[["dangling_plus"]]),
+    "a dangling '+' operator", fixed = TRUE
   )
 })
 
@@ -506,6 +514,14 @@ test_that("guards: model = NULL is a no-op (the auto single-factor model)", {
   a <- get_fs(pd[c("x1", "x2", "x3")], local = TRUE)
   b <- get_fs(pd[c("x1", "x2", "x3")])
   expect_identical(a, b)
+})
+
+test_that("guard: model = NULL with no indicator columns errors clearly", {
+  g <- data.frame(g = rep(c("a", "b"), each = 3L))
+  expect_error(
+    get_fs(g, group = "g"),
+    "no indicator columns"
+  )
 })
 
 # ---------------------------------------------------------------------------

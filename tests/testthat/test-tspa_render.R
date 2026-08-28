@@ -106,8 +106,7 @@ ref_mf <- function(model, data, fsT, fsL, fsb) {
 
   # latent variables
   loadings_mat <- matrix(unlist(fsL), ncol = ngroup)
-  loadings <- apply(loadings_mat, 1, vals_str) |>
-    paste0(" * ", fs)
+  loadings <- paste0(apply(loadings_mat, 1, vals_str), " * ", fs)
   loadings_list <- split(loadings, factor(rep(var, each = nvar),
                                           levels = var))
   loadings_c <- lapply(loadings_list, function(x) {

@@ -163,8 +163,11 @@ supported for mirt. Conceptually similar to the \code{mean} argument of
 1 x 1 matrix is accepted when \code{q = 1}) giving fixed external prior
 covariance for the latent variables. \code{NULL} (default) uses the
 lavaan-estimated (group-specific) latent covariance. Non-NULL values
-must be finite, symmetric and positive definite, and are treated as
-fixed external priors shared across all lavaan groups. Only supported
+must be finite, symmetric and positive definite; when \code{q > 1} the
+matrix must be named (row and column names matching the latent
+variable names), so its entries map unambiguously onto the model's
+latent variables. Values are treated as fixed external priors shared
+across all lavaan groups. Only supported
 for lavaan objects with regression (EB) scoring;
 \code{reliability = TRUE} is not supported together with user-supplied
 \code{prior_mean}/\code{prior_cov}. With \code{corrected_fsT = TRUE} or

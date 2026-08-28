@@ -234,6 +234,29 @@ test_that("tspa(): single-factor FIML -- se_fs is pooled per group from the per-
                                    style = "sf"))
 })
 
+test_that("tspa(): single-factor FIML from a list-of-frames result -- the group= argument finds the group column", {
+  d <- HolzingerSwineford1939
+  set.seed(4242)
+  d$x2[!rbinom(nrow(d), 1L, 0.5)] <- NA
+  fit_sf <- suppressWarnings(
+    cfa("visual =~ x1 + x2 + x3", data = d, group = "school", missing = "fiml")
+  )
+  fs_list <- get_fs(fit_sf, format = "list")
+  # a multigroup list result carries no group_col attribute, so the group
+  # column is resolved from the group= argument (the derivation convention)
+  expect_null(attr(fs_list, "group_col"))
+  expect_true(is.list(fs_list) && !is.data.frame(fs_list))
+  fit_list <- tspa("", data = fs_list, se_fs = c(visual = 0.35),
+                   group = "school")
+  # reference: the rbind'd frame with the group_col attribute; the list fit
+  # must pool the per-row SEs to the same per-group values
+  fs_rb <- do.call(rbind, fs_list)
+  attr(fs_rb, "group_col") <- "school"
+  fit_rb <- tspa("", data = fs_rb, se_fs = c(visual = 0.35),
+                 group = "school")
+  expect_equal(attr(fit_list, "tspaModel"), attr(fit_rb, "tspaModel"))
+})
+
 test_that("tspa(): single-factor complete data -- se_fs untouched, byte-identical to the legacy path", {
   fit_sf <- suppressWarnings(
     cfa("visual =~ x1 + x2 + x3", data = HolzingerSwineford1939,
@@ -430,6 +453,21 @@ test_that("tspa(): all-missing (NA-pattern) rows are excluded from the pool, not
   expect_equal(attr(fit, "fsL"), ref$fsL, tolerance = 1e-8, ignore_attr = TRUE)
 })
 
+test_that("tspa(): pooling with no scorable rows errors informatively (no misleading PSD warning)", {
+  fp <- attr(fs_fiml_all2f, "fs_pattern")[[1L]]$label
+  # keep only the all-missing rows (NA pattern label) and shorten the carried
+  # label vector to match the rows (the get_fs() attribute/row consistency
+  # invariant): nothing left to pool
+  fs_na <- fs_fiml_all2f[is.na(fp), , drop = FALSE]
+  fp_attr <- attr(fs_fiml_all2f, "fs_pattern")
+  fp_attr[[1L]]$label <- rep(NA_character_, nrow(fs_na))
+  attr(fs_na, "fs_pattern") <- fp_attr
+  expect_error(
+    R2spa:::pool_per_unit(fs_na, "mean", have_int = FALSE),
+    "no scorable rows"
+  )
+})
+
 # ============================================================================
 # 7. mirt per-obs is out of scope; data must be a get_fs() result
 # ============================================================================
@@ -521,21 +559,57 @@ test_that("tspa(): mirt multi-factor (SG) -- per-obs fsT/fsL == scorable row mea
                tolerance = 1e-10)
 })
 
-test_that("tspa(): mirt multi-factor (MG) -- one matrix per group, levels order, scorable means (PLAN 11)", {
+test_that("tspa(): mirt multi-factor (MG) -- one matrix per group, first-appearance order, scorable means (PLAN 11)", {
   fit <- suppressWarnings(
     tspa("F2 ~ F1", data = fs_mf_mg, group = "group",
          fsT = attr(fs_mf_mg, "fsT"), fsL = attr(fs_mf_mg, "fsL")))
   ft <- attr(fit, "fsT")
   expect_type(ft, "list")
   expect_length(ft, 2L)
-  # group order == the mirt group column's factor levels
-  expect_identical(names(ft), as.character(levels(fs_mf_mg$group)))
+  # group order == first appearance of the group column (the lavaan
+  # stage-2 order; for this blocked fixture also the level order)
+  expect_identical(names(ft),
+                   as.character(unique(fs_mf_mg$group[!is.na(fs_mf_mg$group)])))
   for (g in levels(fs_mf_mg$group)) {
     rows_g <- which(as.character(fs_mf_mg$group) == g)
     sc_g <- rows_g[!isnaT_mf(fs_mf_mg)[rows_g]]
     hand_T <- Reduce(`+`, attr(fs_mf_mg, "fsT")[sc_g]) / length(sc_g)
     expect_equal(as.numeric(ft[[g]]), as.numeric(hand_T), tolerance = 1e-10)
   }
+})
+
+test_that("tspa(): mirt MG with block order != level order -- pooled list follows stage-2 (first-appearance) order", {
+  set.seed(2026)
+  dat_i <- rbind(mrt_sim2f(NMF), mrt_sim2f(NMF))
+  # mirt's data must be contiguous by group; here the first block is B and
+  # the second A, while the factor's level order is A, B. mirt's stage-1
+  # attribute/psi lists are in level (groupNames) order (A, B), but the
+  # stage-2 lavaan fit groups in first-appearance order (B, A): the pooled
+  # list must follow the stage-2 order, or the groups' matrices are
+  # silently swapped.
+  grp_i <- factor(rep(c("B", "A"), each = NMF), levels = c("A", "B"))
+  expect_identical(as.character(levels(grp_i)), c("A", "B"))
+  expect_identical(as.character(unique(grp_i)), c("B", "A"))
+  mf_i <- suppressWarnings(mirt::multipleGroup(dat_i, 2L, group = grp_i,
+                                               invariance = "slopes",
+                                               verbose = FALSE))
+  fs_i <- get_fs(mf_i)
+  # the stage-1 per-group psi list is in mirt's level order (A, B)
+  expect_identical(names(attr(fs_i, "psi")), c("A", "B"))
+  fit <- suppressWarnings(
+    tspa("F2 ~ F1", data = fs_i, group = "group",
+         fsT = attr(fs_i, "fsT"), fsL = attr(fs_i, "fsL")))
+  ft <- attr(fit, "fsT")
+  # the pooled list must be in the stage-2 order (B, A), not level order:
+  # element k feeds lavaan group k
+  expect_identical(names(ft), c("B", "A"))
+  # and each group's matrix is that group's own scorable-row mean
+  rows_b <- which(as.character(fs_i$group) == "B")
+  hand_T <- Reduce(`+`, attr(fs_i, "fsT")[rows_b]) / length(rows_b)
+  expect_equal(as.numeric(ft[["B"]]), as.numeric(hand_T), tolerance = 1e-10)
+  rows_a <- which(as.character(fs_i$group) == "A")
+  hand_T <- Reduce(`+`, attr(fs_i, "fsT")[rows_a]) / length(rows_a)
+  expect_equal(as.numeric(ft[["A"]]), as.numeric(hand_T), tolerance = 1e-10)
 })
 
 test_that("tspa(): mirt multi-factor -- completely-missing row (group NA) is excluded (PLAN 11)", {

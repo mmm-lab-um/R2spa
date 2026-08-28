@@ -61,9 +61,14 @@ that cluster's own \code{fsL}/\code{fsT}.
 \examples{
 library(lavaan)
 fit <- cfa("visual =~ x1 + x2 + x3", data = HolzingerSwineford1939)
-fs_indiv(get_fs(fit))
+# For a lavaan result the per-row se / loading / ev columns are the same
+# ones get_fs() already carries; include_intercept = TRUE adds the score
+# intercepts (int_fs_*) from the fsb attribute (non-NULL under mean
+# scoring or with prior_mean/prior_cov).
+fs_indiv(get_fs(fit, method = "mean"), include_intercept = TRUE)
 
-# merMod: one row per cluster
+# merMod: one row per cluster, with a trailing id column holding the
+# cluster (Subject) level
 library(lme4)
 lmod <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
 fs_indiv(get_fs(lmod))

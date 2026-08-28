@@ -192,6 +192,42 @@ test_that("T5: which_free requires a matching principal submatrix of vfsLT", {
   expect_true(all(diag(vc) > 0))
 })
 
+test_that("T5b: which_free rejects non-integer / invalid positions before any refit", {
+  vldev7 <- attr(fs_prior, "vfsLT")   # 7 x 7
+  # Fractional position (as.integer() used to truncate this silently).
+  expect_error(
+    vcov_corrected(tspa_prior, vfsLT = vldev7, which_free = 2.5),
+    "whole-number positions"
+  )
+  # NA position.
+  expect_error(
+    vcov_corrected(tspa_prior, vfsLT = vldev7, which_free = c(NA, 2)),
+    "whole-number positions"
+  )
+  # Out-of-range position.
+  expect_error(
+    vcov_corrected(tspa_prior, vfsLT = vldev7, which_free = c(1, 100)),
+    "whole-number positions"
+  )
+  # Duplicated positions.
+  expect_error(
+    vcov_corrected(tspa_prior, vfsLT = vldev7, which_free = c(5, 5)),
+    "whole-number positions"
+  )
+  # Non-numeric positions.
+  expect_error(
+    vcov_corrected(tspa_prior, vfsLT = vldev7, which_free = c("1", "2")),
+    "whole-number positions"
+  )
+  # Integer-valued doubles are accepted: with the full 7 x 7 vfsLT the
+  # call must proceed past the which_free guard and fail at the (matching)
+  # vfsLT check instead — proving c(5.0, 7.0) was not rejected/truncated.
+  expect_error(
+    vcov_corrected(tspa_prior, vfsLT = vldev7, which_free = c(5.0, 7.0)),
+    "principal submatrix"
+  )
+})
+
 test_that("T6: the convergence gate stops on a non-converged refit", {
   # Unit layer: a real converged fit with the flag flipped exercises the
   # exact slot read the gate performs (a forced non-convergence would be

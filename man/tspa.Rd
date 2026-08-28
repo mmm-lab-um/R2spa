@@ -98,7 +98,9 @@ matrices), per-cluster values from a \code{merMod} fit (3-D arrays),
 or per-observation values from a \code{mirt} fit, are collapsed to a
 single representative value per group for
 stage 2. A no-op when the per-unit quantities are constant within
-the group (e.g. complete single-group data). One of \code{"mean"}
+the group (e.g. complete single-group data). A group (or the
+whole data) with no scorable rows at all (every row missing) is
+an error: there is nothing to pool. One of \code{"mean"}
 (the default) or \code{"median"}. With \code{"mean"} the pooled \code{fsT} is a
 convex combination of the per-unit (positive semi-definite)
 matrices and so remains positive semi-definite; with \code{"median"}

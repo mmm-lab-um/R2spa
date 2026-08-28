@@ -64,7 +64,7 @@
 #'   columns are appended automatically --- `fs_indiv()` is no longer
 #'   needed to obtain them. [`fs_indiv()`] on a [get_fs()] result produces
 #'   the equivalent fully explicit table. Definition-variable columns must
-#'   be free of `NA`.
+#'   be numeric and free of `NA`.
 #' @param se_fs A named numeric vector of standard errors (one per latent) for
 #'   the single-score-per-latent case; implies fixed unit loadings and error
 #'   variances `se_fs^2`. An explicit `se_fs` always wins over derivation;
@@ -72,19 +72,26 @@
 #'   inputs are derived from a [get_fs()] result passed as `data` (see
 #'   Details).
 #' @param fsL A `q x p` loading matrix including cross-loadings: rows = score
-#'   names (`fs_<latent>`), columns = latent names. Each cell is either a
-#'   number (fixed loading) or a character naming a definition-variable column.
+#'   names (`fs_<latent>`), columns = latent names. The matrix must be
+#'   uniformly numeric (every cell a fixed loading) or uniformly character
+#'   (every cell a definition-variable column name); mixing fixed values and
+#'   column names in one matrix is not supported.
 #'   Or omitted, in which case the value is derived from the `fsL` attribute
 #'   of a [get_fs()] result passed as `data` (see Details); an explicit `fsL`
 #'   always wins.
 #' @param fsT A `q x q` error variance-covariance matrix over the score names;
-#'   the lower triangle (incl. diagonal) is used. Each cell is a number
-#'   (fixed) or a character naming a definition-variable column.
+#'   the lower triangle (incl. diagonal) is used, and every score must have
+#'   an error variance (a complete diagonal). The matrix must be uniformly
+#'   numeric (every cell fixed) or uniformly character (every cell a
+#'   definition-variable column name); mixing fixed values and column names in
+#'   one matrix is not supported.
 #'   Or omitted, in which case the value is derived from the `fsT` attribute
 #'   of a [get_fs()] result passed as `data` (see Details); an explicit `fsT`
 #'   always wins.
 #' @param fsb A vector of score intercepts (length `q`, named by score, either
-#'   order) --- each a number (fixed) or a definition-variable column name.
+#'   order), uniformly numeric (every entry fixed) or uniformly character
+#'   (every entry a definition-variable column name); mixing fixed values and
+#'   column names is not supported.
 #'   `NULL` (default) fixes all score intercepts at zero.
 #'   Or omitted, in which case the value is derived from the `fsb` attribute
 #'   of a [get_fs()] result passed as `data` (see Details); the derivation
@@ -137,6 +144,9 @@ tspa_mx_model <- function(model, data, se_fs = NULL, fsL = NULL,
   if (!is.data.frame(data)) {
     stop("'data' must be a data frame.", call. = FALSE)
   }
+  if (!nrow(data)) {
+    stop("'data' must have at least one row.", call. = FALSE)
+  }
   if (!is.null(se_fs) && (!is.null(fsL) || !is.null(fsT))) {
     stop("Provide either 'se_fs' or ('fsL' and 'fsT'), not both.",
          call. = FALSE)
@@ -151,8 +161,7 @@ tspa_mx_model <- function(model, data, se_fs = NULL, fsL = NULL,
   }
 
   # PLAN 15 (D1): explicit measurement inputs always win; derivation fires
-  # only when all four are omitted, and every such call errors today (no
-  # currently-working call changes behavior).
+  # only when all four are omitted.
   if (!se_fs_given && is.null(fsL) && is.null(fsT) && !fsb_given) {
     derived <- tspa_mx_derive_measurement(data)
     if (is.null(derived$fsL)) {
@@ -198,6 +207,12 @@ tspa_mx_model <- function(model, data, se_fs = NULL, fsL = NULL,
     stop("data is missing definition-variable column(s): ",
          paste(setdiff(dv_cols, names(data)), collapse = ", "), ".",
          call. = FALSE)
+  }
+  bad_type <- dv_cols[vapply(dv_cols, function(col) !is.numeric(data[[col]]),
+                             logical(1L))]
+  if (length(bad_type)) {
+    stop("Definition-variable column(s) must be numeric (",
+         paste(bad_type, collapse = ", "), ").", call. = FALSE)
   }
   na_dv <- dv_cols[vapply(dv_cols, function(col) anyNA(data[[col]]), logical(1L))]
   if (length(na_dv)) {
@@ -411,6 +426,10 @@ tspa_mx_align_scores <- function(T, S, arg) {
   if (is.null(rownames(T)) || length(S) > 0L && !all(S %in% rownames(T))) {
     stop("'", arg, "' rows must be named by the factor-score names.", call. = FALSE)
   }
+  if (is.null(colnames(T)) || length(S) > 0L && !all(S %in% colnames(T))) {
+    stop("'", arg, "' columns must be named by the factor-score names.",
+         call. = FALSE)
+  }
   T <- T[rownames = S, , drop = FALSE]
   T <- T[, colnames = S, drop = FALSE]
 }
@@ -421,6 +440,10 @@ tspa_mx_spec <- function(se_fs, fsL, fsT, fsb) {
       stop("'se_fs' must be named by latent name.", call. = FALSE)
     }
     se <- as.numeric(se_fs)
+    if (anyNA(se)) {
+      stop("'se_fs' must not contain NA: every latent needs a known ",
+           "factor-score SE.", call. = FALSE)
+    }
     V <- names(se_fs)
     S <- paste0("fs_", V)
     Lm <- matrix(NA_real_, length(V), length(V), dimnames = list(S, V)); diag(Lm) <- 1
@@ -439,6 +462,10 @@ tspa_mx_spec <- function(se_fs, fsL, fsT, fsb) {
     S <- rownames(fsL)
     V <- colnames(fsL)
     fsT <- tspa_mx_align_scores(fsT, S, "fsT")
+    if (anyNA(diag(fsT))) {
+      stop("'fsT' must specify an error variance (diagonal entry) for every ",
+           "factor score.", call. = FALSE)
+    }
     L <- tspa_mx_cells(fsL, "fsL")
     T <- tspa_mx_cells(fsT, "fsT")
   }
@@ -492,18 +519,25 @@ tspa_mx_model_string <- function(model, spec) {
          call. = FALSE)
   }
   lines <- character()
-
+  score_used <- rep(FALSE, length(S))
   for (k in seq_along(V)) {
     terms <- character()
     for (i in seq_along(S)) {
       cv <- tspa_mx_cellval(spec$L$vals, spec$L$coln, i, k)
-      if (!is.na(cv)) terms <- c(terms, paste0(cv, " * ", S[i]))
+      if (!is.na(cv)) {
+        terms <- c(terms, paste0(cv, " * ", S[i]))
+        score_used[i] <- TRUE
+      }
     }
     if (!length(terms)) {
       stop("Latent '", V[k], "' has no factor-score indicator in 'fsL'.",
            call. = FALSE)
     }
     lines <- c(lines, paste(V[k], "=~", paste(terms, collapse = " + ")))
+  }
+  if (any(!score_used)) {
+    stop("Factor score(s) ", paste(S[!score_used], collapse = ", "),
+         " load on no latent in 'fsL'.", call. = FALSE)
   }
 
   for (i in seq_along(S)) {
@@ -577,8 +611,10 @@ tspa_mx_paths <- function(pt, spec) {
                     values = 0, labels = paste0("data.", dv)))
     }
     # lavaanify() auto-seeds structural-latent variances (and means, when a mean
-    # structure is present) as free == 0, ustart == 0; release them.
-    if (r$free == 0L && is.numeric(r$ustart) && r$ustart == 0L &&
+    # structure is present) as user == 0, free == 0, ustart == 0; release them.
+    # The user flag keeps a user-declared fixed zero (pathological, but legal
+    # lavaan syntax) from being silently re-freed.
+    if (r$user == 0L && r$free == 0L && is.numeric(r$ustart) && r$ustart == 0L &&
         r$lhs %in% spec$latents && (mm$ar == 2L && mm$f == mm$t || mm$f == "one")) {
       return(mxPath(from = mm$f, to = mm$t, arrows = mm$ar, free = TRUE,
                     values = if (mm$ar == 2L) 1 else 0))

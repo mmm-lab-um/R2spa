@@ -314,6 +314,32 @@ test_that("fs_indiv(): merMod -- one row per cluster, SE matches per-cluster fsT
   }
 })
 
+test_that("fs_indiv(): merMod q = 1 (single random effect) -- no crash, correct 1x1 blocks", {
+  # Regression test: a 1 x 1 x N fsT/fsL array subscripts to a bare scalar
+  # under default drop = TRUE, which used to crash fs_indiv() with
+  # "non-numeric matrix extent" (ncol of the scalar block is NULL).
+  lmod1 <- lmer(Reaction ~ Days + (1 | Subject), sleepstudy)
+  fs_mer1 <- get_fs(lmod1)
+  fsT1 <- attr(fs_mer1, "fsT")
+  expect_equal(dim(fsT1), c(1L, 1L, nlevels(sleepstudy$Subject)))
+  ind_m1 <- fs_indiv(fs_mer1)
+  expect_equal(nrow(ind_m1), nlevels(sleepstudy$Subject))
+  expect_equal(
+    names(ind_m1),
+    c("fs_u0", "fs_u0_se", "u0_by_fs_u0", "ev_fs_u0", "id")
+  )
+  # per-cluster 1 x 1 values: SE == sqrt(fsT_jj), ev == fsT_jj, loading == fsL
+  for (j in seq_len(dim(fsT1)[3L])) {
+    expect_equal(ind_m1[j, "fs_u0_se"], sqrt(fsT1[1L, 1L, j]), tolerance = 1e-8)
+    expect_equal(ind_m1[j, "ev_fs_u0"], fsT1[1L, 1L, j], tolerance = 1e-8)
+    expect_equal(ind_m1[j, "u0_by_fs_u0"],
+                 attr(fs_mer1, "fsL")[1L, 1L, j], tolerance = 1e-8)
+  }
+  # scores and the id column carry through unchanged
+  expect_equal(ind_m1[["fs_u0"]], fs_mer1[["fs_u0"]], tolerance = 1e-12)
+  expect_equal(ind_m1[["id"]], dimnames(fsT1)[[3L]])
+})
+
 test_that("fs_indiv(): merMod legacy_names -- u<k>_eb column naming, values unchanged", {
   fs_mleg <- get_fs(lmod, legacy_names = TRUE)
   ind_lg <- fs_indiv(fs_mleg)

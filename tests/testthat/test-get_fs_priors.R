@@ -123,6 +123,33 @@ test_that("prior input validation errors", {
                               dimnames = list(c("a", "b"), c("a", "b")))),
     "names must match"
   )
+  # an unnamed q x q (q > 1) matrix is ambiguous (its row/column order might
+  # not be the model's latent order), so it is rejected rather than fitted
+  # silently in whatever order it happens to carry
+  expect_error(
+    get_fs(prior_fit, prior_cov = matrix(c(1.2, 0.25, 0.25, 0.8), 2, 2)),
+    "must be a named matrix"
+  )
+  # type coercions that would silently change the values (factor -> integer
+  # codes, character -> NA with a warning) are rejected up front; the
+  # character-matrix case would otherwise crash deep in is.finite()
+  expect_error(
+    get_fs(prior_fit, prior_mean = factor(c("a", "b"))),
+    "must be numeric"
+  )
+  expect_error(
+    get_fs(prior_fit, prior_mean = c("0.1", "0.2")),
+    "must be numeric"
+  )
+  expect_error(
+    get_fs(prior_fit, prior_cov = matrix(c("1", "0.1", "0.1", "1"), 2, 2)),
+    "must be numeric"
+  )
+  expect_error(
+    get_fs(prior_fit,
+           prior_cov = data.frame(x = c("1", "0.1"), y = c("0.1", "1"))),
+    "must be numeric"
+  )
 })
 
 test_that("priors are rejected for Bartlett scoring", {

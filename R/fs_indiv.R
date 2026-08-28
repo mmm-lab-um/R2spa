@@ -70,9 +70,14 @@
 #' @examples
 #' library(lavaan)
 #' fit <- cfa("visual =~ x1 + x2 + x3", data = HolzingerSwineford1939)
-#' fs_indiv(get_fs(fit))
+#' # For a lavaan result the per-row se / loading / ev columns are the same
+#' # ones get_fs() already carries; include_intercept = TRUE adds the score
+#' # intercepts (int_fs_*) from the fsb attribute (non-NULL under mean
+#' # scoring or with prior_mean/prior_cov).
+#' fs_indiv(get_fs(fit, method = "mean"), include_intercept = TRUE)
 #'
-#' # merMod: one row per cluster
+#' # merMod: one row per cluster, with a trailing id column holding the
+#' # cluster (Subject) level
 #' library(lme4)
 #' lmod <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
 #' fs_indiv(get_fs(lmod))
@@ -93,9 +98,19 @@ fs_indiv <- function(fs, include_intercept = FALSE, ...) {
   ev_mat <- matrix(NA_real_, nrow = n, ncol = k_ev)
   int_mat <- if (has_int) matrix(NA_real_, nrow = n, ncol = k_int) else NULL
 
+  # Row indices per block, precomputed once: `which(pattern_idx == b)` inside
+  # the loop is O(n x n_blocks) -- quadratic for per-cluster (merMod) and
+  # per-row (mirt per-obs) inputs, where every row is its own block. split()
+  # is O(n). The explicit factor levels keep one (possibly empty) entry per
+  # block, so block b always maps to rows_by_block[[b]].
+  rows_by_block <- split(
+    seq_len(n),
+    factor(resolved$pattern_idx, levels = seq_along(resolved$blocks))
+  )
+
   for (b in seq_along(resolved$blocks)) {
     blk <- resolved$blocks[[b]]
-    rows_b <- which(resolved$pattern_idx == b)
+    rows_b <- rows_by_block[[b]]
     vals <- fs_row_cols(
       resolved$scores[rows_b, , drop = FALSE],
       blk$fsL,
@@ -530,12 +545,16 @@ resolve_mer_mod <- function(fs) {
   }
   blocks <- vector("list", n_clus)
   for (j in seq_len(n_clus)) {
-    # Default drop = TRUE is required: with drop = FALSE the trailing length-1
-    # dim survives as a 3-D q x q x 1 "array" (not a matrix), which breaks
-    # downstream matrix ops such as diag().
+    # matrix() enforces 2-D geometry on the subscripted slice: the default
+    # drop = TRUE turns a q = 1 slice of a 1 x 1 x N attribute into a bare
+    # scalar (ncol() NULL), which breaks ncol()/diag() downstream. (With
+    # drop = FALSE a length-1 trailing dim would survive as a 3-D q x q x 1
+    # "array", which breaks the same ops.)
     blocks[[j]] <- list(
-      fsL = L_attr[,, j],
-      fsT = T_attr[,, j],
+      fsL = matrix(L_attr[,, j], nrow = dim(L_attr)[1L],
+                   dimnames = dimnames(L_attr)[1:2]),
+      fsT = matrix(T_attr[,, j], nrow = dim(T_attr)[1L],
+                   dimnames = dimnames(T_attr)[1:2]),
       fsb = if (is.null(b_attr)) {
         NULL
       } else if (is.list(b_attr) && length(b_attr) == n_clus) {
@@ -545,7 +564,7 @@ resolve_mer_mod <- function(fs) {
       }
     )
   }
-  nm_l1 <- score_column_names(L_attr[,, 1L], colnames(fs))
+  nm_l1 <- score_column_names(blocks[[1L]]$fsL, colnames(fs))
   make_resolved_with_legacy(fs[, nm_l1$score_nm, drop = FALSE],
                             n_clus, seq_len(n_clus), blocks, nm_l1$legacy,
                             group_col = NULL, group_vals = NULL,

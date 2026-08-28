@@ -29,7 +29,7 @@ from its attributes (see Details), and the \verb{int_fs_*} intercept
 columns are appended automatically --- \code{fs_indiv()} is no longer
 needed to obtain them. \code{\link[=fs_indiv]{fs_indiv()}} on a \code{\link[=get_fs]{get_fs()}} result produces
 the equivalent fully explicit table. Definition-variable columns must
-be free of \code{NA}.}
+be numeric and free of \code{NA}.}
 
 \item{se_fs}{A named numeric vector of standard errors (one per latent) for
 the single-score-per-latent case; implies fixed unit loadings and error
@@ -39,21 +39,28 @@ inputs are derived from a \code{\link[=get_fs]{get_fs()}} result passed as \code
 Details).}
 
 \item{fsL}{A \verb{q x p} loading matrix including cross-loadings: rows = score
-names (\verb{fs_<latent>}), columns = latent names. Each cell is either a
-number (fixed loading) or a character naming a definition-variable column.
+names (\verb{fs_<latent>}), columns = latent names. The matrix must be
+uniformly numeric (every cell a fixed loading) or uniformly character
+(every cell a definition-variable column name); mixing fixed values and
+column names in one matrix is not supported.
 Or omitted, in which case the value is derived from the \code{fsL} attribute
 of a \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see Details); an explicit \code{fsL}
 always wins.}
 
 \item{fsT}{A \verb{q x q} error variance-covariance matrix over the score names;
-the lower triangle (incl. diagonal) is used. Each cell is a number
-(fixed) or a character naming a definition-variable column.
+the lower triangle (incl. diagonal) is used, and every score must have
+an error variance (a complete diagonal). The matrix must be uniformly
+numeric (every cell fixed) or uniformly character (every cell a
+definition-variable column name); mixing fixed values and column names in
+one matrix is not supported.
 Or omitted, in which case the value is derived from the \code{fsT} attribute
 of a \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see Details); an explicit \code{fsT}
 always wins.}
 
 \item{fsb}{A vector of score intercepts (length \code{q}, named by score, either
-order) --- each a number (fixed) or a definition-variable column name.
+order), uniformly numeric (every entry fixed) or uniformly character
+(every entry a definition-variable column name); mixing fixed values and
+column names is not supported.
 \code{NULL} (default) fixes all score intercepts at zero.
 Or omitted, in which case the value is derived from the \code{fsb} attribute
 of a \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see Details); the derivation

@@ -343,8 +343,7 @@ fs_metric <- get_fs(HolzingerSwineford1939,
 )
 
 fs_single <- get_fs(
-  HolzingerSwineford1939 |>
-    subset(school == "Grant-White"),
+  subset(HolzingerSwineford1939, school == "Grant-White"),
   hs_model_2,
   corrected_fsT = TRUE,
   format = "list"

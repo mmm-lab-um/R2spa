@@ -254,6 +254,22 @@ tspa_multi <- tspa(
   # group.equal = "regressions"
 )
 
+# the same single-factor fit with the data passed as a list of per-group
+# data frames (the get_fs(format = "list") results cbind()ed per group);
+# tspa() coerces the list to a data frame before the stage-2 fit
+fs_dat_multi_list <- Map(
+  function(a, b) cbind(a, b), fs_dat_visual, fs_dat_speed
+)
+tspa_multi_list <- tspa(
+  model = "visual ~ speed",
+  data = fs_dat_multi_list,
+  se_fs = data.frame(
+    visual = c(0.3391326, 0.3118280),
+    speed = c(0.2786875, 0.2740507)
+  ),
+  group = "school"
+)
+
 ########## Testing section #############
 
 # Standardized parameter estimates
@@ -302,6 +318,13 @@ test_that("test if the se of variance is similar for two methods", {
   )
 })
 
+test_that("tspa(): single-factor list-of-frames data matches the rbind'd-frame fit", {
+  expect_equal(
+    lavInspect(tspa_multi_list, "est"),
+    lavInspect(tspa_multi, "est")
+  )
+})
+
 # Test tspa_mf()
 mod4 <- "
   # latent variables
@@ -333,7 +356,7 @@ test_that("The order of factors in the model from tspa_mf()", {
                factors_order_m$rhs)
 })
 test_that("The order of loadings in the model from tspa_mf()", {
-  expect_equal(rep(c("visual", "textual", "speed"), each = 3) |> rep(2),
+  expect_equal(rep(rep(c("visual", "textual", "speed"), each = 3), 2),
                loadings_order_m$lhs)
   expect_equal(rep(c("fs_visual", "fs_textual", "fs_speed"), 6),
                loadings_order_m$rhs)
@@ -390,9 +413,9 @@ cov_mat <- matrix(c(
 ), nrow = 9, ncol = 9, byrow = TRUE)
 set.seed(123)
 sim_dat <- MASS::mvrnorm(n = 2000, mu = mean_vec, Sigma = cov_mat,
-                         empirical = TRUE) |>
-  `colnames<-`(c("s_g3", "s_g5", "s_g8", "r_g3", "r_g5", "r_g8",
-                 "m_g3", "m_g5", "m_g8"))
+                         empirical = TRUE)
+colnames(sim_dat) <- c("s_g3", "s_g5", "s_g8", "r_g3", "r_g5", "r_g8",
+                       "m_g3", "m_g5", "m_g8")
 
 strict_mod <- "
 # factor loadings
@@ -488,6 +511,48 @@ test_that("Need to provide none or both fsT and fsL", {
   )
 })
 
+test_that("tspa(): non-numeric or non-finite se_fs is a clear error", {
+  # non-numeric: a cryptic 'non-numeric argument' from the schema otherwise
+  expect_error(
+    tspa("dem60 ~ ind60", data = fs_dat_single,
+         se_fs = c(ind60 = "0.12", dem60 = "0.68")),
+    "numeric standard errors"
+  )
+  # non-finite: a NaN fixed value in the model string is a parse failure
+  # in lavaan, not an actionable error
+  expect_error(
+    tspa("dem60 ~ ind60", data = fs_dat_single,
+         se_fs = c(ind60 = 0.12, dem60 = NA_real_)),
+    "not all finite"
+  )
+})
+
+test_that("tspa(): non-finite or unnamed fsT/fsL values are clear errors", {
+  data("PoliticalDemocracy", package = "lavaan")
+  fit <- cfa("ind60 =~ x1 + x2 + x3
+              dem60 =~ y1 + y2 + y3 + y4",
+             data = PoliticalDemocracy, std.lv = TRUE)
+  fs <- get_fs(fit)
+  Tm <- attr(fs, "fsT")[[1L]]
+  Lm <- attr(fs, "fsL")[[1L]]
+  # an NA in fsT renders as "NA" in the model string, which lavaan parses
+  # as a parameter label: the fixed value silently becomes a free estimate
+  T_bad <- Tm
+  T_bad[1L, 1L] <- NA
+  expect_error(
+    tspa("dem60 ~ ind60", data = fs, fsT = T_bad, fsL = Lm),
+    "non-finite"
+  )
+  # unnamed fsL would render NA indicator names into the model string
+  # (a cryptic rbind failure downstream)
+  L_bare <- Lm
+  dimnames(L_bare) <- list(NULL, colnames(Lm))
+  expect_error(
+    tspa("dem60 ~ ind60", data = fs, fsT = Tm, fsL = L_bare),
+    "row and column names"
+  )
+})
+
 test_that(
   "Names of factor score variables need to match those in the input data",
   {
@@ -501,7 +566,7 @@ test_that(
     fs_dat2 <- get_fs(PoliticalDemocracy, model = mod2, std.lv = TRUE, format = "list")
     ecov_fs <- attr(fs_dat2, "fsT")
     dimnames(ecov_fs) <- lapply(dimnames(ecov_fs),
-      FUN = \(x) paste0("bs_", x)
+      FUN = function(x) paste0("bs_", x)
     )
     expect_error(
       tspa(
@@ -540,8 +605,9 @@ test_that("Single-group list-valued attributes mixed with plain matrices", {
   fsL_u <- attr(fs_dat_uni, "fsL")
   expect_true(is.list(fsT_u) && length(fsT_u) == 1)
   expect_true(is.list(fsL_u) && length(fsL_u) == 1)
-  identity_ld <- diag(2) |>
-    `dimnames<-`(list(c("fs_ind60", "fs_dem60"), c("ind60", "dem60")))
+  identity_ld <- `dimnames<-`(diag(2),
+                              list(c("fs_ind60", "fs_dem60"),
+                                   c("ind60", "dem60")))
   # list fsT + matrix fsL (the Bartlett identity-loadings case)
   fit_tl <- tspa(model = "dem60 ~ ind60", data = fs_dat_uni,
                  fsT = fsT_u, fsL = identity_ld)
@@ -718,7 +784,7 @@ test_that("Test indicator names not starting with 'fs_'", {
   names(fs_dat2) <- gsub("fs_", "bs_", names(fs_dat2))
   ecov_fs <- attr(fs_dat2, "fsT")
   dimnames(ecov_fs) <- lapply(dimnames(ecov_fs),
-                              FUN = \(x) gsub("fs_", "bs_", x))
+                              FUN = function(x) gsub("fs_", "bs_", x))
   mat_ld <- attr(fs_dat2, "fsL")
   rownames(mat_ld) <- gsub("fs_", "bs_", rownames(mat_ld))
   expect_no_error(
