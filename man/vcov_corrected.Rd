@@ -55,11 +55,14 @@ principal submatrix (see \code{vfsLT}).}
 \item{engine}{The engine used to evaluate the Jacobian \code{J = d(thetahat)/d(eta)}. \code{"fd"} (the default) uses central
 finite differences (one stage-2 refit on each side of each
 free element). \code{"analytic"} uses a refit-free, deterministic
-closed form for the saturated single-group case (PLAN 16,
-section 2.4) and transparently falls back to \code{"fd"} otherwise
-(multigroup, or a structural model that is not exactly
-saturated, df > 0). The two engines agree to the
-finite-difference noise floor whenever \code{"analytic"} applies.}
+closed form for the saturated single-group path model (PLAN
+16, section 2.4) — free structural regressions and latent
+variances only — and transparently falls back to \code{"fd"}
+otherwise (multigroup, a model that is not exactly saturated
+(df > 0), or a saturated model with other free parameters
+such as free latent covariances or means). The two engines
+agree to the finite-difference noise floor whenever
+\code{"analytic"} applies.}
 
 \item{...}{Currently not used.}
 }
@@ -99,9 +102,11 @@ correction is never applied twice).
 The \code{engine} argument selects how the Jacobian is evaluated. The default
 \code{"fd"} uses central finite differences (one stage-2 refit on each side of
 each free element). \code{"analytic"} instead uses a refit-free, deterministic
-closed form for the saturated single-group case (PLAN 16, section 2.4) and
-transparently falls back to \code{"fd"} otherwise (multigroup, or a structural
-model that is not exactly saturated, df > 0); the two agree to the
+closed form for the saturated single-group path model (PLAN 16, section
+2.4) — free structural regressions and latent variances only — and
+transparently falls back to \code{"fd"} otherwise (multigroup, a model that is
+not exactly saturated (df > 0), or a saturated model with other free
+parameters such as free latent covariances or means); the two agree to the
 finite-difference noise floor whenever \code{"analytic"} applies, and the
 analytic result is bit-reproducible.
 }

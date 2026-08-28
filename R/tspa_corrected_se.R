@@ -29,9 +29,11 @@
 #' The `engine` argument selects how the Jacobian is evaluated. The default
 #' `"fd"` uses central finite differences (one stage-2 refit on each side of
 #' each free element). `"analytic"` instead uses a refit-free, deterministic
-#' closed form for the saturated single-group case (PLAN 16, section 2.4) and
-#' transparently falls back to `"fd"` otherwise (multigroup, or a structural
-#' model that is not exactly saturated, df > 0); the two agree to the
+#' closed form for the saturated single-group path model (PLAN 16, section
+#' 2.4) — free structural regressions and latent variances only — and
+#' transparently falls back to `"fd"` otherwise (multigroup, a model that is
+#' not exactly saturated (df > 0), or a saturated model with other free
+#' parameters such as free latent covariances or means); the two agree to the
 #' finite-difference noise floor whenever `"analytic"` applies, and the
 #' analytic result is bit-reproducible.
 #'
@@ -75,11 +77,14 @@
 #'              d(thetahat)/d(eta)`. `"fd"` (the default) uses central
 #'              finite differences (one stage-2 refit on each side of each
 #'              free element). `"analytic"` uses a refit-free, deterministic
-#'              closed form for the saturated single-group case (PLAN 16,
-#'              section 2.4) and transparently falls back to `"fd"` otherwise
-#'              (multigroup, or a structural model that is not exactly
-#'              saturated, df > 0). The two engines agree to the
-#'              finite-difference noise floor whenever `"analytic"` applies.
+#'              closed form for the saturated single-group path model (PLAN
+#'              16, section 2.4) — free structural regressions and latent
+#'              variances only — and transparently falls back to `"fd"`
+#'              otherwise (multigroup, a model that is not exactly saturated
+#'              (df > 0), or a saturated model with other free parameters
+#'              such as free latent covariances or means). The two engines
+#'              agree to the finite-difference noise floor whenever
+#'              `"analytic"` applies.
 #' @param ... Currently not used.
 #' @return A corrected covariance matrix in the same dimension as
 #'     `vcov(tspa_fit)` (symmetric).
