@@ -4,7 +4,7 @@
 # and the internal machinery that backs get_fs.lavaan() and augment_lav_predict().
 
 sqrt_or_na <- function(x) {
-  sqrt(ifelse(x >= 0, x, NA))
+  sqrt(replace(x, x < 0, NA_real_))
 }
 
 # Legacy per-row layout (augment_lav_predict() contract): scores followed by
@@ -172,19 +172,20 @@ augment_lav_predict <- function(
   has_means <- lavaan::lavInspect(lavobj, what = "meanstructure")
   out <- vector("list", ngroups)
   if (ngroups > 1) names(out) <- names(fs_lst)
-  fs_matnames <- NULL
+  # The column layout depends only on the latent names (identical across
+  # groups), so it is computed once, outside the group loop.
+  fs_matnames <- get_fs_mat_names(
+    colnames(as.matrix(fs_lst[[1L]])), int = has_means
+  )
+  fs_matnames_flat <- fs_matnames
+  fs_matnames_flat$ld <- c(fs_matnames_flat$ld)
+  fs_matnames_flat$ev <- fs_matnames_flat$ev[upper.tri(fs_matnames_flat$ev,
+                                                        diag = TRUE)]
+  fs_colnames <- unlist(fs_matnames_flat)
   for (g in seq_len(ngroups)) {
     fs_g <- as.matrix(fs_lst[[g]])
     blocks <- blocks_by_group[[g]]
     n_cases <- max(unlist(lapply(blocks, function(b) max(b$case_idx))))
-    if (is.null(fs_matnames)) {
-      fs_matnames <- get_fs_mat_names(colnames(fs_g), int = has_means)
-    }
-    fs_matnames_flat <- fs_matnames
-    fs_matnames_flat$ld <- c(fs_matnames_flat$ld)
-    fs_matnames_flat$ev <- fs_matnames_flat$ev[upper.tri(fs_matnames_flat$ev,
-                                                          diag = TRUE)]
-    fs_colnames <- unlist(fs_matnames_flat)
     fs_dat <- data.frame(
       matrix(
         NA,
@@ -385,11 +386,13 @@ compute_fspars <- function(
   for (g in seq_len(ngrp)) {
     free <- frees[[g]]
     mat <- mats[[g]]
-    free_list <- lapply(free, FUN = \(x) x[which(x > 0)])
-    for (l in seq_along(free_list)) {
-      for (i in free_list[[l]]) {
-        mat[[l]][which(free[[l]] == i)] <- par[i]
-      }
+    # free[[l]] maps each est-matrix cell to its parameter index in `par`
+    # (0 when fixed); the re-injection below is vectorized -- one
+    # assignment per matrix instead of one scalar assignment (plus one
+    # mask scan) per free cell on every Jacobian evaluation.
+    for (l in seq_along(free)) {
+      pos <- which(free[[l]] > 0)
+      mat[[l]][pos] <- par[free[[l]][pos]]
     }
     if (!is.null(psi_override)) {
       mat$psi <- psi_override
@@ -415,9 +418,9 @@ compute_fspars <- function(
       } else if (what == "ldfs") {
         out[[g]][[m]] <- a %*% mat$lambda[idx, , drop = FALSE]
       }
-      if (num_mp == 1) {
-        out[[g]] <- out[[g]][[1]]
-      }
+    }
+    if (num_mp == 1) {
+      out[[g]] <- out[[g]][[1]]
     }
   }
   out
@@ -730,21 +733,25 @@ vcov_ld_evfs <- function(
   method <- match.arg(method)
   jac <- compute_grad_ld_evfs(fit, method = method,
                               psi_override = psi_override)
-  jac %*% lavaan::vcov(fit) %*% t(jac)
+  jac %*% vcov(fit) %*% t(jac)
 }
 
 compute_fsrel <- function(fit, method = c("regression", "Bartlett")) {
   method <- match.arg(method)
   # Direct slot access; avoids lavInspect()'s per-call version check.
   ngrp <- fit@Data@ngroups
-  est_fits <- lavInspect(fit, what = "est")
+  est_raw <- lavInspect(fit, what = "est")
+  frees_raw <- lavInspect(fit, what = "free")
   sigmas <- lavInspect(fit, "implied")
-  if (ngrp == 1) {
-    est_fits <- list(est_fits)
-    sigmas <- list(sigmas)
-  }
+  est_fits <- if (ngrp == 1) list(est_raw) else est_raw
+  sigmas <- if (ngrp == 1) list(sigmas) else sigmas
+  # vcov(fit) is group-independent; hoist it out of the per-group loop.
   vc_fit <- vcov(fit)
-  a <- compute_a(coef(fit), lavobj = fit, method = method)
+  # est/free hoisted into compute_a(): the Jacobian below re-evaluates it
+  # once per free parameter, and lavInspect() re-reads lavaan's DESCRIPTION
+  # on every call (same idiom as correct_evfs()).
+  a <- compute_a(coef(fit), lavobj = fit, method = method,
+                 frees = frees_raw, mats = est_raw)
   outs <- vector("list", ngrp)
   for (g in seq_len(ngrp)) {
     est_fit <- est_fits[[g]]
@@ -754,12 +761,15 @@ compute_fsrel <- function(fit, method = c("regression", "Bartlett")) {
       stop("reliability is only supported for unidimensional models.")
     }
     jac_a <- lavaan::lav_func_jacobian_complex(
-      function(x, fit, method) {
-        compute_a(x, lavobj = fit, method = method)[[g]]
+      function(x, fit, method, frees, mats) {
+        compute_a(x, lavobj = fit, method = method,
+                  frees = frees, mats = mats)[[g]]
       },
       coef(fit),
       fit = fit,
-      method = method
+      method = method,
+      frees = frees_raw,
+      mats = est_raw
     )
     va <- jac_a %*% vc_fit %*% t(jac_a)
     aa <- crossprod(a[[g]]) + va
