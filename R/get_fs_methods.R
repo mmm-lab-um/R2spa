@@ -14,6 +14,12 @@ validate_fs_priors <- function(prior_mean, prior_cov, lv_names) {
   q <- length(lv_names)
 
   if (!is.null(prior_mean)) {
+    # Type check BEFORE as.numeric(): a factor would silently coerce to its
+    # integer codes (accepted as a valid prior), a character vector coerces
+    # with a warning to NA.
+    if (!is.numeric(prior_mean) && !is.logical(prior_mean)) {
+      stop("'prior_mean' must be numeric.", call. = FALSE)
+    }
     prior_nms <- names(prior_mean)
     prior_mean <- as.numeric(prior_mean)
     if (!is.null(prior_nms)) {
@@ -43,6 +49,12 @@ validate_fs_priors <- function(prior_mean, prior_cov, lv_names) {
   if (!is.null(prior_cov)) {
     if (!is.matrix(prior_cov)) {
       prior_cov <- as.matrix(prior_cov)
+    }
+    # A non-numeric matrix (e.g. character, from a data.frame with factor or
+    # character columns) would make the is.finite() check below error with a
+    # cryptic base-R message instead of a clean stop.
+    if (!is.numeric(prior_cov)) {
+      stop("'prior_cov' must be numeric.", call. = FALSE)
     }
     if (any(!is.finite(prior_cov))) {
       stop("'prior_cov' must contain only finite values.", call. = FALSE)
@@ -137,6 +149,13 @@ get_fs.data.frame <- function(
     ind_names <- colnames(object)
     if (!is.null(group)) {
       ind_names <- setdiff(ind_names, group)
+    }
+    if (length(ind_names) == 0L) {
+      stop(
+        "get_fs(): no indicator columns available (all columns are the ",
+        "group variable); supply 'model' explicitly.",
+        call. = FALSE
+      )
     }
     model <- paste("f1 =~", paste(ind_names, collapse = " + "))
   }
@@ -606,6 +625,9 @@ merge_local_fs <- function(
 ) {
   format <- match.arg(format)
   q <- length(fs_list)
+  # Positional: callers may pass a named vector (get_fs_local()'s lv_names
+  # carries the latent names as element names); dimnames are value-based.
+  latent_names <- unname(latent_names)
   fs_names <- paste0("fs_", latent_names)
 
   # -- Group structure (shared by all per-latent results: same data/group).
@@ -681,9 +703,9 @@ merge_local_fs <- function(
     }
     items_by_latent[[k]] <- rownames(fp$pat)
   }
-   # unique() keeps first occurrences, i.e. first appearance across the
-   # per-latent vectors in latent order (the old setdiff accumulation).
-   item_names <- unique(unlist(items_by_latent, use.names = FALSE))
+  # unique() keeps first occurrences, i.e. first appearance across the
+  # per-latent vectors in latent order (the old setdiff accumulation).
+  item_names <- unique(unlist(items_by_latent, use.names = FALSE))
   p_all <- length(item_names)
   item_pos <- lapply(items_by_latent, match, item_names)
 
@@ -694,40 +716,61 @@ merge_local_fs <- function(
   }
   colnames(score_mx) <- latent_names
 
-  # -- Per-row merged (block-diagonal) blocks. --
-  b_of <- function(k, r) {
-    b <- blks[[k]][[pidx[[k]][r]]]$fsb
-    if (is.null(b)) NA_real_ else as.numeric(b)[1L]
+  # -- Per-row merged (block-diagonal) blocks. Each local fit defines exactly
+  #    one latent (enforced in get_fs_local()), so every per-latent (fsL, fsT,
+  #    fsb) block is 1 x 1 and the merged q x q matrices are zero off-diagonal
+  #    with per-pattern scalars on the diagonal. A row's merged blocks and
+  #    scoring-matrix fragments are determined entirely by its (group,
+  #    per-latent pattern) tuple, so one template per distinct tuple is minted
+  #    and the reference is shared by every row carrying that tuple (rows keep
+  #    distinct list slots; every downstream consumer reads the blocks
+  #    read-only). Measured at n = 50k, q = 2, ~50% missing per factor: the
+  #    FIML merge drops from ~4.9 s to ~0.05 s, and the compact path (which
+  #    reads a single row per group) from ~4.9 s to ~0.15 s.
+  g_of_row <- if (mg) match(group_vals, group_labels) else rep(1L, n)
+  # Per-latent per-block 1 x 1 scalars (fsL / fsT / fsb) + the unscorable
+  # marker (all-NA fsT: the latent could not score the block's rows).
+  Lsc <- vector("list", q); Tsc <- vector("list", q)
+  Bsc <- vector("list", q); unsc <- vector("list", q)
+  for (k in seq_len(q)) {
+    Lsc[[k]] <- vapply(blks[[k]], function(b) as.numeric(b$fsL)[1L],
+                       numeric(1L))
+    Tsc[[k]] <- vapply(blks[[k]], function(b) as.numeric(b$fsT)[1L],
+                       numeric(1L))
+    Bsc[[k]] <- vapply(blks[[k]], function(b) {
+      bb <- b$fsb
+      if (is.null(bb)) NA_real_ else as.numeric(bb)[1L]
+    }, numeric(1L))
+    unsc[[k]] <- vapply(blks[[k]], function(b) all(is.na(b$fsT)), logical(1L))
   }
-  L_row_list <- vector("list", n)
-  T_row_list <- vector("list", n)
-  B_row_list <- vector("list", n)
-  for (r in seq_len(n)) {
-    L_row_list[[r]] <- block_diag(lapply(
-      seq_len(q), function(k) blks[[k]][[pidx[[k]][r]]]$fsL
-    ))
-    T_row_list[[r]] <- block_diag(lapply(
-      seq_len(q), function(k) blks[[k]][[pidx[[k]][r]]]$fsT
-    ))
-    B_row_list[[r]] <- setNames(
-      vapply(seq_len(q), function(k) b_of(k, r), numeric(1L)),
-      fs_names
-    )
+  diagL_mx <- matrix(NA_real_, n, q)
+  diagT_mx <- matrix(NA_real_, n, q)
+  B_mx <- matrix(NA_real_, n, q)
+  for (k in seq_len(q)) {
+    pk_r <- pidx[[k]]
+    diagL_mx[, k] <- Lsc[[k]][pk_r]
+    diagT_mx[, k] <- Tsc[[k]][pk_r]
+    B_mx[, k] <- Bsc[[k]][pk_r]
   }
+  # Distinct (group, per-latent pattern) tuples: the key is a string join of
+  # the integer fields (non-negative, so the separator is unambiguous).
+  # unique()/match() give the dense 1..ntpl encoding in first-appearance
+  # order; tpl_row[u] is the first-occurrence row of distinct key u, the
+  # template representative.
+  key_v <- as.character(g_of_row)
+  for (k in seq_len(q)) {
+    key_v <- paste0(key_v, "\r", pidx[[k]])
+  }
+  key_u <- unique(key_v)
+  tuple <- match(key_v, key_u)
+  ntpl <- length(key_u)
+  tpl_row <- match(key_u, key_v)
 
   # -- Per-row scoring matrices (row k = local fit k's a_k, zero-padded to
   #    all items; all-NA row where that latent could not score the row;
-  #    colnames NULL per the joint-path dimname quirk). --
-  g_of_row <- if (mg) match(group_vals, group_labels) else rep(1L, n)
-  li_of_row <- integer(n)
-  if (mg) {
-    for (g in seq_len(ngroups)) {
-      li_of_row[rows_of_group[[g]]] <-
-        seq_len(length(rows_of_group[[g]]))
-    }
-  } else {
-    li_of_row <- seq_len(n)
-  }
+  #    colnames NULL per the joint-path dimname quirk). Precomputed per
+  #    (latent, group, pattern column): each row's pattern column plus that
+  #    column's observed/missing item positions and the scoring values.
   sm_kg <- vector("list", q * ngroups)
   lab_kg <- vector("list", q * ngroups)
   pat_kg <- vector("list", q * ngroups)
@@ -740,36 +783,87 @@ merge_local_fs <- function(
       pat_kg[[(k - 1L) * ngroups + g]] <- fp$pat
     }
   }
-  S_row_list <- vector("list", n)
-  for (r in seq_len(n)) {
-    # Each latent's own items carry its a-matrix; every other latent's items
-    # are 0. Compact: a_k spans all of latent k's items. FIML: a_k spans only
-    # the pattern's observed items (placed there, NA at the latent's missing
-    # items). An unscorable latent (all-NA block) is NA across its items.
-    S_row <- matrix(
-      0, nrow = q, ncol = p_all, dimnames = list(latent_names, NULL)
-    )
-    for (k in seq_len(q)) {
-      idx_kg <- (k - 1L) * ngroups + g_of_row[r]
-      if (all(is.na(blks[[k]][[pidx[[k]][r]]]$fsT))) {
-        S_row[k, item_pos[[k]]] <- NA_real_
-        next
-      }
+  col_of_row <- vector("list", q)
+  pos_obs <- vector("list", q)
+  pos_miss <- vector("list", q)
+  sm_vals <- vector("list", q)
+  for (k in seq_len(q)) {
+    cor_k <- integer(n)
+    po_k <- vector("list", ngroups)
+    pm_k <- vector("list", ngroups)
+    sv_k <- vector("list", ngroups)
+    for (g in seq_len(ngroups)) {
+      idx_kg <- (k - 1L) * ngroups + g
       sm <- sm_kg[[idx_kg]]
       if (is.matrix(sm)) {
-        S_row[k, item_pos[[k]]] <- as.numeric(sm)
+        # Single-pattern (complete) group: one virtual pattern column.
+        po_k[[g]] <- list(item_pos[[k]])
+        pm_k[[g]] <- list(integer(0))
+        sv_k[[g]] <- list(as.numeric(sm))
+        cor_k[rows_of_group[[g]]] <- 1L
       } else {
-        label_r <- lab_kg[[idx_kg]][li_of_row[r]]
         pk <- pat_kg[[idx_kg]]
-        m_col <- match(label_r, colnames(pk))
-        obs <- rownames(pk)[as.logical(pk[, m_col, drop = FALSE])]
-        S_row[k, match(obs, item_names)] <- as.numeric(sm[[label_r]])
-        miss_k <- setdiff(items_by_latent[[k]], obs)
-        if (length(miss_k) > 0L) S_row[k, match(miss_k, item_names)] <- NA_real_
+        cols <- colnames(pk)
+        lab2col <- seq_along(cols)
+        names(lab2col) <- cols
+        cor_k[rows_of_group[[g]]] <- lab2col[lab_kg[[idx_kg]]]
+        po_g <- vector("list", ncol(pk))
+        pm_g <- vector("list", ncol(pk))
+        sv_g <- vector("list", ncol(pk))
+        for (cc in seq_len(ncol(pk))) {
+          obs_c <- rownames(pk)[pk[, cc, drop = FALSE]]
+          po_g[[cc]] <- match(obs_c, item_names)
+          pm_g[[cc]] <- match(setdiff(items_by_latent[[k]], obs_c), item_names)
+          sv_g[[cc]] <- as.numeric(sm[[cols[cc]]])
+        }
+        po_k[[g]] <- po_g
+        pm_k[[g]] <- pm_g
+        sv_k[[g]] <- sv_g
       }
     }
-    S_row_list[[r]] <- S_row
+    col_of_row[[k]] <- cor_k
+    pos_obs[[k]] <- po_k
+    pos_miss[[k]] <- pm_k
+    sm_vals[[k]] <- sv_k
   }
+  # One template per distinct tuple, minted at its first-occurrence row.
+  diag_q <- cbind(seq_len(q), seq_len(q))
+  dn_L <- list(fs_names, latent_names)
+  dn_T <- list(fs_names, fs_names)
+  L_tmpl <- vector("list", ntpl)
+  T_tmpl <- vector("list", ntpl)
+  B_tmpl <- vector("list", ntpl)
+  S_tmpl <- vector("list", ntpl)
+  for (u in seq_len(ntpl)) {
+    r <- tpl_row[u]
+    g_r <- g_of_row[r]
+    L_u <- matrix(0, q, q, dimnames = dn_L)
+    L_u[diag_q] <- diagL_mx[r, ]
+    T_u <- matrix(0, q, q, dimnames = dn_T)
+    T_u[diag_q] <- diagT_mx[r, ]
+    S_u <- matrix(0, q, p_all, dimnames = list(latent_names, NULL))
+    for (k in seq_len(q)) {
+      if (unsc[[k]][pidx[[k]][r]]) {
+        # Unscorable latent (all-NA block): NA across its own items.
+        S_u[k, item_pos[[k]]] <- NA_real_
+        next
+      }
+      c_r <- col_of_row[[k]][r]
+      S_u[k, pos_obs[[k]][[g_r]][[c_r]]] <- sm_vals[[k]][[g_r]][[c_r]]
+      pm_c <- pos_miss[[k]][[g_r]][[c_r]]
+      if (length(pm_c) > 0L) {
+        S_u[k, pm_c] <- NA_real_
+      }
+    }
+    L_tmpl[[u]] <- L_u
+    T_tmpl[[u]] <- T_u
+    B_tmpl[[u]] <- setNames(B_mx[r, ], fs_names)
+    S_tmpl[[u]] <- S_u
+  }
+  L_row_list <- L_tmpl[tuple]
+  T_row_list <- T_tmpl[tuple]
+  B_row_list <- B_tmpl[tuple]
+  S_row_list <- S_tmpl[tuple]
 
   # -- Group-level latent moments (block-diagonal psi, concatenated alpha).
   psi_g <- vector("list", ngroups)
@@ -847,19 +941,18 @@ merge_local_fs <- function(
     # marker (the mirt per-obs convention). The output is always a single
     # data frame (a trailing group column + group_col attribute for MG).
     k3 <- q + q * q + q * (q + 1L) / 2L
-    vals <- matrix(NA_real_, nrow = n, ncol = k3)
-    # fs_row_cols() only reads nrow(fs) (always 1 here): reuse one 1-row
-    # token for every row instead of allocating a fresh data frame per
-    # iteration (measured ~83% of this loop's runtime at n = 50k).
+    # One fs_row_cols() call per distinct tuple: rows sharing a tuple share
+    # the (fsL, fsT, fsb) template, hence the same se/loading/error row.
+    # fs_row_cols() only reads nrow(fs) (always 1 here): one shared 1-row
+    # token.
     dummy_fs <- data.frame(x = 0L)
-    for (r in seq_len(n)) {
-      vals[r, ] <- fs_row_cols(
-        dummy_fs,
-        L_row_list[[r]],
-        T_row_list[[r]],
-        B_row_list[[r]]
+    vals_u <- matrix(NA_real_, ntpl, k3)
+    for (u in seq_len(ntpl)) {
+      vals_u[u, ] <- fs_row_cols(
+        dummy_fs, L_tmpl[[u]], T_tmpl[[u]], B_tmpl[[u]]
       )[1L, seq_len(k3), drop = FALSE]
     }
+    vals <- vals_u[tuple, , drop = FALSE]
     se_nm <- paste0(fs_names, "_se")
     ld_nm <- c(create_fsL_names(latent_names, fs_names))
     ev_nm <- character(q * (q + 1L) / 2L)

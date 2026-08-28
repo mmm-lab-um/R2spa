@@ -516,6 +516,14 @@ test_that("guards: model = NULL is a no-op (the auto single-factor model)", {
   expect_identical(a, b)
 })
 
+test_that("guard: model = NULL with no indicator columns errors clearly", {
+  g <- data.frame(g = rep(c("a", "b"), each = 3L))
+  expect_error(
+    get_fs(g, group = "g"),
+    "no indicator columns"
+  )
+})
+
 # ---------------------------------------------------------------------------
 # 9-10. corrected_fsT and std.lv
 # ---------------------------------------------------------------------------
