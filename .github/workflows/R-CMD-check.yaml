@@ -92,23 +92,50 @@ jobs:
         # 0.7-2 is still the current CRAN release, so the archive URL 404s
         # until a newer lavaan pushes it into /Archive/. Try current CRAN
         # first, then the archive, and hard-fail if neither yields the pin.
+        #
+        # Three R gotchas this step works around (all verified live):
+        # - as.character(packageVersion(...)) renders "0.7-2" as "0.7.2"
+        #   (dash normalized to dot), so the version is compared as
+        #   package_version objects, never as strings.
+        # - install.packages(url, repos = <non-NULL>) treats the URL as a
+        #   package *name* looked up in the repo index and never downloads
+        #   it ("not available for this version of R"), so the tarball is
+        #   fetched with download.file() and the local file is installed
+        #   with repos = NULL.
+        # - A namespace that fails to load in a session stays marked failed,
+        #   so the final check runs in a fresh Rscript subprocess.
         run: |
           want <- "0.7-2"
-          have <- if (requireNamespace("lavaan", quietly = TRUE))
-            as.character(packageVersion("lavaan")) else NA_character_
-          if (!identical(have, want)) {
+          have <- tryCatch(packageVersion("lavaan"), error = function(e) NA)
+          cat("lavaan before pin:", ifelse(is.na(have), "<absent or broken>", as.character(have)), "\n")
+          if (!identical(have, package_version(want))) {
+            # lavaan's non-base Imports, in case the library is short of them.
+            install.packages(c("mnormt", "pbivnorm", "numDeriv", "quadprog"))
             urls <- c(
               paste0("https://cran.r-project.org/src/contrib/lavaan_", want, ".tar.gz"),
               paste0("https://cran.r-project.org/src/contrib/Archive/lavaan/lavaan_", want, ".tar.gz")
             )
+            tf <- tempfile(fileext = ".tar.gz")
+            got <- FALSE
             for (url in urls) {
-              try(install.packages(url, repos = "https://cloud.r-project.org",
-                                   type = "source"), silent = TRUE)
-              if (requireNamespace("lavaan", quietly = TRUE) &&
-                  identical(as.character(packageVersion("lavaan")), want)) break
+              got <- tryCatch(download.file(url, tf, quiet = TRUE, mode = "wb") == 0L,
+                              error = function(e) FALSE)
+              if (got) break
+              unlink(tf)
             }
+            if (!got) stop("could not download lavaan ", want, " from CRAN")
+            install.packages(tf, repos = NULL, type = "source")
+            unlink(tf)
           }
-          stopifnot(identical(as.character(packageVersion("lavaan")), want))
+          chk <- tempfile(fileext = ".R")
+          writeLines(c(
+            'if (!requireNamespace("lavaan", quietly = TRUE)) quit(status = 1L)',
+            sprintf('stopifnot(identical(packageVersion("lavaan"), package_version(%s)))', deparse(want))
+          ), chk)
+          ok <- system(paste("Rscript", shQuote(chk)), ignore.stdout = TRUE, ignore.stderr = TRUE) == 0L
+          unlink(chk)
+          if (!ok) stop("lavaan pin failed: installed lavaan is not ", want)
+          cat("pin OK: lavaan", as.character(packageVersion("lavaan")), "\n")
         shell: Rscript {0}
 
       - uses: r-lib/actions/check-r-package@v2
