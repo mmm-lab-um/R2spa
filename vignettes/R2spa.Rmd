@@ -112,6 +112,39 @@ TRUE)` materializes the `fsb` values as `int_fs_<f>` columns, which is how the
 `tspa_mx_model()` examples wire up the score-intercept definition variables
 (`fsb = c(fs_ind60 = "int_fs_ind60", ...)`).
 
+## Mean (sum) scores
+
+`get_fs()` can also score a construct as its **mean score** — the plain mean of
+the items that load on it, with no latent distribution — a simpler alternative
+to the default regression (EB) scores. Request it with `method = "mean"` (the
+item-to-factor split is auto-derived from the estimated loadings, or supplied
+via `sum_items`):
+
+```{r}
+fs_mean <- get_fs(PoliticalDemocracy,
+                  model = "ind60 =~ x1 + x2 + x3
+                           dem60 =~ y1 + y2 + y3 + y4",
+                  method = "mean")
+head(fs_mean)   # fs_ind60 == rowMeans(x1, x2, x3); constant fs_<name>_se per factor
+```
+
+A mean score is a composite of items, so its measurement error is carried by
+the `fsT`/`fsL`/`fsb` form (the cross terms are exactly zero for a plain CFA).
+`tspa()` reads those from the result's attributes:
+
+```{r}
+tspa_mean_fit <- tspa(model = "dem60 ~ ind60",
+                      data = fs_mean,
+                      fsT = attr(fs_mean, "fsT"),
+                      fsL = attr(fs_mean, "fsL"),
+                      fsb = attr(fs_mean, "fsb"))
+summary(tspa_mean_fit, standardized = TRUE)
+```
+
+`method = "mean"` is for complete-data fits: it errors when stage 1 retains
+missing data (e.g. `missing = "fiml"`) and is not supported together with
+`corrected_fsT`, `vfsLT`, `reliability`, `prior_mean`, or `prior_cov`.
+
 ## Single group, single factor
 
 ```r
