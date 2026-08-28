@@ -136,13 +136,16 @@ vcov_corrected <- function(tspa_fit, vfsLT, which_free = NULL, ...) {
     if (is.null(which_free)) {
         which_free <- seq_along(val_fsLT)
     }
+    if (!is.numeric(which_free) ||
+        any(!is.finite(which_free)) ||
+        any(which_free != floor(which_free)) ||
+        any(which_free < 1) || any(which_free > length(val_fsLT)) ||
+        anyDuplicated(which_free)) {
+        stop("'which_free' must be a numeric vector of distinct ",
+             "whole-number positions in 1:", length(val_fsLT), ".")
+    }
     which_free <- as.integer(which_free)
     nfree <- length(which_free)
-    if (anyNA(which_free) || anyDuplicated(which_free) ||
-        any(which_free < 1L) || any(which_free > length(val_fsLT))) {
-        stop("'which_free' must contain distinct positions in ",
-             "1:", length(val_fsLT), ".")
-    }
     # Fail-fast input guards (before any refit is spent):
     if (!is.matrix(vfsLT) || nrow(vfsLT) != ncol(vfsLT) ||
         nrow(vfsLT) != nfree) {
@@ -170,6 +173,10 @@ vcov_corrected <- function(tspa_fit, vfsLT, which_free = NULL, ...) {
     num_ld <- length(val_fsL[[1]])
     num_ev <- sum(lower.tri(val_fsT[[1]], diag = TRUE))
     qT <- nrow(val_fsT[[1]])
+    # Per-group diagonal scale for the PSD perturbation tolerance (the same
+    # scaling the base-PSD check above uses), so the padding is not swallowed
+    # by floating-point noise when 'fsT' is on a large scale.
+    dscale <- vapply(val_fsT, function(x) max(1, max(abs(diag(x)))), 1)
     # theta vector -> (fsL, fsT) per group, preserving dimnames.
     assemble <- function(par) {
         counter <- 0L
@@ -207,10 +214,12 @@ vcov_corrected <- function(tspa_fit, vfsLT, which_free = NULL, ...) {
         mat <- assemble(par)
         for (g in seq_len(ngrp)) {
             # A PSD base can drop by at most sqrt(q) * step per eigenvalue
-            # (Weyl); anything beyond that means the assembly is broken.
+            # (Weyl); the extra padding is scaled by the group's diagonal
+            # magnitude (as in the base-PSD check), so it is not swallowed
+            # by floating-point noise at large scale.
             dmin <- min(eigen(mat$fsT[[g]], symmetric = TRUE,
                               only.values = TRUE)$values)
-            if (dmin < -sqrt(qT) * step - 1e-10) {
+            if (dmin < -sqrt(qT) * step - 1e-10 * dscale[g]) {
                 stop("the perturbed 'fsT' (group ", g, ", theta index ",
                      k, ") is not positive semi-definite; the ",
                      "first-order correction is undefined here. Try ",
