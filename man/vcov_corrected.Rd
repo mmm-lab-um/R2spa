@@ -77,10 +77,12 @@ First-order correction of sampling covariance for 2S-PA estimates
 \code{vcov_corrected()} applies the first-order (delta-method) two-stage
 approximation: the stage-2 covariance \code{vcov(tspa_fit)} is augmented by
 \code{J \%*\% vfsLT \%*\% t(J)}, where \code{J} is the Jacobian of the stage-2
-estimates with respect to the selected \code{fsL}/\code{fsT} free elements. \code{J} is
-estimated by central differences, one full stage-2 refit on each side of
-each free element while reusing the base fit's coefficients, so the cost
-is \verb{2 x (number of free elements)} stage-2 refits.
+estimates with respect to the selected \code{fsL}/\code{fsT} free elements. With the
+default \code{engine = "fd"}, \code{J} is estimated by central differences, one full
+stage-2 refit on each side of each free element while reusing the base
+fit's coefficients, so the cost is \verb{2 x (number of free elements)} stage-2
+refits; with \code{engine = "analytic"} it is instead evaluated refit-free via
+a closed form (see the \code{engine} argument below).
 
 The correction is \strong{partial by design}. It propagates only the \emph{sampling}
 uncertainty of the stage-1 estimates of \code{fsL} (loadings/cross-loadings)

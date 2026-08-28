@@ -4,10 +4,12 @@
 #' `vcov_corrected()` applies the first-order (delta-method) two-stage
 #' approximation: the stage-2 covariance `vcov(tspa_fit)` is augmented by
 #' `J %*% vfsLT %*% t(J)`, where `J` is the Jacobian of the stage-2
-#' estimates with respect to the selected `fsL`/`fsT` free elements. `J` is
-#' estimated by central differences, one full stage-2 refit on each side of
-#' each free element while reusing the base fit's coefficients, so the cost
-#' is `2 x (number of free elements)` stage-2 refits.
+#' estimates with respect to the selected `fsL`/`fsT` free elements. With the
+#' default `engine = "fd"`, `J` is estimated by central differences, one full
+#' stage-2 refit on each side of each free element while reusing the base
+#' fit's coefficients, so the cost is `2 x (number of free elements)` stage-2
+#' refits; with `engine = "analytic"` it is instead evaluated refit-free via
+#' a closed form (see the `engine` argument below).
 #'
 #' The correction is **partial by design**. It propagates only the *sampling*
 #' uncertainty of the stage-1 estimates of `fsL` (loadings/cross-loadings)
@@ -342,9 +344,18 @@ vcov_jacobian_analytic <- function(tspa_fit, names0, which_free) {
     # FD. (A near-saturation test against the sample covariance is NOT a
     # reliable proxy for the closed form's accuracy — a df > 0 model can have
     # a tiny implied-vs-sample discrepancy yet a large second-order term —
-    # so gate on df instead.) The fit must also be at its MLE (converged).
+    # so gate on lavaan's fitted df (fitMeasures(fit, "df") == 0), with the
+    # p == q(q+1)/2 count as an equivalent structural guard.) The fit must
+    # also be at its MLE (converged).
     p <- length(names0)
     if (p != q * (q + 1L) / 2L) return(NULL)
+    # Authoritative saturation check: lavaan's fitted df must be exactly 0.
+    # (p == q(q+1)/2 is the equivalent structural guard for the stage-2
+    # model's fixed measurement part; the fitted df is the authoritative
+    # value, so require both.)
+    df_fit <- try(lavaan::fitMeasures(tspa_fit, "df"), silent = TRUE)
+    if (inherits(df_fit, "try-error") || length(df_fit) != 1L ||
+        !is.finite(df_fit) || df_fit != 0) return(NULL)
     if (!isTRUE(tsp_converged(tspa_fit))) return(NULL)
     # Observation count (the closed form scales by n): lavaan's own effective
     # nobs (consistent with weights / case deletion), not the raw row count.
