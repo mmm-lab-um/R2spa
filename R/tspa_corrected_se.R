@@ -264,7 +264,7 @@ vcov_corrected <- function(tspa_fit, vfsLT, which_free = NULL,
     # exactly saturated, df > 0). engine = "fd" (the default) is
     # byte-identical to the original central-difference implementation below.
     J <- if (engine == "analytic")
-        vcov_jacobian_analytic(tspa_fit, args0, names0, which_free) else NULL
+        vcov_jacobian_analytic(tspa_fit, names0, which_free) else NULL
     if (is.null(J)) {
         # Central-difference step: verified stable over h in 1e-5..1e-7 for
         # the package's stage-2 models (the stage-2 MLE is strongly curved,
@@ -320,7 +320,7 @@ check_refit_convergence <- function(fit, k) {
 # model (the free params span the q(q+1)/2 score covariances, df = 0, at the
 # MLE); that saturation is checked before the closed form is used, otherwise
 # the caller falls back to the FD.
-vcov_jacobian_analytic <- function(tspa_fit, args0, names0, which_free) {
+vcov_jacobian_analytic <- function(tspa_fit, names0, which_free) {
     if (tsp_ngroups(tspa_fit) != 1L) return(NULL)
     est <- try(lavaan::lavInspect(tspa_fit, "est"), silent = TRUE)
     if (inherits(est, "try-error")) return(NULL)
@@ -341,10 +341,12 @@ vcov_jacobian_analytic <- function(tspa_fit, args0, names0, which_free) {
     p <- length(names0)
     if (p != q * (q + 1L) / 2L) return(NULL)
     if (!isTRUE(tsp_converged(tspa_fit))) return(NULL)
-    # Observation count (the closed form scales by n).
-    data0 <- args0$data
-    if (is.null(data0)) return(NULL)
-    n <- nrow(data0)
+    # Observation count (the closed form scales by n): lavaan's own effective
+    # nobs (consistent with weights / case deletion), not the raw row count.
+    n_obs <- try(tsp_nobs(tspa_fit), silent = TRUE)
+    if (inherits(n_obs, "try-error") || length(n_obs) != 1L ||
+        !is.finite(n_obs)) return(NULL)
+    n <- as.numeric(n_obs)
     # Geometry: F = (I-beta)^{-1} psi (I-beta)^{-1}' (full latent cov, not
     # est$psi, which is exogenous-only), Sigma = L F L' + T.
     M <- try(solve(diag(q) - beta), silent = TRUE)

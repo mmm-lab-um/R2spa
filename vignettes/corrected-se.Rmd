@@ -94,7 +94,7 @@ vcov(tspa_fit)
 sqrt(diag(vc_cor))
 ```
 
-The `engine` argument of `vcov_corrected()` (and of `tspa(corrected_se = TRUE)`) selects how the Jacobian is evaluated. The default `"fd"` uses central finite differences (one stage-2 refit on each side of each free element); `"analytic"` evaluates the same Jacobian refit-free and deterministically for the (approximately) saturated single-group case, transparently falling back to `"fd"` otherwise (multigroup, or a restricted structural model). The two agree to the finite-difference noise floor whenever `"analytic"` applies, and the analytic result is bit-reproducible.
+The `engine` argument of `vcov_corrected()` (and of `tspa(corrected_se = TRUE)`) selects how the Jacobian is evaluated. The default `"fd"` uses central finite differences (one stage-2 refit on each side of each free element); `"analytic"` evaluates the same Jacobian refit-free and deterministically for the saturated single-group case (the free structural parameters exactly span the score covariances, df = 0), transparently falling back to `"fd"` otherwise (multigroup, or a structural model that is not exactly saturated). The two agree to the finite-difference noise floor whenever `"analytic"` applies, and the analytic result is bit-reproducible.
 
 Standardized solution
 

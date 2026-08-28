@@ -467,15 +467,14 @@ test_that("T12: engine = 'analytic' honours which_free exactly as the FD", {
 test_that("T13: the saturation gate routes saturated -> analytic, restricted -> FD", {
   # Saturated single-group fit: the closed form applies (a p x nfree matrix,
   # nfree = q^2 loadings + q(q+1)/2 error terms = 15 for q = 3).
-  j_sat <- vcov_jacobian_analytic(tspa_joint3, attr(tspa_joint3, "tspa_args"),
-                                  names(coef(tspa_joint3)), seq_len(15))
+  j_sat <- R2spa:::vcov_jacobian_analytic(tspa_joint3, names(coef(tspa_joint3)),
+                                          seq_len(15))
   expect_true(is.matrix(j_sat))
   expect_equal(dim(j_sat), c(length(coef(tspa_joint3)), 15))
   # Restricted fit (df > 0, not exactly saturated): the closed form does not
   # apply -> NULL -> FD.
-  j_nsat <- vcov_jacobian_analytic(
-    tspa_joint3_nsat, attr(tspa_joint3_nsat, "tspa_args"),
-    names(coef(tspa_joint3_nsat)), seq_len(15))
+  j_nsat <- R2spa:::vcov_jacobian_analytic(
+    tspa_joint3_nsat, names(coef(tspa_joint3_nsat)), seq_len(15))
   expect_null(j_nsat)
   # The public path still yields a finite corrected covariance (the FD).
   vc_nsat <- vcov_corrected(tspa_joint3_nsat, vfsLT = attr(fs_joint3, "vfsLT"),

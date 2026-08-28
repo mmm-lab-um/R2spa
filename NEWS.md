@@ -4,12 +4,12 @@
 - `vcov_corrected()` and `tspa(corrected_se = TRUE)` gain an `engine`
   argument. `"fd"` (the default) is the original central finite-difference
   Jacobian; `"analytic"` evaluates the same Jacobian refit-free and
-  deterministically via a closed form for the (approximately) saturated
-  single-group case (PLAN 16), transparently falling back to `"fd"` for
-  multigroup or restricted structural models that do not approximately
-  saturate the score covariance. The two engines agree to the
-  finite-difference noise floor whenever `"analytic"` applies, and the
-  analytic result is bit-reproducible (no refits, no optimizer jitter).
+  deterministically via a closed form for the saturated single-group case
+  (PLAN 16), transparently falling back to `"fd"` for multigroup or
+  structural models that are not exactly saturated (df > 0). The two engines
+  agree to the finite-difference noise floor whenever `"analytic"` applies,
+  and the analytic result is bit-reproducible (no refits, no optimizer
+  jitter).
 - `tspa_mx_model()` now auto-derives its measurement inputs from
   `get_fs.merMod()` results as well: with `se_fs`/`fsL`/`fsT`/`fsb` all
   omitted, the per-cluster 3-D `fsL`/`fsT` array attributes become
