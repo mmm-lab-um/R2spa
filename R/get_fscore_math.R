@@ -37,7 +37,10 @@ compute_lav_fs_matrices <- function(
 ) {
   method <- match.arg(method)
   if (method == "regression") {
-    fsL <- diag(nrow(acov)) - acov %*% solve(psi)
+    # Solve psi X = t(acov) instead of forming solve(psi): identical for
+    # symmetric psi (all call sites pass a symmetric latent covariance)
+    # without an explicit inverse.
+    fsL <- diag(nrow(acov)) - t(solve(psi, t(acov)))
     fsT <- fsL %*% acov
     if (is.null(alpha)) {
       fsb <- NULL
@@ -643,12 +646,16 @@ correct_evfs <- function(
       mats = est_raw
     )
     c_col <- nrow(J) %/% p
+    # tr(th Ji vc Jj') = sum((th Ji) * (Jj vc')) by tr(AB) = sum(A * t(B))
+    # with vc symmetric: each (i, j) pair pays only the element-wise sum,
+    # and the per-i / per-j products are hoisted out of the pair loop.
+    Jrows <- function(k) J[k + p * (0:(c_col - 1)), , drop = FALSE]
+    thJ <- lapply(seq_len(p), function(i) th %*% Jrows(i))
+    Jvc <- lapply(seq_len(p), function(j) Jrows(j) %*% vc_fit)
     out <- matrix(nrow = p, ncol = p)
     for (j in seq_len(p)) {
       for (i in j:p) {
-        Ji <- J[i + p * (0:(c_col - 1)), , drop = FALSE]
-        Jj <- J[j + p * (0:(c_col - 1)), , drop = FALSE]
-        out[i, j] <- sum(diag(th %*% Ji %*% vc_fit %*% t(Jj)))
+        out[i, j] <- sum(thJ[[i]] * Jvc[[j]])
         if (i > j) {
           out[j, i] <- out[i, j]
         }
@@ -756,8 +763,11 @@ compute_fsrel <- function(fit, method = c("regression", "Bartlett")) {
     )
     va <- jac_a %*% vc_fit %*% t(jac_a)
     aa <- crossprod(a[[g]]) + va
-    outs[[g]] <- sum(diag(lam %*% psi %*% t(lam) %*% aa)) /
-      sum(diag(sigmas[[g]]$cov %*% aa))
+    # tr(M aa) = sum(M * aa): aa is symmetric by construction, the implied
+    # covariance is symmetric, and lam %*% psi %*% t(lam) is an outer
+    # product (lam is n x 1, psi is 1 x 1).
+    lam_psi_lamT <- tcrossprod(lam %*% psi, lam)
+    outs[[g]] <- sum(lam_psi_lamT * aa) / sum(sigmas[[g]]$cov * aa)
   }
   outs
 }
