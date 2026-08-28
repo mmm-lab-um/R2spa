@@ -8,8 +8,8 @@
 #' equivalent to [`lavaan::standardizedSolution()`], which matches it only
 #' in the single-group case (the function emits that message when it
 #' applies). When the input fit is an SE-corrected `tspa()` fit (produced
-#' with `tspa(corrected_se = TRUE)`, attribute `tspa_corrected = TRUE`) --
-#' or when `acov_par = vcov(corrected_fit)` is supplied -- the reported
+#' with `tspa(corrected_se = TRUE)`, attribute `tspa_corrected = TRUE`) —
+#' or when `acov_par = vcov(corrected_fit)` is supplied — the reported
 #' standard errors are the first-order corrected grand-standardized
 #' standard errors, while the point estimates (`est.std`) are unchanged.
 #'
@@ -41,7 +41,10 @@
 #' @param free_list A list of model matrices that indicate the position of
 #'                  the free parameters in the parameter vector.
 #' @param level The confidence level required.
-#' @return A matrix of the standardized model parameters and standard errors.
+#' @return A data frame (class `lavaan.data.frame`) with one row per structural
+#' (`~`) parameter in partable order: `lhs`, `op`, `rhs`, `exo`, `group`,
+#' `block`, `label`, the grand standardized estimate `est.std`, and, when
+#' `se = TRUE`, `se`, `z`, `pvalue`, `ci.lower`, and `ci.upper`.
 #'
 #' @importFrom stats pnorm qnorm
 #' @importFrom utils tail
@@ -202,8 +205,12 @@ grand_standardized_solution <- function(object, model_list = NULL,
                               free = free_beta_psi_alpha)
     }
     acov_par <- acov_par[pos_par, pos_par]
-    tmp_acov_std_beta <- jac %*% acov_par %*% t(jac)
-    out$se <- sqrt(diag(as.matrix(tmp_acov_std_beta[out_idx, out_idx])))
+    # Only the diagonal of the structural-path block of jac %*% acov_par %*%
+    # t(jac) is needed. Subset the Jacobian first (out_idx rows of the full
+    # q^2 x p Jacobian), then use rowSums(A * B) == diag(A %*% t(B)) to avoid
+    # forming the full q^2 x q^2 covariance matrix.
+    jac_sub <- jac[out_idx, , drop = FALSE]
+    out$se <- sqrt(rowSums((jac_sub %*% acov_par) * jac_sub))
     out$z <- out$est.std / out$se
     out$pvalue <- 2 * (1 - pnorm(abs(out$z)))
     ci <- out$est.std +
@@ -253,7 +260,10 @@ std_beta_est <- function(model_list, free_list = NULL, est = NULL) {
   v_eta <- veta(beta, psi = psi)
   s_eta <- sqrt(diag(v_eta))
   inv_s_eta <- 1 / s_eta
-  diag(inv_s_eta) %*% beta %*% diag(s_eta)
+  # diag(inv_s_eta) %*% beta %*% diag(s_eta) as O(q^2) recycling: a length-nrow
+  # vector recycles down the columns (row scaling), rep(v, each = nrow) scales
+  # the columns. Also immune to diag()'s length-1-numeric-as-size trap.
+  (inv_s_eta * beta) * rep(s_eta, each = nrow(beta))
 }
 
 # Function for combining free estimates into a vector
@@ -313,7 +323,7 @@ grand_std_beta_est <- function(model_list, ns, free_list = NULL, est = NULL) {
   s_eta <- sqrt(diag(v_eta))
   inv_s_eta <- 1 / s_eta
   lapply(beta_list, function(x) {
-    diag(inv_s_eta) %*% x %*% diag(s_eta)
+    (inv_s_eta * x) * rep(s_eta, each = nrow(x))
   })
 }
 

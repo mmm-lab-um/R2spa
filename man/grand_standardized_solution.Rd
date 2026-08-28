@@ -45,7 +45,10 @@ the free parameters in the parameter vector.}
 \item{level}{The confidence level required.}
 }
 \value{
-A matrix of the standardized model parameters and standard errors.
+A data frame (class \code{lavaan.data.frame}) with one row per structural
+(\code{~}) parameter in partable order: \code{lhs}, \code{op}, \code{rhs}, \code{exo}, \code{group},
+\code{block}, \code{label}, the grand standardized estimate \code{est.std}, and, when
+\code{se = TRUE}, \code{se}, \code{z}, \code{pvalue}, \code{ci.lower}, and \code{ci.upper}.
 }
 \description{
 Grand standardized solution of a two-stage path analysis model.
@@ -56,8 +59,8 @@ from the grand (pooled) means and variance-covariances and is \strong{not}
 equivalent to \code{\link[lavaan:standardizedSolution]{lavaan::standardizedSolution()}}, which matches it only
 in the single-group case (the function emits that message when it
 applies). When the input fit is an SE-corrected \code{tspa()} fit (produced
-with \code{tspa(corrected_se = TRUE)}, attribute \code{tspa_corrected = TRUE}) --
-or when \code{acov_par = vcov(corrected_fit)} is supplied -- the reported
+with \code{tspa(corrected_se = TRUE)}, attribute \code{tspa_corrected = TRUE}) —
+or when \code{acov_par = vcov(corrected_fit)} is supplied — the reported
 standard errors are the first-order corrected grand-standardized
 standard errors, while the point estimates (\code{est.std}) are unchanged.
 
