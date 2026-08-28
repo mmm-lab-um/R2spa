@@ -191,3 +191,66 @@ test_that("guards: multigroup fsL/fsT are rejected (Phase 1 single-group)", {
     "not supported yet"
   )
 })
+
+test_that("guards: incomplete or mistyped measurement inputs are rejected", {
+  # NA in se_fs (an NA error variance would otherwise yield a RED-status fit)
+  expect_error(
+    tspa_mx_model(model2, data = fsd2, se_fs = c(ind60 = NA, dem60 = 0.6756472)),
+    "must not contain NA"
+  )
+  t_ok <- matrix(c(0.25, 0, 0, 0.4), nrow = 2,
+                 dimnames = list(c("fs_ind60", "fs_dem60"),
+                                 c("fs_ind60", "fs_dem60")))
+  # NA on the fsT diagonal (a score without a known error variance)
+  t_na <- t_ok; t_na[2, 2] <- NA
+  expect_error(
+    tspa_mx_model(model2, data = dat2[, 1:2], fsL = L2, fsT = t_na),
+    "error variance"
+  )
+  # fsT without column names (previously: opaque 'subscript out of bounds')
+  t_nc <- t_ok; colnames(t_nc) <- NULL
+  expect_error(
+    tspa_mx_model(model2, data = dat2[, 1:2], fsL = L2, fsT = t_nc),
+    "columns must be named"
+  )
+  # non-numeric definition-variable column
+  dn <- dat2; dn$ev_fs_ind60 <- as.character(dn$ev_fs_ind60)
+  expect_error(
+    suppressWarnings(tspa_mx_model(model2, data = dn,
+                                   fsL = L2, fsT = T2dv, fsb = b2dv)),
+    "must be numeric"
+  )
+  # a score loading on no latent (previously dropped silently)
+  l_na <- L2; l_na[1, ] <- NA
+  expect_error(
+    tspa_mx_model(model2, data = dat2[, 1:2], fsL = l_na, fsT = t_ok),
+    "load on no latent"
+  )
+  # zero-row data
+  expect_error(
+    tspa_mx_model(model2, data = fsd2[0, ], se_fs = se2),
+    "at least one row"
+  )
+})
+
+test_that("auto-seed release is user-gated (user == 0): a user-fixed zero mean stays fixed", {
+  spec <- R2spa:::tspa_mx_spec(se2, NULL, NULL, NULL)
+  vcol <- function(m, x) {
+    v <- c(m$manifestVars, m$latentVars)
+    match(x, v)
+  }
+  # user-declared 'ind60 ~ 0*1' (fixed zero mean): must not be re-freed
+  ms <- R2spa:::tspa_mx_model_string("dem60 ~ ind60; ind60 ~ 0*1", spec)
+  m_fix <- suppressWarnings(mxRun(R2spa:::lav_to_mx_ram(ms, spec, fsd2),
+                                  silent = TRUE))
+  i <- vcol(m_fix, "ind60")
+  expect_false(sprintf("m1.M[1,%d]", i) %in% names(coef(m_fix)))
+  # the auto-seeded latent variance is still released (free)
+  expect_true(sprintf("m1.S[%d,%d]", i, i) %in% names(coef(m_fix)))
+  # control: no user mean structure -> the latent mean is free (need_mean)
+  m_free <- suppressWarnings(mxRun(
+    R2spa:::lav_to_mx_ram(R2spa:::tspa_mx_model_string("dem60 ~ ind60", spec),
+                          spec, fsd2), silent = TRUE))
+  j <- vcol(m_free, "ind60")
+  expect_true(sprintf("m1.M[1,%d]", j) %in% names(coef(m_free)))
+})
