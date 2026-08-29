@@ -358,6 +358,18 @@ vcov_jacobian_analytic <- function(tspa_fit, names0, which_free) {
     if (inherits(est, "try-error")) return(NULL)
     args0 <- attr(tspa_fit, "tspa_args")
     data <- args0$data
+    # The analytic score is the unweighted normal-ML score (both the xbar/S_ml
+    # site and the score_grp site assume it). estimator.orig is the user's
+    # requested estimator (estimator alone is the base likelihood -- "ML" even
+    # for MLR, which pairs the ML likelihood with robust SEs). Any non-ML
+    # request (MLR, WLS, ULS, ...) or case weights changes the objective the
+    # FD/refit engine respects via refits, so return NULL -> the FD fallback
+    # rather than scoring the wrong likelihood.
+    opts <- try(lavaan::lavInspect(tspa_fit, "options"), silent = TRUE)
+    if (inherits(opts, "try-error")) return(NULL)
+    est_orig <- opts[["estimator.orig"]]
+    if (is.null(est_orig) || any(est_orig != "ML")) return(NULL)
+    if (!is.null(args0$weights)) return(NULL)
     gc <- if (ngrp == 1L) NULL else args0$group
     # Per-group effective sample size, matching lavaan's nobs (the FD engine
     # respects it implicitly via refits). If the analytic path can't align its

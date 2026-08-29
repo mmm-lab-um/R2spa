@@ -598,6 +598,26 @@ test_that("T18: the analytic engine is bit-deterministic on every A/B shape", {
     vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"), engine = "analytic"))
 })
 
+test_that("T19: the analytic engine falls back to FD for a non-ML estimator", {
+  # The analytic score is the unweighted normal-ML score. A non-ML estimator
+  # (here MLR: the ML likelihood with robust SEs) changes the objective the
+  # FD/refit engine respects via refits, so vcov_jacobian_analytic() must
+  # return NULL -> the FD fallback. The guard reads estimator.orig (not
+  # estimator: MLR reports its base likelihood as "ML").
+  fit_mlr <- tspa("dem60 ~ ind60\ndem65 ~ ind60 + dem60", data = fs_joint3,
+                  fsT = attr(fs_joint3, "fsT"), fsL = attr(fs_joint3, "fsL"),
+                  estimator = "MLR")
+  expect_equal(lavInspect(fit_mlr, "options")[["estimator.orig"]], "MLR")
+  expect_null(R2spa:::vcov_jacobian_analytic(fit_mlr, names(coef(fit_mlr)),
+                                             seq_len(15)))
+  # The public path still returns a finite, correctly-dimensioned corrected
+  # covariance via the FD fallback, so a non-ML corrected fit is never broken.
+  va <- vcov_corrected(fit_mlr, vfsLT = attr(fs_joint3, "vfsLT"),
+                       engine = "analytic")
+  expect_true(all(is.finite(va)))
+  expect_equal(dim(va), dim(vcov(fit_mlr)))
+})
+
 test_that("IT9: in-place corrected_se = TRUE, engine = 'analytic' matches the FD", {
   fa <- tspa("dem60 ~ ind60\ndem65 ~ ind60 + dem60", data = fs_joint3,
              fsT = attr(fs_joint3, "fsT"), fsL = attr(fs_joint3, "fsL"),
