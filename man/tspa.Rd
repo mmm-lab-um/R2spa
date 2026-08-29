@@ -308,6 +308,16 @@ exogenous latent mean at zero and estimates the factor-score mean, whereas
 quantities, not on how the mean is split (see \code{tspa_mx_model()} under
 "Mean structure").
 }
+
+\subsection{Re-fitting with \code{lavaan::update()}}{
+
+The returned fit carries a self-contained \verb{@call}, so
+\code{lavaan::update()} works on it as it does on a hand-written
+\code{lavaan::sem()} fit. In particular
+\code{update(fit, meanstructure = TRUE)} re-fits the stage-2 model with a
+mean structure, equivalent to calling \code{tspa(..., meanstructure = TRUE)}
+from the start.
+}
 }
 \examples{
 library(lavaan)

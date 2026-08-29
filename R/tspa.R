@@ -115,6 +115,15 @@
 #' quantities, not on how the mean is split (see `tspa_mx_model()` under
 #' "Mean structure").
 #'
+#' ## Re-fitting with `lavaan::update()`
+#'
+#' The returned fit carries a self-contained `@call`, so
+#' `lavaan::update()` works on it as it does on a hand-written
+#' `lavaan::sem()` fit. In particular
+#' `update(fit, meanstructure = TRUE)` re-fits the stage-2 model with a
+#' mean structure, equivalent to calling `tspa(..., meanstructure = TRUE)`
+#' from the start.
+#'
 #' @param model A string variable describing the structural path model,
 #'              in \code{lavaan} syntax.
 #' @param data A data frame containing factor scores. When `data` is a
@@ -900,6 +909,18 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
                   data  = data,
                   se = se,
                   ...)
+  # lavaan stores the call above in @call with the tspa() locals
+  # (tspaModel, data, se) as symbols, which are out of scope when
+  # lavaan::update() re-evaluates the call (e.g. update(fit,
+  # meanstructure = TRUE)). Inline them as literals so the stored call
+  # is self-contained, as for a hand-written sem() call.
+  cl <- tspa_fit@call
+  if (is.call(cl)) {
+    if (is.symbol(cl[["model"]])) cl[["model"]] <- tspaModel
+    if (is.symbol(cl[["data"]]))  cl[["data"]]  <- data
+    if (is.symbol(cl[["se"]]))    cl[["se"]]    <- se
+    tspa_fit@call <- cl
+  }
   attr(tspa_fit, "tspaModel") <- tspaModel
   if (!is.null(fsT)) {
     attr(tspa_fit, "fsT") <- fsT
