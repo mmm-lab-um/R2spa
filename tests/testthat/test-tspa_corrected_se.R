@@ -109,8 +109,9 @@ tspa_joint3_nsat <- tspa("dem65 ~ ind60", data = fs_joint3,
                          fsT = attr(fs_joint3, "fsT"),
                          fsL = attr(fs_joint3, "fsL"))
 ## FD references for the remaining A/B shapes (restricted, fixed-mean prior,
-## 2-factor saturated). tspa_mg -- the multigroup + free-mean reference --
-## reuses vcov_corr_mg above, whose default engine is "fd".
+## 2-factor saturated). The multigroup + free-mean reference (T14) is vc_fd_mg
+## (file scope, explicit engine = "fd"); vcov_corr_mg is the default-engine
+## (analytic) standalone correction used by T2/IT6.
 vc_fd_nsat <- vcov_corrected(tspa_joint3_nsat,
                              vfsLT = attr(fs_joint3, "vfsLT"), engine = "fd")
 vc_fd_prior <- vcov_corrected(tspa_prior,

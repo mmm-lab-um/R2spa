@@ -5,11 +5,11 @@
 #' approximation: the stage-2 covariance `vcov(tspa_fit)` is augmented by
 #' `J %*% vfsLT %*% t(J)`, where `J` is the Jacobian of the stage-2
 #' estimates with respect to the selected `fsL`/`fsT` free elements. With the
-#' default `engine = "fd"`, `J` is estimated by central differences, one full
-#' stage-2 refit on each side of each free element while reusing the base
-#' fit's coefficients, so the cost is `2 x (number of free elements)` stage-2
-#' refits; with `engine = "analytic"` it is instead evaluated refit-free via
-#' a closed form (see the `engine` argument below).
+#' default `engine = "analytic"`, `J` is evaluated refit-free via a closed form
+#' (see the `engine` argument below); with `engine = "fd"` it is instead
+#' estimated by central differences, one full stage-2 refit on each side of each
+#' free element while reusing the base fit's coefficients, so the cost is
+#' `2 x (number of free elements)` stage-2 refits.
 #'
 #' The correction is **partial by design**. It propagates only the *sampling*
 #' uncertainty of the stage-1 estimates of `fsL` (loadings/cross-loadings)
@@ -280,11 +280,12 @@ vcov_corrected <- function(tspa_fit, vfsLT, which_free = NULL,
         }
         c_i
     }
-    # Jacobian J = d(thetahat)/d(eta). engine = "analytic" evaluates it
-    # refit-free via the saturated closed form (PLAN 16, section 2.4) and
-    # silently falls back to the finite-difference engine when the analytic
-    # form is not applicable (multigroup, or a structural model that is not
-    # exactly saturated, df > 0). engine = "fd" (the default) is
+    # Jacobian J = d(thetahat)/d(eta). engine = "analytic" (the default)
+    # evaluates it refit-free via the influence-function closed form (PLAN 16,
+    # sections 2.4 and 4.3; covers saturated, restricted, multigroup, and
+    # mean-structure models) and silently falls back to the finite-difference
+    # engine when the analytic form is not applicable (an unrecognised free
+    # parameter or unequal per-group free-param counts). engine = "fd" is
     # byte-identical to the original central-difference implementation below.
     J <- if (engine == "analytic")
         vcov_jacobian_analytic(tspa_fit, names0, which_free) else NULL
@@ -358,7 +359,16 @@ vcov_jacobian_analytic <- function(tspa_fit, names0, which_free) {
     args0 <- attr(tspa_fit, "tspa_args")
     data <- args0$data
     gc <- if (ngrp == 1L) NULL else args0$group
-    gns <- if (ngrp == 1L) character(0) else names(est)
+    # Group labels for the data split, from lavInspect("group.label") (falling
+    # back to the est list names). The per-group partable is indexed
+    # positionally (est[[g]]), so this is robust to an unnamed per-group est
+    # list; if the labels can't be determined cleanly, return NULL -> FD.
+    glab <- if (ngrp == 1L) character(0) else {
+        gl <- unlist(lavaan::lavInspect(tspa_fit, "group.label"))
+        if (is.null(gl) || length(gl) != ngrp) names(est) else gl
+    }
+    if (ngrp > 1L && (is.null(glab) || length(glab) != ngrp ||
+        any(is.na(glab)))) return(NULL)
     p_total <- length(names0)
     if (p_total %% ngrp != 0L) return(NULL)
     pg <- p_total %/% ngrp
@@ -376,7 +386,7 @@ vcov_jacobian_analytic <- function(tspa_fit, names0, which_free) {
     if (max(which_free) > nfull_total) return(NULL)
     J_full <- matrix(0, p_total, nfull_total)
     for (g in seq_len(ngrp)) {
-        e <- if (ngrp == 1L) est else est[[gns[g]]]
+        e <- if (ngrp == 1L) est else est[[g]]
         L0 <- e$lambda; psi0 <- e$psi
         q <- nrow(psi0)
         if (q != q0 || nrow(L0) != q || ncol(L0) != q) return(NULL)
@@ -384,7 +394,7 @@ vcov_jacobian_analytic <- function(tspa_fit, names0, which_free) {
         if (is.null(lat) || any(is.na(lat))) return(NULL)
         tri <- which(lower.tri(diag(q), diag = TRUE), arr.ind = TRUE)
         nfull <- q * q + nrow(tri)
-        sub <- if (ngrp == 1L) data else data[data[[gc]] == gns[g], ]
+        sub <- if (ngrp == 1L) data else data[data[[gc]] == glab[g], ]
         x <- try(as.matrix(sub[, score_cols]), silent = TRUE)
         if (inherits(x, "try-error") || any(!is.finite(x))) return(NULL)
         n <- nrow(x); xbar <- colMeans(x)
@@ -470,23 +480,30 @@ vcov_jacobian_analytic <- function(tspa_fit, names0, which_free) {
             out
         }
         # H = d^2 l / dtheta^2, C = d^2 l / dtheta deta: central differences
-        # of the analytic score (refit-free and deterministic).
+        # of the analytic score (refit-free and deterministic). Wrapped in
+        # try(): a singular solve() inside score_grp (singular I - beta or
+        # implied covariance at a perturbed point) returns NULL -> the FD
+        # fallback, rather than aborting the correction.
         h <- 1e-6
-        H <- matrix(0, pg, pg)
-        for (m in seq_len(pg)) {
-            ev <- numeric(pg); ev[m] <- 1
-            st <- h * max(1, abs(theta0[m]))
-            H[, m] <- (score_grp(theta0 + st * ev, eta0) -
-                       score_grp(theta0 - st * ev, eta0)) / (2 * st)
-        }
-        C <- matrix(0, pg, nfull)
-        for (j in seq_len(nfull)) {
-            ev <- numeric(nfull); ev[j] <- 1
-            st <- h * max(1, abs(eta0[j]))
-            C[, j] <- (score_grp(theta0, eta0 + st * ev) -
-                       score_grp(theta0, eta0 - st * ev)) / (2 * st)
-        }
-        Jg <- try(-solve(H, C), silent = TRUE)
+        HC <- try({
+            H <- matrix(0, pg, pg)
+            for (m in seq_len(pg)) {
+                ev <- numeric(pg); ev[m] <- 1
+                st <- h * max(1, abs(theta0[m]))
+                H[, m] <- (score_grp(theta0 + st * ev, eta0) -
+                           score_grp(theta0 - st * ev, eta0)) / (2 * st)
+            }
+            C <- matrix(0, pg, nfull)
+            for (j in seq_len(nfull)) {
+                ev <- numeric(nfull); ev[j] <- 1
+                st <- h * max(1, abs(eta0[j]))
+                C[, j] <- (score_grp(theta0, eta0 + st * ev) -
+                           score_grp(theta0, eta0 - st * ev)) / (2 * st)
+            }
+            list(H = H, C = C)
+        }, silent = TRUE)
+        if (inherits(HC, "try-error")) return(NULL)
+        Jg <- try(-solve(HC$H, HC$C), silent = TRUE)
         if (inherits(Jg, "try-error")) return(NULL)
         rows <- (g - 1L) * pg + seq_len(pg)
         lcols <- (g - 1L) * q2 + seq_len(q2)
