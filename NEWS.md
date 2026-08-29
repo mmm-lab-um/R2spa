@@ -1,6 +1,19 @@
 # R2spa 0.0.4
 
 ## New Features
+- `get_fs()` gains a `brmsfit` method: Bayesian Gaussian mixed models (brms)
+  are now a supported stage-1 input alongside lavaan, lme4, and mirt. The
+  per-level posterior-mean random effects of the (single) random-effects term
+  are the factor scores, with `fsL`/`fsT`/`scoring_matrix` from the same EB/ML
+  formulas the `merMod` method uses, generalised to a `p x p` random-effects
+  covariance `D` reconstructed from the posterior of the term's `sd_`/`cor_`
+  hyperparameters. `method = "EB"` (default) returns the posterior-mean random
+  effects; `method = "ML"` a prior-free per-cluster OLS estimate. v1 requires
+  the Gaussian family and a single random grouping factor (random slopes
+  supported; `p > 2` terms via the generic Cholesky). `brms`/`posterior`/
+  `reformulas` are `Suggests`-only and guarded by `require_brms()`; the fixed
+  and random designs are built directly from the model formula + data
+  (bit-identical to `lme4::getME`), so no throwaway fit is required.
 - `vcov_corrected()` and `tspa(corrected_se = TRUE)` gain an `engine`
   argument. `"fd"` (the default) is the original central finite-difference
   Jacobian; `"analytic"` evaluates the same Jacobian refit-free and

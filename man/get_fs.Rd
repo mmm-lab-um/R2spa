@@ -5,6 +5,7 @@
 \alias{get_fs.default}
 \alias{get_fs.lavaan}
 \alias{get_fs.merMod}
+\alias{get_fs.brmsfit}
 \alias{get_fs.SingleGroupClass}
 \alias{get_fs.MultipleGroupClass}
 \alias{get_fs}
@@ -54,6 +55,16 @@
   ...
 )
 
+\method{get_fs}{brmsfit}(
+  object,
+  method = c("EB", "ML"),
+  corrected_fsT = FALSE,
+  vfsLT = FALSE,
+  format = c("unified", "list"),
+  legacy_names = FALSE,
+  ...
+)
+
 \method{get_fs}{SingleGroupClass}(object, prior_mean = NULL, format = c("unified", "list"), ...)
 
 \method{get_fs}{MultipleGroupClass}(object, prior_mean = NULL, format = c("unified", "list"), ...)
@@ -61,8 +72,9 @@
 get_fs(object, ...)
 }
 \arguments{
-\item{object}{A data frame, a fitted \link[lavaan:lavaan]{lavaan} model object, or a fitted
-\link[lme4:lmer]{lme4::lmer} model object (\code{merMod}).}
+\item{object}{A data frame, a fitted \link[lavaan:lavaan]{lavaan} model object, a fitted
+\link[lme4:lmer]{lme4::lmer} model object (\code{merMod}), or a fitted \link[brms:brm]{brms::brm} model
+object (\code{brmsfit}).}
 
 \item{model}{An optional string specifying the measurement model
 in \code{lavaan} syntax. Only used when \code{object} is a data frame.
@@ -101,7 +113,14 @@ per-cluster OLS estimate of the random effects, using no
 random-effects prior, analogous to Bartlett scores for
 \code{lavaan} objects). The \code{"ML"}/\code{"EB"} aliases apply to the
 lavaan path only; for \code{merMod} objects the two strings are
-distinct methods. Bartlett scores have more desirable
+distinct methods. For \code{brmsfit} objects the semantics mirror
+\code{merMod}: \code{"EB"} (default) returns the posterior-mean random
+effects of the single random-effects term and \code{"ML"} a
+prior-free per-cluster OLS estimate; the term's random-effects
+covariance is reconstructed from the posterior of its
+\code{sd_}/\code{cor_} hyperparameters (Gaussian family, one grouping
+factor; \code{corrected_fsT}, \code{vfsLT}, and \verb{prior_*} are not
+supported). Bartlett scores have more desirable
 properties than regression scores and may be preferred for
 2S-PA. \code{method = "mean"} takes the item-to-factor
 assignment from \code{sum_items} (auto-derived from the
@@ -237,7 +256,9 @@ one \code{num_re} x \code{n_j} matrix per cluster, where
 \code{S_j \%*\% (y_j - X_j \%*\% beta)} with \code{y_j}/\code{X_j} the cluster's
 rows of the model response and the fixed-effects design
 reproduces the cluster's EB scores for method \code{"EB"} and the
-per-cluster OLS (ML) scores for method \code{"ML"}.
+per-cluster OLS (ML) scores for method \code{"ML"}. The same holds for
+\code{brmsfit} models (one \code{p} x \code{n_j} matrix per level of the
+random-effects term).
 * \code{psi}: effective (prior-adjusted) covariance matrix of the
 latent variables (\verb{q x q}), group-level (not per-pattern), and
 a point estimate only (no sampling SEs of the latents are
@@ -249,7 +270,10 @@ With \code{prior_cov} supplied it equals the prior (shared across
 groups), otherwise the per-group lavaan estimate. For \code{merMod}
 objects the matrix is the first random-effects term's
 \code{VarCorr}, with dimnames renamed to match the \code{fsL} column
-names (\code{u0}/\code{u1}/..., or the legacy \code{u0_eb}/\code{u1_eb} names).
+names (\code{u0}/\code{u1}/..., or the legacy \code{u0_eb}/\code{u1_eb} names). For
+\code{brmsfit} objects it is the (posterior-mean) random-effects
+covariance of the term, reconstructed from the posterior of its
+\code{sd_}/\code{cor_} hyperparameters.
 * \code{alpha}: effective (prior-adjusted) means of the latent
 variables (a named vector of length \code{q}), with the same group
 nesting and point-estimate semantics as \code{psi}. With
@@ -291,7 +315,8 @@ by pattern name.
 \description{
 \code{get_fs()} is an S3 generic that extracts factor scores from fitted models.
 Methods are available for \code{data.frame} (fits a CFA internally), \code{lavaan}
-objects, \code{lmerMod} objects, and fitted \code{mirt} models (single-group
+objects, \code{lmerMod} objects, \code{brmsfit} objects (Gaussian mixed models; \code{brms}
+is a \code{Suggests} dependency), and fitted \code{mirt} models (single-group
 \code{SingleGroupClass} and multi-group \code{MultipleGroupClass}; \code{mirt} is a
 \code{Suggests} dependency). Multi-group mirt results carry a trailing \code{group}
 column and a per-group (\code{list}) \code{psi} attribute.

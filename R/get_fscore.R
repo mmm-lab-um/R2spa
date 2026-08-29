@@ -3,7 +3,8 @@
 #' @description
 #' `get_fs()` is an S3 generic that extracts factor scores from fitted models.
 #' Methods are available for `data.frame` (fits a CFA internally), `lavaan`
-#' objects, `lmerMod` objects, and fitted `mirt` models (single-group
+#' objects, `lmerMod` objects, `brmsfit` objects (Gaussian mixed models; `brms`
+#' is a `Suggests` dependency), and fitted `mirt` models (single-group
 #' `SingleGroupClass` and multi-group `MultipleGroupClass`; `mirt` is a
 #' `Suggests` dependency). Multi-group mirt results carry a trailing `group`
 #' column and a per-group (`list`) `psi` attribute.
@@ -84,8 +85,9 @@
 #' [compute_fs_prod()] for the derivation. Single-group lavaan models only
 #' (v1); not supported with `local = TRUE`.
 #'
-#' @param object A data frame, a fitted [lavaan] model object, or a fitted
-#'        [lme4::lmer] model object (`merMod`).
+#' @param object A data frame, a fitted [lavaan] model object, a fitted
+#'        [lme4::lmer] model object (`merMod`), or a fitted [brms::brm] model
+#'        object (`brmsfit`).
 #' @param model An optional string specifying the measurement model
 #'              in \code{lavaan} syntax. Only used when `object` is a data frame.
 #'              See \code{\link[lavaan]{model.syntax}} for more information.
@@ -120,7 +122,14 @@
 #'               random-effects prior, analogous to Bartlett scores for
 #'               `lavaan` objects). The `"ML"`/`"EB"` aliases apply to the
 #'               lavaan path only; for `merMod` objects the two strings are
-#'               distinct methods. Bartlett scores have more desirable
+#'               distinct methods. For `brmsfit` objects the semantics mirror
+#'               `merMod`: `"EB"` (default) returns the posterior-mean random
+#'               effects of the single random-effects term and `"ML"` a
+#'               prior-free per-cluster OLS estimate; the term's random-effects
+#'               covariance is reconstructed from the posterior of its
+#'               `sd_`/`cor_` hyperparameters (Gaussian family, one grouping
+#'               factor; `corrected_fsT`, `vfsLT`, and `prior_*` are not
+#'               supported). Bartlett scores have more desirable
 #'               properties than regression scores and may be preferred for
 #'               2S-PA. `method = "mean"` takes the item-to-factor
 #'               assignment from `sum_items` (auto-derived from the
@@ -230,7 +239,9 @@
 #'           `S_j %*% (y_j - X_j %*% beta)` with `y_j`/`X_j` the cluster's
 #'           rows of the model response and the fixed-effects design
 #'           reproduces the cluster's EB scores for method `"EB"` and the
-#'           per-cluster OLS (ML) scores for method `"ML"`.
+#'           per-cluster OLS (ML) scores for method `"ML"`. The same holds for
+#'           `brmsfit` models (one `p` x `n_j` matrix per level of the
+#'           random-effects term).
 #'         * `psi`: effective (prior-adjusted) covariance matrix of the
 #'           latent variables (`q x q`), group-level (not per-pattern), and
 #'           a point estimate only (no sampling SEs of the latents are
@@ -242,7 +253,10 @@
 #'           groups), otherwise the per-group lavaan estimate. For `merMod`
 #'           objects the matrix is the first random-effects term's
 #'           `VarCorr`, with dimnames renamed to match the `fsL` column
-#'           names (`u0`/`u1`/..., or the legacy `u0_eb`/`u1_eb` names).
+#'           names (`u0`/`u1`/..., or the legacy `u0_eb`/`u1_eb` names). For
+#'           `brmsfit` objects it is the (posterior-mean) random-effects
+#'           covariance of the term, reconstructed from the posterior of its
+#'           `sd_`/`cor_` hyperparameters.
 #'         * `alpha`: effective (prior-adjusted) means of the latent
 #'           variables (a named vector of length `q`), with the same group
 #'           nesting and point-estimate semantics as `psi`. With
