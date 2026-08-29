@@ -92,12 +92,14 @@ tspa_joint3 <- tspa("dem60 ~ ind60
                     dem65 ~ ind60 + dem60", data = fs_joint3,
                     fsT = attr(fs_joint3, "fsT"), fsL = attr(fs_joint3, "fsL"))
 
-## PLAN 16 (engine = "analytic", feeds T10-T13, IT9): the T3 saturated fit
-## (tspa_joint3, df = 0) is the A/B reference. The FD correction (vc_fd_sat)
-## is the expensive side (30 stage-2 refits) and is computed once; the analytic
-## (vc_an_sat) is refit-free and deterministic. A restricted fit on the same
-## 3-factor data (tspa_joint3_nsat, df > 0) drives the saturated-only -> FD
-## fallback (the closed form is exact only for a df = 0 structural model).
+## PLAN 16 (engine = "analytic", feeds T10-T18, IT9): the T3 saturated fit
+## (tspa_joint3, df = 0) is the primary A/B reference. The FD correction is the
+## expensive side (one stage-2 refit per side of each free fsL/fsT element), so
+## each FD reference is computed once at file scope; the analytic side is
+## refit-free and deterministic (computed in-test). The general path (PLAN 16
+## section 4.3) covers restricted (df > 0), multigroup, and mean-structure
+## models; the D2 gate A/Bs every corrected-SE fixture (saturated, restricted,
+## multigroup, fixed- and free-mean).
 vc_an_sat <- vcov_corrected(tspa_joint3, vfsLT = attr(fs_joint3, "vfsLT"),
                             engine = "analytic")
 vc_fd_sat <- vcov_corrected(tspa_joint3, vfsLT = attr(fs_joint3, "vfsLT"),
@@ -105,6 +107,15 @@ vc_fd_sat <- vcov_corrected(tspa_joint3, vfsLT = attr(fs_joint3, "vfsLT"),
 tspa_joint3_nsat <- tspa("dem65 ~ ind60", data = fs_joint3,
                          fsT = attr(fs_joint3, "fsT"),
                          fsL = attr(fs_joint3, "fsL"))
+## FD references for the remaining A/B shapes (restricted, fixed-mean prior,
+## 2-factor saturated). tspa_mg -- the multigroup + free-mean reference --
+## reuses vcov_corr_mg above, whose default engine is "fd".
+vc_fd_nsat <- vcov_corrected(tspa_joint3_nsat,
+                             vfsLT = attr(fs_joint3, "vfsLT"), engine = "fd")
+vc_fd_prior <- vcov_corrected(tspa_prior,
+                              vfsLT = attr(fs_prior, "vfsLT"), engine = "fd")
+vc_fd_joint2 <- vcov_corrected(tspa_joint2,
+                               vfsLT = attr(fs_joint2, "vfsLT"), engine = "fd")
 
 ########## Tests ##########
 
@@ -533,6 +544,54 @@ test_that("T13: the analytic path covers saturated and restricted (general) mode
                             engine = "analytic")
   expect_true(all(is.finite(vc_nsat)))
   expect_equal(dim(vc_nsat), dim(vcov(tspa_joint3_nsat)))
+})
+
+test_that("T14: engine = 'analytic' matches the FD on the multigroup + free-mean fit", {
+  va <- vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"), engine = "analytic")
+  # vcov_corr_mg is the file-scope default-engine ("fd") MG correction.
+  expect_equal(va, vcov_corr_mg, tolerance = 1e-2)
+  expect_equal(dim(va), dim(vcov(tspa_mg)))
+  expect_true(all(is.finite(va)))
+  expect_equal(va, t(va), tolerance = 1e-10)
+})
+
+test_that("T15: engine = 'analytic' matches the FD on the restricted (non-saturated) fit", {
+  # df > 0 -> the general path (section 4.3), not the saturated closed form.
+  va <- vcov_corrected(tspa_joint3_nsat, vfsLT = attr(fs_joint3, "vfsLT"),
+                       engine = "analytic")
+  expect_equal(va, vc_fd_nsat, tolerance = 1e-2)
+  expect_true(all(is.finite(va)))
+})
+
+test_that("T16: engine = 'analytic' matches the FD on the fixed-mean (prior) fit", {
+  # tspa_prior carries FIXED score means (fsb). The analytic engine must read
+  # the model's implied means from the partable (est$nu), not assume zero:
+  # otherwise d = xbar - mu is nonzero and a spurious mean-coupling term
+  # corrupts the cov-param score (the 4.2% vs 0.95% regression this guards).
+  va <- vcov_corrected(tspa_prior, vfsLT = attr(fs_prior, "vfsLT"),
+                       engine = "analytic")
+  expect_equal(va, vc_fd_prior, tolerance = 1e-2)
+  expect_true(all(is.finite(va)))
+})
+
+test_that("T17: engine = 'analytic' matches the FD on the 2-factor saturated fit", {
+  va <- vcov_corrected(tspa_joint2, vfsLT = attr(fs_joint2, "vfsLT"),
+                       engine = "analytic")
+  expect_equal(va, vc_fd_joint2, tolerance = 1e-2)
+  expect_true(all(is.finite(va)))
+})
+
+test_that("T18: the analytic engine is bit-deterministic on every A/B shape", {
+  # No refits and no RNG -> the corrected vcov is a pure function of the base
+  # fit + vfsLT, so repeated calls are bit-identical (the property the FD lacks).
+  expect_identical(
+    vcov_corrected(tspa_joint3_nsat, vfsLT = attr(fs_joint3, "vfsLT"),
+                   engine = "analytic"),
+    vcov_corrected(tspa_joint3_nsat, vfsLT = attr(fs_joint3, "vfsLT"),
+                   engine = "analytic"))
+  expect_identical(
+    vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"), engine = "analytic"),
+    vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"), engine = "analytic"))
 })
 
 test_that("IT9: in-place corrected_se = TRUE, engine = 'analytic' matches the FD", {

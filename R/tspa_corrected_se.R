@@ -412,6 +412,18 @@ vcov_jacobian_analytic <- function(tspa_fit, names0, which_free) {
         theta0 <- coef_all[idx_g]
         eta0 <- c(as.vector(fsL[[g]]),
                   as.vector(fsT[[g]][lower.tri(fsT[[g]], diag = TRUE)]))
+        # Base implied score means from the partable's observed-variable
+        # intercepts (est$nu): FIXED for a single-group model with a mean
+        # structure (e.g. fsb supplied), or the free-mean estimates for a
+        # multigroup model. Strip the free-mean base values so the central
+        # difference re-adds them via tv; without this, a fixed nonzero mean
+        # leaks a spurious mean-coupling term into the cov-param score.
+        nu0 <- if (!is.null(e$nu) && nrow(e$nu) > 0L)
+            as.vector(e$nu[score_cols, 1]) else rep(0, q)
+        if (length(nu0) != q) nu0 <- rep(0, q)
+        mu_fixed <- nu0
+        for (k in which(th_type == "mean"))
+            mu_fixed[th_score[k]] <- mu_fixed[th_score[k]] - theta0[k]
         # Analytic score s(theta, eta) for the group (cov + mean params).
         score_grp <- function(tv, ev) {
             beta_of <- function(tv) { b <- matrix(0, q, q)
@@ -426,7 +438,7 @@ vcov_jacobian_analytic <- function(tspa_fit, names0, which_free) {
             for (i in seq_len(nrow(tri)))
                 Tm[tri[i, 1], tri[i, 2]] <- ev[q * q + i]
             Tm <- Tm + t(Tm) - diag(diag(Tm))
-            mu <- rep(0, q)
+            mu <- mu_fixed
             for (k in which(th_type == "mean")) mu[th_score[k]] <- tv[k]
             M <- solve(diag(q) - beta_of(tv))
             F <- M %*% psi_of(tv) %*% t(M)
