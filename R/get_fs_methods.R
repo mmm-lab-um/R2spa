@@ -1788,6 +1788,19 @@ reorder_ecov_col <- function(nm) {
 # are the headline cases, p > 2 via the generic Cholesky). Multiple distinct
 # grouping factors are deferred. `corrected_fsT` / `vfsLT` / `prior_*` are not
 # supported (rejected), matching get_fs.merMod().
+#
+# Location-scale extension: a distributional (location-scale) Gaussian model
+# with a RANDOM SIGMA coefficient (e.g. bf(y ~ x + (x|p|Subject),
+# sigma ~ (1|p|Subject))) is scored posterior-based (the mirt-EAP pattern):
+# each RE coefficient (mu intercept/slope, sigma intercept/slope) is one
+# latent, its score is the posterior mean of the corresponding r_ draws, and
+# the measurement-error matrices come from the per-level posterior covariance
+# of those draws fed through the shared compute_lav_fs_matrices() regression-
+# form engine (get_fs_blocks.brmsfit_ls()). Everything is read from the fitted
+# posterior -- no design matrix is built, which sidesteps the
+# reformulas::mkReTrms hard error on the nested (x|p|Subject) syntax. That
+# path is EB-only (method = "ML" is rejected: prior-free OLS presumes a
+# constant residual variance) and carries no scoring_matrix.
 # ===========================================================================
 
 require_brms <- function() {
@@ -1855,6 +1868,51 @@ brms_re_cov <- function(draws, group, cnms) {
   D <- S %*% R %*% S
   dimnames(D) <- list(cnms, cnms)
   D
+}
+
+# Does the posterior contain a random sigma coefficient? The signal is the raw
+# RE draws of the sigma (scale) submodel, whose group part carries a
+# `__sigma` infix: r_<group>__sigma[<level>,<coef>]. A mu-submodel RE merely
+# NAMED "sigma_*" has no infix (r_<group>[<level>,sigma_*]) and is not a
+# signal; no random sigma RE means the plain Gaussian path applies.
+brms_ls_detected <- function(draws) {
+  any(grepl("^r_[^[]*__sigma\\[", colnames(draws)))
+}
+
+# Parse the raw RE draw columns of a brms posterior into a one-row-per-column
+# data frame with columns:
+#   col   - the draw column name
+#   group - the RE grouping factor name
+#   sigma - TRUE for sigma-submodel (scale) REs, FALSE for mu-submodel REs
+#   level - the grouping-factor level value, as it appears in the draw name
+#   coef  - the canonical coefficient name: mu-submodel coefs verbatim,
+#           sigma-submodel coefs prefixed with "sigma_" (matching the third
+#           dim of coef(object)[[group]] and the sd_/cor_ hyperparameters)
+# Columns without the r_<group>[<level>,<coef>] shape (fixed parameters,
+# sd_/cor_ hyperparameters, .chain/.iteration/.draw) are dropped.
+brms_re_draw_cols <- function(draws) {
+  pat <- "^r_(.+?)(__sigma)?\\[(.+),(.*)\\]$"
+  cn <- colnames(draws)
+  m <- regmatches(cn, regexec(pat, cn))
+  ok <- vapply(m, length, integer(1L)) == 5L
+  if (!any(ok)) {
+    return(data.frame(
+      col = character(0), group = character(0), sigma = logical(0),
+      level = character(0), coef = character(0), stringsAsFactors = FALSE
+    ))
+  }
+  mat <- do.call(rbind, m[ok])
+  # Column 1 of a regexec capture is the full match; columns 2-5 are the
+  # (group, "__sigma" infix, level, coef) captures.
+  sigma <- mat[, 3L] == "__sigma"
+  data.frame(
+    col = cn[ok],
+    group = mat[, 2L],
+    sigma = sigma,
+    level = mat[, 4L],
+    coef = ifelse(sigma, paste0("sigma_", mat[, 5L]), mat[, 5L]),
+    stringsAsFactors = FALSE
+  )
 }
 
 # Per-level blocks for the single random-effects term of a brmsfit, reusing the
@@ -1986,6 +2044,115 @@ get_fs_blocks.brmsfit <- function(object, method = c("EB", "ML"),
   setNames(blocks, levels(f1))
 }
 
+# Per-level blocks for the location-scale (random sigma) brmsfit. One block
+# per level of the single RE grouping factor, mirroring the block contract of
+# get_fs_blocks.brmsfit(): the score row is the posterior mean of the level's
+# p r_ draws, and fsL / fsT come from the shared regression-form engine
+# compute_lav_fs_matrices() applied to the level's posterior covariance with
+# psi = brms_re_cov() (the joint mu + sigma RE covariance) and alpha = NULL
+# (fsb is therefore NULL). scoring_matrix is NULL: no linear scoring map
+# exists for location-scale models. The structure (group, coefficient set,
+# levels) is read from the fitted posterior, not the formula.
+get_fs_blocks.brmsfit_ls <- function(object, legacy_names = FALSE, draws = NULL,
+                                     ...) {
+  require_brms()
+  # draws: the posterior draws (draws x parameters) as in get_fs.brmsfit();
+  # flatten to a plain data frame so that the column [[ extraction of
+  # brms_re_cov() works and the as.matrix() subsetting below does not trip
+  # posterior's draws_df class-dropping warning.
+  if (is.null(draws)) draws <- posterior::as_draws_df(object)
+  draws <- as.data.frame(draws)
+  pmat <- as.matrix(draws)
+  rd <- brms_re_draw_cols(draws)
+  # Single grouping factor only (v1): the mu- and sigma-submodel REs must
+  # share one group.
+  grps <- unique(rd$group)
+  if (length(grps) != 1L) {
+    stop(
+      "get_fs() for brms location-scale models supports a single RE ",
+      "grouping factor; this model has ", length(grps), " (",
+      paste(grps, collapse = ", "), "). Multiple distinct grouping factors ",
+      "are not supported yet.",
+      call. = FALSE
+    )
+  }
+  group <- grps
+  data <- object$data
+  if (!group %in% names(data)) {
+    stop("internal error: RE grouping factor '", group,
+         "' not found in the model data.", call. = FALSE)
+  }
+  # Canonical coefficient order (incl. sigma_* coefs) and level order from
+  # the coef() array [level, stat, coef] of the single RE group.
+  co3d <- stats::coef(object)[[group]]
+  if (is.null(co3d) || length(dim(co3d)) != 3L) {
+    stop("internal error: cannot recover the RE structure of group '", group,
+         "' from the model posterior.", call. = FALSE)
+  }
+  cnms <- dimnames(co3d)[[3L]]
+  lv_co <- dimnames(co3d)[[1L]]
+  p <- length(cnms)
+  # Levels present in the draws, in the coef() array's level order.
+  lv_r <- unique(rd$level)
+  lvl <- lv_co[lv_co %in% lv_r]
+  if (length(lvl) != length(lv_r) || !identical(sort(lvl), sort(lv_r))) {
+    stop("internal error: the RE levels of the posterior draws and of ",
+         "coef() do not agree for group '", group, "'.", call. = FALSE)
+  }
+  base_names <- paste0("u", seq_len(p) - 1L)
+  re_names <- if (legacy_names) paste0(base_names, "_eb") else base_names
+  fs_names <- paste0("fs_", re_names)
+  # Shared (posterior-mean) RE covariance over the full coefficient set.
+  D <- brms_re_cov(draws, group, cnms)
+  # Observation index per level (block contract; the per-level assembly does
+  # not fill rows from it).
+  case_split <- split(seq_len(nrow(data)), data[[group]])
+  blocks <- vector("list", length(lvl))
+  for (j in seq_along(lvl)) {
+    lv <- lvl[j]
+    # This level's S x p matrix of r draws, columns reordered to cnms.
+    cj <- rd$col[rd$level == lv]
+    ord <- match(cnms, rd$coef[rd$level == lv])
+    if (any(is.na(ord))) {
+      stop("internal error: incomplete RE draws for group '", group,
+           "', level ", lv, ". ", call. = FALSE)
+    }
+    M <- pmat[, cj[ord], drop = FALSE]
+    score_j <- colMeans(M)
+    # Posterior covariance over the S draws: stats::cov() takes the
+    # COLUMNS of its argument as the variables, so the S x p draws matrix is
+    # passed as-is (stats::cov(t(M)) would return an S x S matrix).
+    Vpost_j <- stats::cov(M)
+    mts <- compute_lav_fs_matrices(Vpost_j, D, alpha = NULL,
+                                   method = "regression")
+    fsL_j <- mts$fsL
+    fsT_j <- mts$fsT
+    fs_row <- t(score_j)
+    colnames(fs_row) <- re_names
+    colnames(fsL_j) <- re_names
+    rownames(fsL_j) <- fs_names
+    rownames(fsT_j) <- colnames(fsT_j) <- fs_names
+    attr(fs_row, "fsL") <- fsL_j
+    idx <- case_split[[lv]]
+    if (is.null(idx)) {
+      stop("internal error: RE level ", lv, " of group '", group,
+           "' not found in the model data.", call. = FALSE)
+    }
+    blocks[[j]] <- list(
+      case_idx = idx,
+      fs = fs_row,
+      fsL = fsL_j,
+      fsT = fsT_j,
+      fsb = NULL,
+      scoring_matrix = NULL
+    )
+  }
+  names(blocks) <- lvl
+  attr(blocks, "group") <- group
+  attr(blocks, "D") <- D
+  blocks
+}
+
 #' @rdname get_fs
 #' @export
 get_fs.brmsfit <- function(
@@ -2015,8 +2182,36 @@ get_fs.brmsfit <- function(
          call. = FALSE)
   }
 
-  blocks <- get_fs_blocks.brmsfit(object, method = method,
-                                  legacy_names = legacy_names)
+  # Location-scale (random sigma) detection and routing: a random sigma
+  # coefficient shows up as raw RE draws r_<group>__sigma[<level>,<coef>] in
+  # the posterior. Such models are scored from the posterior (EB only, no
+  # scoring matrix) by get_fs_blocks.brmsfit_ls(); a plain Gaussian mixed
+  # model follows the existing design-matrix path unchanged.
+  draws <- posterior::as_draws_df(object)
+  ls_model <- brms_ls_detected(draws)
+  if (ls_model && method == "ML") {
+    stop(
+      "method = 'ML' is not supported for brms location-scale models (this ",
+      "model has a random sigma coefficient): the prior-free OLS scoring ",
+      "presumes a constant residual variance, which does not hold when the ",
+      "residual scale has its own random effect. Use the default ",
+      "method = 'EB' (posterior) scoring.",
+      call. = FALSE
+    )
+  }
+  if (ls_model && (corrected_fsT || vfsLT)) {
+    stop(
+      "'", paste(c(if (corrected_fsT) "corrected_fsT",
+                  if (vfsLT) "vfsLT"), collapse = "' and '"),
+      "' is/are not supported for brms location-scale models.",
+      call. = FALSE
+    )
+  }
+  blocks <- if (ls_model) {
+    get_fs_blocks.brmsfit_ls(object, legacy_names = legacy_names, draws = draws)
+  } else {
+    get_fs_blocks.brmsfit(object, method = method, legacy_names = legacy_names)
+  }
   group <- attr(blocks, "group")
 
   # merMod-style assembly (one row per level of the RE term); mirrors
@@ -2058,10 +2253,12 @@ get_fs.brmsfit <- function(
   attr(out, "psi") <- psi_re
   attr(out, "alpha") <- setNames(rep(0, length(re_names)), re_names)
 
-  attr(out, "scoring_matrix") <- setNames(
-    lapply(blocks, function(b) b$scoring_matrix),
-    names(blocks)
-  )
+  # No linear scoring map exists for location-scale models.
+  attr(out, "scoring_matrix") <- if (ls_model) {
+    NULL
+  } else {
+    setNames(lapply(blocks, function(b) b$scoring_matrix), names(blocks))
+  }
   out
 }
 

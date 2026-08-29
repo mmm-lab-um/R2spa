@@ -74,7 +74,8 @@ get_fs(object, ...)
 \arguments{
 \item{object}{A data frame, a fitted \link[lavaan:lavaan]{lavaan} model object, a fitted
 \link[lme4:lmer]{lme4::lmer} model object (\code{merMod}), or a fitted \link[brms:brm]{brms::brm} model
-object (\code{brmsfit}).}
+object (\code{brmsfit}, Gaussian, including location-scale models with a
+random \code{sigma} coefficient).}
 
 \item{model}{An optional string specifying the measurement model
 in \code{lavaan} syntax. Only used when \code{object} is a data frame.
@@ -120,7 +121,14 @@ prior-free per-cluster OLS estimate; the term's random-effects
 covariance is reconstructed from the posterior of its
 \code{sd_}/\code{cor_} hyperparameters (Gaussian family, one grouping
 factor; \code{corrected_fsT}, \code{vfsLT}, and \verb{prior_*} are not
-supported). Bartlett scores have more desirable
+supported). For brms location-scale models (a random effect
+on the scale, e.g. \code{sigma ~ (1|Subject)}) only \code{"EB"} is
+supported: the scores are the posterior means of the random
+coefficients (their posterior covariance enters via \code{psi}),
+and \code{"ML"} is rejected, because the prior-free OLS scoring
+presumes a constant residual variance, which does not hold
+when the residual scale has its own random effect. Bartlett
+scores have more desirable
 properties than regression scores and may be preferred for
 2S-PA. \code{method = "mean"} takes the item-to-factor
 assignment from \code{sum_items} (auto-derived from the
@@ -258,7 +266,8 @@ rows of the model response and the fixed-effects design
 reproduces the cluster's EB scores for method \code{"EB"} and the
 per-cluster OLS (ML) scores for method \code{"ML"}. The same holds for
 \code{brmsfit} models (one \code{p} x \code{n_j} matrix per level of the
-random-effects term).
+random-effects term); for brms location-scale models it is
+\code{NULL} (no linear scoring map exists).
 * \code{psi}: effective (prior-adjusted) covariance matrix of the
 latent variables (\verb{q x q}), group-level (not per-pattern), and
 a point estimate only (no sampling SEs of the latents are
@@ -273,14 +282,17 @@ objects the matrix is the first random-effects term's
 names (\code{u0}/\code{u1}/..., or the legacy \code{u0_eb}/\code{u1_eb} names). For
 \code{brmsfit} objects it is the (posterior-mean) random-effects
 covariance of the term, reconstructed from the posterior of its
-\code{sd_}/\code{cor_} hyperparameters.
+\code{sd_}/\code{cor_} hyperparameters; for brms location-scale models it
+is the full (correlated) covariance of all the random
+coefficients (mu and \code{sigma}).
 * \code{alpha}: effective (prior-adjusted) means of the latent
 variables (a named vector of length \code{q}), with the same group
 nesting and point-estimate semantics as \code{psi}. With
 \code{prior_mean} supplied it equals the prior, otherwise the
 per-group lavaan estimate; a named zero vector (\code{0} per latent)
 when the model has no (estimated) mean structure. For \code{merMod}
-objects a named zero vector (random effects are mean zero).
+and \code{brmsfit} objects a named zero vector (random effects are
+mean zero).
 * \code{fs_pattern}: for lavaan models, a named list by group of
 \code{list(label, pat)} entries. \code{label} is a character vector with
 one entry per case in the group giving that case's
@@ -289,7 +301,17 @@ are all missing); \code{pat} is a logical matrix with rows =
 indicators and one column per pattern, the columns being named
 by pattern name.
 
-\if{html}{\out{<div class="sourceCode">}}\preformatted{    For a lavaan group without missing data, its `fsT`/`fsL`/`fsb`/
+\if{html}{\out{<div class="sourceCode">}}\preformatted{    For `brmsfit` location-scale models (a random `sigma` coefficient)
+    the result is a multi-factor correlated result: one factor per
+    random coefficient (`fs_u0`, `fs_u1`, ..., in the model's
+    coefficient order, mu coefficients before `sigma` coefficients),
+    each score the posterior mean of the corresponding random
+    coefficient; `psi` is the full (correlated) random-effects
+    covariance, `alpha` a zero vector, and `scoring_matrix` is `NULL`
+    (no linear scoring map exists). Scoring is EB (posterior) only —
+    `method = "ML"` is rejected; see `method`.
+
+    For a lavaan group without missing data, its `fsT`/`fsL`/`fsb`/
     `scoring_matrix` elements are the plain matrix/vector for the whole
     group. When a group's cases split into multiple observed-indicator
     patterns (missing data), each such element is instead a named list
@@ -315,8 +337,9 @@ by pattern name.
 \description{
 \code{get_fs()} is an S3 generic that extracts factor scores from fitted models.
 Methods are available for \code{data.frame} (fits a CFA internally), \code{lavaan}
-objects, \code{lmerMod} objects, \code{brmsfit} objects (Gaussian mixed models; \code{brms}
-is a \code{Suggests} dependency), and fitted \code{mirt} models (single-group
+objects, \code{lmerMod} objects, \code{brmsfit} objects (Gaussian mixed models,
+including location-scale models with a random scale coefficient; \code{brms} is
+a \code{Suggests} dependency), and fitted \code{mirt} models (single-group
 \code{SingleGroupClass} and multi-group \code{MultipleGroupClass}; \code{mirt} is a
 \code{Suggests} dependency). Multi-group mirt results carry a trailing \code{group}
 column and a per-group (\code{list}) \code{psi} attribute.
