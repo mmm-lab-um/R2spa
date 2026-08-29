@@ -50,6 +50,9 @@
 #' @importFrom utils tail
 #' @importFrom lavaan vcov lav_func_jacobian_complex
 #'
+#' @seealso
+#' - `vignette("Grand Standardized Coefficients", package = "R2spa")` for the grand-standardization workflow.
+#'
 #' @export
 #'
 #' @examples

@@ -166,3 +166,9 @@ tspa_mx_model("dem60 ~ ind60; dem60 + ind60 ~ 1",
   fsb = c(fs_ind60 = "int_fs_ind60", fs_dem60 = "int_fs_dem60"))
 }
 }
+\seealso{
+\itemize{
+\item \code{vignette("2S-PA with OpenMx and IRT (mirt)", package = "R2spa")} for the OpenMx route and IRT stage 1.
+\item \code{vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")} for the lavaan route.
+}
+}

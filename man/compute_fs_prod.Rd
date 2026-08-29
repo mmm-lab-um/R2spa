@@ -129,3 +129,8 @@ Isserlis, L. (1918). On a formula for the product-moment coefficient of any
 order of a normal frequency distribution in any number of variables.
 \emph{Biometrika}, 12(1-2), 134-139. \doi{10.1093/biomet/12.1-2.134}.
 }
+\seealso{
+\itemize{
+\item \code{vignette("Product factor-score indicators (latent interactions)", package = "R2spa")} for the full latent-interaction workflow.
+}
+}

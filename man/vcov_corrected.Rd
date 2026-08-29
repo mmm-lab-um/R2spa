@@ -139,3 +139,9 @@ vc <- vcov_corrected(fit, vfsLT = vfsLT[c(5, 7), c(5, 7)],
                      which_free = c(5, 7))
 sqrt(diag(vc))   # corrected standard errors
 }
+\seealso{
+\itemize{
+\item \code{vignette("Corrected Standard Errors", package = "R2spa")} for the corrected-SE workflow.
+\item \code{vignette("Correction to Measurement Error", package = "R2spa")} for the underlying error correction.
+}
+}

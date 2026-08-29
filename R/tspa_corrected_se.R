@@ -97,6 +97,11 @@
 #' @param ... Currently not used.
 #' @return A corrected covariance matrix in the same dimension as
 #'     `vcov(tspa_fit)` (symmetric).
+#'
+#' @seealso
+#' - `vignette("Corrected Standard Errors", package = "R2spa")` for the corrected-SE workflow.
+#' - `vignette("Correction to Measurement Error", package = "R2spa")` for the underlying error correction.
+#'
 #' @examples
 #' library(lavaan)
 #'

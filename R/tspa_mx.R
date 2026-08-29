@@ -119,6 +119,10 @@
 #'
 #' @importFrom OpenMx mxModel mxData mxPath mxFitFunctionML mxRun
 #'
+#' @seealso
+#' - `vignette("2S-PA with OpenMx and IRT (mirt)", package = "R2spa")` for the OpenMx route and IRT stage 1.
+#' - `vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")` for the lavaan route.
+#'
 #' @export
 #'
 #' @examples

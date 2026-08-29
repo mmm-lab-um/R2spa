@@ -284,6 +284,12 @@
 #' @importFrom lavaan vcov
 #' @importFrom stats setNames
 #'
+#' @seealso
+#' - `vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")` for end-to-end stage-1/stage-2 examples.
+#' - `vignette("Scoring Matrices: lavaan CFA and lme4", package = "R2spa")` for the scoring-matrix internals.
+#' - `vignette("EFA Scores", package = "R2spa")` for EFA-based factor scores.
+#' - `vignette("2S-PA with Missing Data", package = "R2spa")` for `missing = "fiml"`.
+#'
 #' @export
 #'
 #' @examples

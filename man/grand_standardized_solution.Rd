@@ -135,3 +135,8 @@ fit4 <- sem(mod4, data = HolzingerSwineford1939,
             group.equal = c("loadings", "intercepts"))
 grand_standardized_solution(fit4)
 }
+\seealso{
+\itemize{
+\item \code{vignette("Grand Standardized Coefficients", package = "R2spa")} for the grand-standardization workflow.
+}
+}

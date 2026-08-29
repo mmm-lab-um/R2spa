@@ -276,6 +276,14 @@
 #'         `standardizedSolution()` on it report the corrected standard
 #'         errors, for multigroup fits as well as single-group ones.
 #'
+#' @seealso
+#' - `vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")` for an end-to-end walkthrough.
+#' - `vignette("Multi-Factor Measurement Model", package = "R2spa")` for multi-factor measurement models.
+#' - `vignette("Linear Growth Modeling with Two-Stage Path Analysis", package = "R2spa")` for growth models.
+#' - `vignette("2S-PA with Missing Data", package = "R2spa")` for missing data (`missing = "fiml"`).
+#' - `vignette("Product factor-score indicators (latent interactions)", package = "R2spa")` for `product = TRUE`.
+#' - `vignette("Corrected Standard Errors", package = "R2spa")` for `corrected_se = TRUE`.
+#'
 #' @export
 #'
 #' @examples

@@ -426,3 +426,11 @@ get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
                  dem60 =~ y1 + y2 + y3 + y4 ",
        product = "ind60:dem60")
 }
+\seealso{
+\itemize{
+\item \code{vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")} for end-to-end stage-1/stage-2 examples.
+\item \code{vignette("Scoring Matrices: lavaan CFA and lme4", package = "R2spa")} for the scoring-matrix internals.
+\item \code{vignette("EFA Scores", package = "R2spa")} for EFA-based factor scores.
+\item \code{vignette("2S-PA with Missing Data", package = "R2spa")} for \code{missing = "fiml"}.
+}
+}

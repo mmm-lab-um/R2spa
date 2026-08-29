@@ -66,6 +66,10 @@
 #'          in `"list"` format); and
 #'        * a trailing `id` column holding the cluster/subject id for `merMod`
 #'          results.
+#'
+#' @seealso
+#' - `vignette("Scoring Matrices: lavaan CFA and lme4", package = "R2spa")` for the scoring-matrix internals these per-row quantities come from.
+#'
 #' @export
 #' @examples
 #' library(lavaan)

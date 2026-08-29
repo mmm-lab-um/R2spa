@@ -471,3 +471,13 @@ fs_prod <- get_fs(df, model = "x =~ x1 + x2 + x3
                     y =~ y1 + y2 + y3", std.lv = TRUE)
 tspa("y ~ x + m + x:m", data = fs_prod, product = TRUE)
 }
+\seealso{
+\itemize{
+\item \code{vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")} for an end-to-end walkthrough.
+\item \code{vignette("Multi-Factor Measurement Model", package = "R2spa")} for multi-factor measurement models.
+\item \code{vignette("Linear Growth Modeling with Two-Stage Path Analysis", package = "R2spa")} for growth models.
+\item \code{vignette("2S-PA with Missing Data", package = "R2spa")} for missing data (\code{missing = "fiml"}).
+\item \code{vignette("Product factor-score indicators (latent interactions)", package = "R2spa")} for \code{product = TRUE}.
+\item \code{vignette("Corrected Standard Errors", package = "R2spa")} for \code{corrected_se = TRUE}.
+}
+}

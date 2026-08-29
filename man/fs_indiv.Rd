@@ -73,3 +73,8 @@ library(lme4)
 lmod <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy)
 fs_indiv(get_fs(lmod))
 }
+\seealso{
+\itemize{
+\item \code{vignette("Scoring Matrices: lavaan CFA and lme4", package = "R2spa")} for the scoring-matrix internals these per-row quantities come from.
+}
+}

@@ -108,6 +108,10 @@
 #'        unscorable rows), and `fs_a:fs_b_ld` the per-row implied loading
 #'        `gamma` (pattern-specific under FIML because `fsL` varies by
 #'        pattern). All existing columns and attributes are untouched.
+#'
+#' @seealso
+#' - `vignette("Product factor-score indicators (latent interactions)", package = "R2spa")` for the full latent-interaction workflow.
+#'
 #' @export
 #'
 #' @references
