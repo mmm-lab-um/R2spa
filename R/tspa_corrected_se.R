@@ -29,15 +29,17 @@
 #' correction is never applied twice).
 #'
 #' The `engine` argument selects how the Jacobian is evaluated. The default
-#' `"fd"` uses central finite differences (one stage-2 refit on each side of
-#' each free element). `"analytic"` instead uses a refit-free, deterministic
-#' closed form for the saturated single-group path model (PLAN 16, section
-#' 2.4) — free structural regressions and latent variances only — and
-#' transparently falls back to `"fd"` otherwise (multigroup, a model that is
-#' not exactly saturated (df > 0), or a saturated model with other free
-#' parameters such as free latent covariances or means); the two agree to the
-#' finite-difference noise floor whenever `"analytic"` applies, and the
-#' analytic result is bit-reproducible.
+#' `"analytic"` is refit-free and deterministic: an influence-function closed
+#' form (PLAN 16, sections 2.4 and 4.3), `J = -H^{-1} C`, with `H` (the
+#' log-likelihood Hessian over the free params) and `C` (the cross-derivative
+#' w.r.t. the fixed `fsL`/`fsT` entries) obtained by central-differencing the
+#' analytic log-likelihood score. It covers single- and multi-group models,
+#' saturated and restricted (df > 0) structural models, and mean-structure
+#' models, and is a pure function of the base fit + `vfsLT` (bit-reproducible,
+#' no refits). `"fd"` (central finite differences, one stage-2 refit per side
+#' of each free element) is retained as the A/B reference; the analytic path
+#' falls back to it only for a shape it cannot handle. The two agree to the
+#' finite-difference noise floor whenever `"analytic"` applies.
 #'
 #' @param tspa_fit A fit from [tspa()] with `fsT` and `fsL` supplied
 #'              (multi-factor measurement model, single- or multi-group),
@@ -76,17 +78,22 @@
 #'                   `k` requires `vfsLT` to be the matching `k x k`
 #'                   principal submatrix (see `vfsLT`).
 #' @param engine The engine used to evaluate the Jacobian `J =
-#'              d(thetahat)/d(eta)`. `"fd"` (the default) uses central
-#'              finite differences (one stage-2 refit on each side of each
-#'              free element). `"analytic"` uses a refit-free, deterministic
-#'              closed form for the saturated single-group path model (PLAN
-#'              16, section 2.4) — free structural regressions and latent
-#'              variances only — and transparently falls back to `"fd"`
-#'              otherwise (multigroup, a model that is not exactly saturated
-#'              (df > 0), or a saturated model with other free parameters
-#'              such as free latent covariances or means). The two engines
-#'              agree to the finite-difference noise floor whenever
-#'              `"analytic"` applies.
+#'              d(thetahat)/d(eta)`. `"analytic"` (the default) uses a
+#'              refit-free, deterministic influence-function closed form
+#'              (PLAN 16, sections 2.4 and 4.3): `J = -H^{-1} C`, with `H`
+#'              (the log-likelihood Hessian over the free params) and `C`
+#'              (the cross-derivative w.r.t. the fixed `fsL`/`fsT` entries)
+#'              obtained by central-differencing the analytic log-likelihood
+#'              score. It covers single- and multi-group models, saturated
+#'              and restricted (df > 0) structural models, and mean-structure
+#'              models, and is a pure function of the base fit + `vfsLT`
+#'              (bit-reproducible, no refits). `"fd"` uses central finite
+#'              differences (one stage-2 refit on each side of each free
+#'              element) and is retained as the A/B reference; the analytic
+#'              path transparently falls back to it only for a shape it cannot
+#'              handle (an unrecognised free parameter or unequal per-group
+#'              free-param counts). The two agree to the finite-difference
+#'              noise floor whenever `"analytic"` applies.
 #' @param ... Currently not used.
 #' @return A corrected covariance matrix in the same dimension as
 #'     `vcov(tspa_fit)` (symmetric).
@@ -111,7 +118,7 @@
 #' sqrt(diag(vc))   # corrected standard errors
 #' @export
 vcov_corrected <- function(tspa_fit, vfsLT, which_free = NULL,
-                           engine = c("fd", "analytic"), ...) {
+                           engine = c("analytic", "fd"), ...) {
     engine <- match.arg(engine)
     if (is.null(attr(tspa_fit, "fsT"))) {
         stop("corrected vcov requires a tspa() fit with ",

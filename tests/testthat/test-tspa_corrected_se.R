@@ -12,22 +12,19 @@
 # tspa_args (evaluated values), so refits are environment-agnostic; the
 # passing of T1/T2 with fixtures in file scope only IS that regression
 # proof.
-# T3 goldens: the shipped central-difference output at the shipped step
-# (h0 = 1e-5), R 4.6.1 / lavaan 0.7-2, re-derived 2026-08-22. Deterministic
-# across runs at a fixed h (the stage-2 refits are reproducible), but
-# platform-sensitive: the h0 = 1e-5 central difference amplifies BLAS/
-# optimizer noise in the stage-2 refits (observed cross-platform drift
-# 1.6e-3 relative, x86-64 Linux/Windows vs aarch64 macOS, 2026-08-27), so
-# the tolerance is 1e-2. The correction is NOT step-invariant below
-# h ~ 1e-6 (the optimizer-noise regime; at h = 1e-7 the d60~~d60 entry
-# drops to ~16.89), so the goldens are pinned to h0, not to an h -> 0
-# limit.
+# T3 goldens: the analytic (default-engine) correction, R 4.6.1 / lavaan
+# 0.7-2, re-derived 2026-08-28. The analytic Jacobian is refit-free and
+# deterministic to machine precision (no optimizer/BLAS noise), so the
+# tolerance is the bit-stability floor (1e-8) rather than the FD's
+# cross-platform drift floor. (The former goldens pinned the h0 = 1e-5
+# central-difference output, whose refit noise drifted ~1.6e-3 relative
+# across platforms, hence the old 1e-2; PLAN 16 D6.)
 # Re-derive: cfa(3-factor joint, PoliticalDemocracy) ->
 # get_fs_lavaan(vfsLT = TRUE) -> tspa("dem60 ~ ind60; dem65 ~ ind60 +
-# dem60") -> vcov_corrected(fit, vfsLT) - vcov(fit), read the named
-# elements. Drift protocol: if a lavaan upgrade moves a golden, diff the
-# base fit first — base unchanged but correction moved => bug in the fix,
-# do NOT update the golden.
+# dem60") -> vcov_corrected(fit, vfsLT, engine = "analytic") - vcov(fit),
+# read the named elements. Drift protocol: if a lavaan upgrade moves a
+# golden, diff the base fit first — base unchanged but correction moved =>
+# bug in the fix, do NOT update the golden.
 # T4 fixture: boo_joint.RDS = corrected-se vignette bootstrap (R = 1999),
 # labels pinned by the vignette's setNames. Shipped in vignettes/ (relocated
 # 2026-08 from tests/testthat/): the fixture is shared between the
@@ -70,9 +67,13 @@ tspa_mg_corr <- tspa("visual ~ speed", data = do.call(rbind, fs_mg),
                      fsT = attr(fs_mg, "fsT"), fsL = attr(fs_mg, "fsL"),
                      vfsLT = attr(fs_mg, "vfsLT"), corrected_se = TRUE,
                      group = "school")
-## Standalone multigroup correction (feeds T2/IT6/T9) — computed once for
-## the same cost reason.
+## Standalone multigroup correction (feeds T2/IT6) — computed once for the
+## same cost reason (default engine, now "analytic"). The FD reference for the
+## multigroup A/B and Jacobian-wiring tests (T14/T9) is kept separate
+## (vc_fd_mg below), since the default engine is no longer "fd".
 vcov_corr_mg <- vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"))
+vc_fd_mg <- vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"),
+                           engine = "fd")
 
 ## Joint two-factor (feeds T4, T8)
 mod2 <- "ind60 =~ x1 + x2 + x3
@@ -155,16 +156,16 @@ test_that("T3: q = 3 correction is non-zero and matches golden values (B1 guard)
   # the golden is ~17.3, so a threshold 4 orders below it survives
   # golden updates.
   expect_gt(cor["dem60~~dem60", "dem60~~dem60"], 1)
-  # Golden elements (provenance, step, and drift protocol in the file
-  # header): the shipped central-difference step (h0 = 1e-5), deterministic
-  # across runs on the pinned R/lavaan/platform (1e-2 absorbs the
-  # cross-platform BLAS/optimizer drift; see header).
-  expect_equal(cor["dem60~~dem60", "dem60~~dem60"], 17.3455467,
-               tolerance = 1e-2)
-  expect_equal(cor["dem65~dem60", "dem65~dem60"], 1.1961761,
-               tolerance = 1e-2)
-  expect_equal(cor["dem60~ind60", "dem60~ind60"], 1.4245011,
-               tolerance = 1e-2)
+  # Golden elements (provenance and drift protocol in the file header): the
+  # analytic (default) correction, deterministic to machine precision (no
+  # refits), so the tolerance is the bit-stability floor (1e-8) rather than
+  # the FD's cross-platform drift floor (PLAN 16 D6).
+  expect_equal(cor["dem60~~dem60", "dem60~~dem60"], 17.3504614099,
+               tolerance = 1e-8)
+  expect_equal(cor["dem65~dem60", "dem65~dem60"], 1.19612678113,
+               tolerance = 1e-8)
+  expect_equal(cor["dem60~ind60", "dem60~ind60"], 1.42392555412,
+               tolerance = 1e-8)
 })
 
 test_that("T4: corrected SEs are within a loose tolerance of the bootstrap MAD", {
@@ -306,10 +307,11 @@ test_that("T8: Jacobian wiring — independent central differences reproduce the
   }
   rownames(J_test) <- names_coef
 
-  # Wiring: the package correction equals J_test %*% V %*% t(J_test). A
+  # Wiring: the package FD correction equals J_test %*% V %*% t(J_test). A
   # wiring/ordering bug (incl. the B1 class) makes the LHS zero or
-  # scrambled while the RHS stays correct.
-  cor_pkg <- vcov_corrected(fit, vfsLT = vldev7) - vcov(fit)
+  # scrambled while the RHS stays correct. Explicit engine = "fd": this test
+  # validates the finite-difference Jacobian (the default is now "analytic").
+  cor_pkg <- vcov_corrected(fit, vfsLT = vldev7, engine = "fd") - vcov(fit)
   expect_equal(cor_pkg, J_test %*% vldev7 %*% t(J_test), tolerance = 1e-4)
 
   # Independent FD scheme (numDeriv Richardson; same order, different
@@ -471,11 +473,12 @@ test_that("T9: MG Jacobian wiring — independent central differences reproduce 
   }
   rownames(J_test) <- names_coef
 
-  # Wiring: the package correction equals J_test %*% vfsLT %*% t(J_test).
+  # Wiring: the package FD correction equals J_test %*% vfsLT %*% t(J_test).
   # A wiring/ordering bug makes the LHS zero or scrambled while the RHS
-  # stays correct.
+  # stays correct. vc_fd_mg is the explicit-"fd" reference (the default is
+  # now "analytic").
   vfsLT <- attr(fs_mg, "vfsLT")
-  cor_pkg <- vcov_corr_mg - vcov(tspa_mg)
+  cor_pkg <- vc_fd_mg - vcov(tspa_mg)
   expect_equal(cor_pkg, J_test %*% vfsLT %*% t(J_test), tolerance = 1e-4)
 })
 
@@ -548,8 +551,8 @@ test_that("T13: the analytic path covers saturated and restricted (general) mode
 
 test_that("T14: engine = 'analytic' matches the FD on the multigroup + free-mean fit", {
   va <- vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"), engine = "analytic")
-  # vcov_corr_mg is the file-scope default-engine ("fd") MG correction.
-  expect_equal(va, vcov_corr_mg, tolerance = 1e-2)
+  # vc_fd_mg is the file-scope explicit-"fd" MG correction (the A/B reference).
+  expect_equal(va, vc_fd_mg, tolerance = 1e-2)
   expect_equal(dim(va), dim(vcov(tspa_mg)))
   expect_true(all(is.finite(va)))
   expect_equal(va, t(va), tolerance = 1e-10)

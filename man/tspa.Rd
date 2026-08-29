@@ -18,7 +18,7 @@ tspa(
   corrected_se = FALSE,
   which_free = NULL,
   product = FALSE,
-  engine = "fd",
+  engine = "analytic",
   ...
 )
 }
@@ -158,10 +158,11 @@ Default \code{FALSE}, which leaves the manual workflow
 front, the product SE in \code{se_fs}) unchanged.}
 
 \item{engine}{The Jacobian engine passed to \code{\link[=vcov_corrected]{vcov_corrected()}} when
-\code{corrected_se = TRUE}: \code{"fd"} (the default, finite
-differences) or \code{"analytic"} (the refit-free saturated closed
-form, which transparently falls back to \code{"fd"} when it does not
-apply). Ignored unless \code{corrected_se = TRUE}.}
+\code{corrected_se = TRUE}: \code{"analytic"} (the default, a refit-free,
+deterministic influence-function closed form covering single- and
+multi-group, saturated and restricted, and mean-structure models)
+or \code{"fd"} (finite differences, retained as the A/B reference).
+Ignored unless \code{corrected_se = TRUE}.}
 
 \item{...}{Additional arguments passed to \code{\link[lavaan]{sem}}. See
 \code{\link[lavaan]{lavOptions}} for a complete list.}

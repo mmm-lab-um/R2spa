@@ -218,10 +218,11 @@
 #'            covariance (see [vcov_corrected()]); used only when
 #'            `corrected_se = TRUE`.
 #' @param engine The Jacobian engine passed to [vcov_corrected()] when
-#'            `corrected_se = TRUE`: `"fd"` (the default, finite
-#'            differences) or `"analytic"` (the refit-free saturated closed
-#'            form, which transparently falls back to `"fd"` when it does not
-#'            apply). Ignored unless `corrected_se = TRUE`.
+#'            `corrected_se = TRUE`: `"analytic"` (the default, a refit-free,
+#'            deterministic influence-function closed form covering single- and
+#'            multi-group, saturated and restricted, and mean-structure models)
+#'            or `"fd"` (finite differences, retained as the A/B reference).
+#'            Ignored unless `corrected_se = TRUE`.
 #' @param product A logical; when `TRUE`, [tspa()] automatically computes
 #'            the double-mean-centered product indicators (via
 #'            [compute_fs_prod()]) for every latent in `model` that names
@@ -433,7 +434,7 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
                  se_fs = NULL, fsT = NULL, fsL = NULL, fsb = NULL,
                  reduce = c("mean", "median"),
                   vfsLT = NULL, corrected_se = FALSE, which_free = NULL,
-                  product = FALSE, engine = "fd",
+                  product = FALSE, engine = "analytic",
                   ...) {
   reduce <- match.arg(reduce)
   # Set when the per-unit fsT/fsL/fsb attributes were collapsed to a single
