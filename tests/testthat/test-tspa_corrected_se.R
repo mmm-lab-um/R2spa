@@ -520,8 +520,7 @@ test_that("T13: the analytic path covers saturated and restricted (general) mode
   # converge (a fixture flake, not an engine bug). Skip cleanly instead of
   # erroring on max(abs(NULL)) below.
   if (is.null(j_nsat)) {
-    skip("analytic J is NULL for the restricted fit (an engine guard fired; ",
-         "the file-scope tspa_joint3_nsat likely did not converge this run)")
+    skip("analytic J is NULL for the restricted fit (an engine guard fired; the file-scope tspa_joint3_nsat likely did not converge this run)")
   }
   expect_true(is.matrix(j_nsat))
   expect_equal(dim(j_nsat), c(length(coef(tspa_joint3_nsat)), 15))
