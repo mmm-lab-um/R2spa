@@ -359,6 +359,12 @@ vcov_jacobian_analytic <- function(tspa_fit, names0, which_free) {
     args0 <- attr(tspa_fit, "tspa_args")
     data <- args0$data
     gc <- if (ngrp == 1L) NULL else args0$group
+    # Per-group effective sample size, matching lavaan's nobs (the FD engine
+    # respects it implicitly via refits). If the analytic path can't align its
+    # score scaling with it, return NULL -> the FD fallback.
+    nobs_vec <- try(tsp_nobs(tspa_fit), silent = TRUE)
+    if (inherits(nobs_vec, "try-error") || length(nobs_vec) != ngrp ||
+        any(!is.finite(nobs_vec))) return(NULL)
     # Group labels for the data split, from lavInspect("group.label") (falling
     # back to the est list names). The per-group partable is indexed
     # positionally (est[[g]]), so this is robust to an unnamed per-group est
@@ -397,7 +403,10 @@ vcov_jacobian_analytic <- function(tspa_fit, names0, which_free) {
         sub <- if (ngrp == 1L) data else data[data[[gc]] == glab[g], ]
         x <- try(as.matrix(sub[, score_cols]), silent = TRUE)
         if (inherits(x, "try-error") || any(!is.finite(x))) return(NULL)
-        n <- nrow(x); xbar <- colMeans(x)
+        # Align the score scaling with lavaan's effective per-group nobs; a
+        # row-count mismatch (e.g. listwise case deletion) returns NULL -> FD.
+        if (nrow(x) != nobs_vec[g]) return(NULL)
+        n <- nobs_vec[g]; xbar <- colMeans(x)
         S_ml <- crossprod(x - xbar) / n
         idx_g <- (g - 1L) * pg + seq_len(pg)
         th_type <- character(pg); th_i <- integer(pg); th_j <- integer(pg)
