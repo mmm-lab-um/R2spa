@@ -29,10 +29,11 @@
 # base fit first — base unchanged but correction moved => bug in the fix,
 # do NOT update the golden.
 # T4 fixture: boo_joint.RDS = corrected-se vignette bootstrap (R = 1999),
-# labels pinned by the vignette's setNames. Shipped in vignettes/ (relocated
-# 2026-08 from tests/testthat/): the fixture is shared between the
-# corrected-se vignette and this test, so the test reads it from the repo
-# root via test_path("../../vignettes/boo_joint.RDS").
+# labels pinned by the vignette's setNames. The test reads its own committed
+# copy under tests/testthat/ (a snapshot of vignettes/boo_joint.RDS) so it is
+# found in the R CMD check environment, where the vignettes/ source tree is
+# not on the test path; the corrected-se vignette keeps reading
+# vignettes/boo_joint.RDS.
 
 library(lavaan)
 
@@ -157,9 +158,8 @@ test_that("T3: q = 3 correction is non-zero and matches golden values (B1 guard)
 })
 
 test_that("T4: corrected SEs are within a loose tolerance of the bootstrap MAD", {
-  p <- test_path("../../vignettes/boo_joint.RDS")
-  skip_if(!file.exists(p),
-          "bootstrap fixture not shipped (vignettes/boo_joint.RDS)")
+  p <- test_path("boo_joint.RDS")
+  skip_if(!file.exists(p), "bootstrap fixture boo_joint.RDS missing from tests/testthat/")
   boo <- readRDS(p)
   mad_v <- setNames(apply(boo$t, 2, mad),
                     c("dem60~ind60", "ind60~~ind60", "dem60~~dem60"))

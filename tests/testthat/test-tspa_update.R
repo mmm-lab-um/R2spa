@@ -43,8 +43,11 @@ test_that("U1: base 3-factor @call is self-contained; update() works and matches
 
 # --- Case 2: growth model (the vignette example) ------------------------
 test_that("U2: growth-model @call is self-contained; update() works and matches a fresh meanstructure fit", {
-  p <- test_path("../../vignettes/eclsk.rds")
-  skip_if(!file.exists(p), "eclsk.rds not shipped")
+  # A committed copy of the growth vignette's eclsk.rds (see
+  # vignettes/tspa-growth-vignette.Rmd), kept under tests/testthat/ so it is
+  # found in the R CMD check environment.
+  p <- test_path("eclsk.rds")
+  skip_if(!file.exists(p), "eclsk.rds missing from tests/testthat/")
   eclsk <- readRDS(p)
 
   # Stage 1 (strict invariance) — vignettes/tspa-growth-vignette.Rmd.
