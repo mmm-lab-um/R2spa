@@ -17,12 +17,12 @@
 
 Lai M, Li Y, Tse W, Zhang G (2026). *R2spa: An R package for two-stage
 path analysis (2S-PA) to adjust for measurement errors*. R package
-version 0.0.4, <https://gengrui-zhang.github.io/R2spa/>.
+version 0.0.4, <https://mmm-lab-um.github.io/R2spa/>.
 
     @Manual{,
       title = {R2spa: An R package for two-stage path analysis (2S-PA) to adjust for measurement errors},
       author = {Mark Hok Chio Lai and Yixiao Li and Winnie Wing-Yee Tse and Gengrui Zhang Zhang},
       year = {2026},
       note = {R package version 0.0.4},
-      url = {https://gengrui-zhang.github.io/R2spa/},
+      url = {https://mmm-lab-um.github.io/R2spa/},
     }

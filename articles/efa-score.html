@@ -357,7 +357,7 @@ analysis<a class="anchor" aria-label="anchor" href="#using-compute_fscore-and-pe
 <span><span class="co"># ecov_fs &lt;- a %*% th %*% t(a)</span></span>
 <span><span class="co"># dimnames(ecov_fs) &lt;- rep(list(c("N", "E", "C", "A", "O")), 2)</span></span>
 <span><span class="co"># Two-stage analysis</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://gengrui-zhang.github.io/R2spa/" class="external-link">R2spa</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://mmm-lab-um.github.io/R2spa/">R2spa</a></span><span class="op">)</span></span>
 <span><span class="va">bfi_fs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/compute_fscore.html">compute_fscore</a></span><span class="op">(</span><span class="va">yc</span>, lambda <span class="op">=</span> <span class="va">lam</span>, theta <span class="op">=</span> <span class="va">th</span>,</span>
 <span>                         method <span class="op">=</span> <span class="st">"Bartlett"</span>, center_y <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>                         fs_matrices <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>

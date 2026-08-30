@@ -124,8 +124,8 @@ summary(tspa_mx_fit)
 #> AIC:       107.7496               407.7496                 409.4212
 #> BIC:      -223.6512               423.9720                 401.9099
 #> To get additional fit indices, see help(mxRefModels)
-#> timestamp: 2026-08-30 11:03:24 
-#> Wall clock time: 0.02866054 secs 
+#> timestamp: 2026-08-30 12:16:34 
+#> Wall clock time: 0.03143764 secs 
 #> optimizer:  SLSQP 
 #> OpenMx version number: 2.22.11 
 #> Need help?  See help(mxSummary)
@@ -227,8 +227,8 @@ summary(tspa_mx_fit)
 #> AIC:       154.4392               454.4392                 455.3088
 #> BIC:      -181.5966               466.0266                 450.2680
 #> To get additional fit indices, see help(mxRefModels)
-#> timestamp: 2026-08-30 11:03:24 
-#> Wall clock time: 0.01514888 secs 
+#> timestamp: 2026-08-30 12:16:35 
+#> Wall clock time: 0.0167954 secs 
 #> optimizer:  SLSQP 
 #> OpenMx version number: 2.22.11 
 #> Need help?  See help(mxSummary)
@@ -384,8 +384,8 @@ summary(tspa_mx_fit)
 #> AIC:        280.339               2280.339                 2280.351
 #> BIC:      -4617.601               2290.155                 2283.802
 #> To get additional fit indices, see help(mxRefModels)
-#> timestamp: 2026-08-30 11:03:25 
-#> Wall clock time: 0.02362299 secs 
+#> timestamp: 2026-08-30 12:16:36 
+#> Wall clock time: 0.02426338 secs 
 #> optimizer:  SLSQP 
 #> OpenMx version number: 2.22.11 
 #> Need help?  See help(mxSummary)
@@ -413,8 +413,8 @@ summary(tspa_mx_fit)
 #> AIC:       399.0212               2399.021                 2399.033
 #> BIC:     -4498.9185               2408.837                 2402.485
 #> To get additional fit indices, see help(mxRefModels)
-#> timestamp: 2026-08-30 11:03:26 
-#> Wall clock time: 0.02225065 secs 
+#> timestamp: 2026-08-30 12:16:36 
+#> Wall clock time: 0.02253413 secs 
 #> optimizer:  SLSQP 
 #> OpenMx version number: 2.22.11 
 #> Need help?  See help(mxSummary)
@@ -503,8 +503,8 @@ summary(tspa_mx_fit)
 #> AIC:       654.1514               4654.151                 4654.212
 #> BIC:     -9136.8204               4678.690                 4662.810
 #> To get additional fit indices, see help(mxRefModels)
-#> timestamp: 2026-08-30 11:03:26 
-#> Wall clock time: 0.172914 secs 
+#> timestamp: 2026-08-30 12:16:37 
+#> Wall clock time: 0.1747611 secs 
 #> optimizer:  SLSQP 
 #> OpenMx version number: 2.22.11 
 #> Need help?  See help(mxSummary)
@@ -621,8 +621,8 @@ summary(tspa_mx2_fit)
 #> AIC:        337.057               4337.057                 4337.117
 #> BIC:      -9453.915               4361.596                 4345.716
 #> To get additional fit indices, see help(mxRefModels)
-#> timestamp: 2026-08-30 11:03:32 
-#> Wall clock time: 0.2066798 secs 
+#> timestamp: 2026-08-30 12:16:43 
+#> Wall clock time: 0.2071025 secs 
 #> optimizer:  SLSQP 
 #> OpenMx version number: 2.22.11 
 #> Need help?  See help(mxSummary)
