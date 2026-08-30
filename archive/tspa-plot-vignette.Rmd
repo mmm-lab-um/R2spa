@@ -183,8 +183,7 @@ fs_dat_visual <- get_fs(model = "visual =~ x1 + x2 + x3",
 fs_dat_speed <- get_fs(model = "speed =~ x7 + x8 + x9", 
                        data = HolzingerSwineford1939, 
                        group = "school")
-fs_hs <- cbind(do.call(rbind, fs_dat_visual),
-               do.call(rbind, fs_dat_speed))
+fs_hs <- cbind(fs_dat_visual, fs_dat_speed)
 
 tspa_fit_3 <- tspa(model = "visual ~ speed",
                    data = fs_hs,

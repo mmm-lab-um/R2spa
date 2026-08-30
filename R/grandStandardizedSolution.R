@@ -2,21 +2,56 @@
 #'
 #' Grand standardized solution of a two-stage path analysis model.
 #'
+#' @details
+#' For a **multigroup** fit the grand standardized solution is computed
+#' from the grand (pooled) means and variance-covariances and is **not**
+#' equivalent to [`lavaan::standardizedSolution()`], which matches it only
+#' in the single-group case (the function emits that message when it
+#' applies). When the input fit is an SE-corrected `tspa()` fit (produced
+#' with `tspa(corrected_se = TRUE)`, attribute `tspa_corrected = TRUE`) —
+#' or when `acov_par = vcov(corrected_fit)` is supplied — the reported
+#' standard errors are the first-order corrected grand-standardized
+#' standard errors, while the point estimates (`est.std`) are unchanged.
+#'
+#' Structural slopes may be free or user-fixed. A user-fixed slope is
+#' reported alongside the free ones: its `est.std` is the user value rescaled
+#' by the (grand) SD ratio, and its `se` is the first-order delta
+#' approximation, both matching `lavaan::standardizedSolution()` (which also
+#' reports a delta SE for fixed slopes). A structural regression whose outcome
+#' or predictor is not part of the beta matrix (e.g. observed-on-observed) is
+#' still rejected with an error. The delta-method SEs are propagated over
+#' the free `beta`/`psi` (and `alpha`, single group) elements as marked by
+#' the lavaan free-position matrices; a free parameter whose block matrix
+#' carries no mark contributes no first-order term (in lavaan 0.7-x the
+#' free-position matrices do not mark, e.g., some observed-variable
+#' intercept blocks, whose omission only matters when their sampling
+#' uncertainty affects the group means pooled into the grand covariance).
+#'
 #' @param object An object of class lavaan.
 #' @param model_list A list of string variable describing the structural path
 #'                   model, in \code{lavaan} syntax.
 #' @param se A Boolean variable. If TRUE, standard errors for the grand
 #'                   standardized parameters will be computed.
 #' @param acov_par An asymptotic variance-covariance matrix for a fitted
-#'                 model object.
+#'                 model object; defaults to `vcov(object)`. Supplying the
+#'                 covariance of an SE-corrected `tspa()` fit (produced
+#'                 with `tspa(corrected_se = TRUE)`) carries the first-order
+#'                 correction through to the grand-standardized standard
+#'                 errors reported by this function.
 #' @param free_list A list of model matrices that indicate the position of
 #'                  the free parameters in the parameter vector.
 #' @param level The confidence level required.
-#' @return A matrix of the standardized model parameters and standard errors.
+#' @return A data frame (class `lavaan.data.frame`) with one row per structural
+#' (`~`) parameter in partable order: `lhs`, `op`, `rhs`, `exo`, `group`,
+#' `block`, `label`, the grand standardized estimate `est.std`, and, when
+#' `se = TRUE`, `se`, `z`, `pvalue`, `ci.lower`, and `ci.upper`.
 #'
 #' @importFrom stats pnorm qnorm
 #' @importFrom utils tail
-#' @importFrom lavaan vcov lavInspect lav_func_jacobian_complex
+#' @importFrom lavaan vcov lav_func_jacobian_complex
+#'
+#' @seealso
+#' - `vignette("Grand Standardized Coefficients", package = "R2spa")` for the grand-standardization workflow.
 #'
 #' @export
 #'
@@ -81,8 +116,8 @@
 grand_standardized_solution <- function(object, model_list = NULL,
                                       se = TRUE, acov_par = NULL,
                                       free_list = NULL, level = .95) {
-  if (is.null(model_list)) model_list <- lavTech(object, what = "est")
-  ns <- lavInspect(object, what = "nobs")
+  if (is.null(model_list)) model_list <- tsp_model_matrices(object)
+  ns <- tsp_nobs(object)
   if (length(ns) == 1) ns <- NULL
   if (is.null(ns)) {
     message(
@@ -91,26 +126,62 @@ grand_standardized_solution <- function(object, model_list = NULL,
     )
   }
   if (is.null(acov_par)) acov_par <- vcov(object)
-  if (is.null(free_list)) free_list <- lavTech(object, what = "free")
+  if (is.null(free_list)) free_list <- tsp_free_matrices(object)
 
-  partable <- subset(lavInspect(object, what = "list"), op == "~")
-  out <- partable[, c("lhs", "op", "rhs", "exo", "group",
-                      "block", "label")]
-  partable_beta <- lavTech(object, what = "partable", list.by.group = TRUE)
+  partable <- tsp_partable_read(object)
+  positions <- tsp_partable_positions(object)
+  i_struct <- which(partable$op == "~")
+  out <- partable[i_struct, c("lhs", "op", "rhs", "exo", "group",
+                              "block", "label")]
+  out_positions <- positions[i_struct]
+  if (!length(i_struct)) {
+    stop("grand_standardized_solution(): the model contains no structural (",
+         "'~') parameters, so there is nothing to standardize.",
+         call. = FALSE)
+  }
 
   # Get standardized betas
   if (is.null(ns)) {
-    tmp_std_beta <- std_beta_est(model_list)
-    all_beta_pos <- partable_beta[[1]]$beta
+    tmp_std_beta <- unlist(std_beta_est(model_list))
   } else {
     tmp_std_beta <- unlist(grand_std_beta_est(model_list, ns))
-    group_names <- names(partable_beta)
-    all_beta_pos <- sapply(group_names, function(x) {
-      partable_beta[[x]]$beta
-    })
   }
-  beta_pos <- which(all_beta_pos != 0)
-  out$est.std <- tmp_std_beta[beta_pos]
+  # The standardized estimates live in the per-group beta matrices in
+  # column-major order, which does not in general follow the partable row
+  # order (model-statement order). Free rows are matched to their matrix
+  # position through the global free position (the partable `free` column and
+  # the free-position matrix entries are the same bijection). A user-FIXED
+  # slope has no free position, so it is anchored by (lhs, rhs) variable
+  # identity instead: the beta matrix is the full lhs x rhs grid, so the cell
+  # exists whether or not it is free. The column-major position of (lhs = row
+  # r, rhs = col c) in an nrow x ncol matrix is (c - 1) * nrow + r. The two
+  # anchors agree on every free cell, so this only changes fixed rows.
+  beta_free <- free_list[which(names(free_list) == "beta")]
+  size_beta <- nrow(beta_free[[1]]) * ncol(beta_free[[1]])
+  bnames <- tsp_beta_names(object)
+  out_idx <- vapply(seq_len(nrow(out)), function(i) {
+    g <- partable$group[i_struct[i]]
+    off <- (g - 1L) * size_beta
+    fp <- which(beta_free[[g]] == out_positions[i])
+    if (length(fp) == 1L) {
+      return(off + fp)
+    }
+    rn <- bnames[[g]]$rnm
+    cm <- bnames[[g]]$clm
+    r <- match(partable$lhs[i_struct[i]], rn)
+    c <- match(partable$rhs[i_struct[i]], cm)
+    if (is.na(r) || is.na(c)) {
+      return(0L)
+    }
+    off + (c - 1L) * nrow(beta_free[[g]]) + r
+  }, integer(1))
+  if (any(out_idx == 0L)) {
+    stop("grand_standardized_solution(): a structural ('~') parameter is not ",
+         "a beta-matrix slope (its outcome or predictor is not part of the ",
+         "structural regression block); only free or fixed latent-variable ",
+         "slopes are supported.")
+  }
+  out$est.std <- tmp_std_beta[out_idx]
 
   # Get SEs for the standardized betas
   if (se) {
@@ -142,8 +213,12 @@ grand_standardized_solution <- function(object, model_list = NULL,
                               free = free_beta_psi_alpha)
     }
     acov_par <- acov_par[pos_par, pos_par]
-    tmp_acov_std_beta <- jac %*% acov_par %*% t(jac)
-    out$se <- sqrt(diag(as.matrix(tmp_acov_std_beta[beta_pos, beta_pos])))
+    # Only the diagonal of the structural-path block of jac %*% acov_par %*%
+    # t(jac) is needed. Subset the Jacobian first (out_idx rows of the full
+    # q^2 x p Jacobian), then use rowSums(A * B) == diag(A %*% t(B)) to avoid
+    # forming the full q^2 x q^2 covariance matrix.
+    jac_sub <- jac[out_idx, , drop = FALSE]
+    out$se <- sqrt(rowSums((jac_sub %*% acov_par) * jac_sub))
     out$z <- out$est.std / out$se
     out$pvalue <- 2 * (1 - pnorm(abs(out$z)))
     ci <- out$est.std +
@@ -193,7 +268,10 @@ std_beta_est <- function(model_list, free_list = NULL, est = NULL) {
   v_eta <- veta(beta, psi = psi)
   s_eta <- sqrt(diag(v_eta))
   inv_s_eta <- 1 / s_eta
-  diag(inv_s_eta) %*% beta %*% diag(s_eta)
+  # diag(inv_s_eta) %*% beta %*% diag(s_eta) as O(q^2) recycling: a length-nrow
+  # vector recycles down the columns (row scaling), rep(v, each = nrow) scales
+  # the columns. Also immune to diag()'s length-1-numeric-as-size trap.
+  (inv_s_eta * beta) * rep(s_eta, each = nrow(beta))
 }
 
 # Function for combining free estimates into a vector
@@ -253,7 +331,7 @@ grand_std_beta_est <- function(model_list, ns, free_list = NULL, est = NULL) {
   s_eta <- sqrt(diag(v_eta))
   inv_s_eta <- 1 / s_eta
   lapply(beta_list, function(x) {
-    diag(inv_s_eta) %*% x %*% diag(s_eta)
+    (inv_s_eta * x) * rep(s_eta, each = nrow(x))
   })
 }
 

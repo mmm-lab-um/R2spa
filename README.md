@@ -3,7 +3,7 @@
 
 <!-- badges: start -->
 
-[![R-CMD-check](https://github.com/Gengrui-Zhang/R2spa/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/Gengrui-Zhang/R2spa/actions/workflows/R-CMD-check.yaml)
+[![R-CMD-check](https://github.com/mmm-lab-um/R2spa/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/mmm-lab-um/R2spa/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
 `R2spa` is a free and open-source R package that performs two-stage path
@@ -24,7 +24,7 @@ GitHub with:
 
 ``` r
 # install.packages("remotes")
-remotes::install_github("Gengrui-Zhang/R2spa")
+remotes::install_github("mmm-lab-um/R2spa")
 ```
 
 ## Example
@@ -47,9 +47,9 @@ model <- '
 ``` r
 # 2S-PA
 # Stage 1: Get factor scores and standard errors for each latent construct
-fs_dat_ind60 <- get_fs(data = PoliticalDemocracy,
+fs_dat_ind60 <- get_fs(object = PoliticalDemocracy,
                        model = "ind60 =~ x1 + x2 + x3")
-fs_dat_dem60 <- get_fs(data = PoliticalDemocracy,
+fs_dat_dem60 <- get_fs(object = PoliticalDemocracy,
                        model = "dem60 =~ y1 + y2 + y3 + y4")
 fs_dat <- cbind(fs_dat_ind60, fs_dat_dem60)
 

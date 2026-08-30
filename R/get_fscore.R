@@ -1,38 +1,294 @@
 #' Get Factor Scores and the Corresponding Standard Error of Measurement
-#' @param data A data frame containing indicators.
+#'
+#' @description
+#' `get_fs()` is an S3 generic that extracts factor scores from fitted models.
+#' Methods are available for `data.frame` (fits a CFA internally), `lavaan`
+#' objects, `lmerMod` objects, and fitted `mirt` models (single-group
+#' `SingleGroupClass` and multi-group `MultipleGroupClass`; `mirt` is a
+#' `Suggests` dependency). Multi-group mirt results carry a trailing `group`
+#' column and a per-group (`list`) `psi` attribute.
+#'
+#' @details
+#' When `object` is a data frame and `model` is supplied as a lavaan syntax string,
+#' the function internally calls [lavaan::cfa()] and then dispatches to the
+#' `lavaan` method. When `object` is a fitted model object, the appropriate S3
+#' method is called directly.
+#'
+#' `get_fs()` replaced `get_fs_lavaan()` and `get_fs_lmer()`, which are now
+#' thin wrappers retained for backward compatibility.
+#'
+#' ## Local per-construct scoring (`local = TRUE`)
+#'
+#' With `local = TRUE` (data-frame input only), each latent in `model` is
+#' scored from its own local single-factor measurement model — the
+#' canonical per-construct 2S-PA stage 1 — instead of the single joint
+#' multi-factor model. Two `model` forms are accepted:
+#'
+#' - a single string, split into per-latent `lhs =~ i1 + i2 + ...`
+#'   statements under a strict grammar (`#` comments, `;` statement
+#'   separators, and a trailing `+` line continuation are allowed;
+#'   everything else — multi-latent left-hand sides, any `~~` (latent-latent
+#'   or residual covariance), structural `~` paths, ordered `|~` statements,
+#'   thresholds `$`, labels, `c()`, and fixed values — is rejected). The
+#'   error names the offending line and points to the alternatives (joint
+#'   mode, `local = FALSE`, or the vector form);
+#' - a character vector of length >= 2 (or a named list of strings), each
+#'   element a complete single-factor model string fit verbatim (any
+#'   one-factor `lavaan` syntax — the escape hatch for what the strict
+#'   grammar rejects, e.g. within-factor residual covariances). Each element
+#'   must define exactly one latent; latent order is the element order and
+#'   latent names must be unique.
+#'
+#' The merged result reproduces the joint layout (same columns, same
+#' attribute shapes) with exactly-zero cross terms: the `fsT`, `fsL`, and
+#' `psi` attributes are block-diagonal, and the off-diagonal `_by_` loading
+#' columns and all `ecov_*` columns are zero. The cross-factor structure is
+#' not estimated by design.
+#'
+#' Local scores are *pure* per-construct. With freely correlated factors
+#' they differ from the joint-model scores, because a joint fit scores every
+#' latent from all of the indicators (verified on the 3-factor
+#' `PoliticalDemocracy` example: maximum score difference 0.369 for
+#' regression and 0.242 for Bartlett scores, and even the joint fit's
+#' per-factor estimates shift, e.g. `psi_ind60` 0.4485 joint vs 0.4455
+#' local). With the factors constrained uncorrelated (e.g.
+#' `ind60 ~~ 0 * dem60`), the likelihood factorizes and the local and joint
+#' scores agree to optimizer tolerance (~1e-5).
+#'
+#' Missing data: `missing = "fiml"` (or any FIML option) is forwarded to
+#' each local fit; the result then carries per-row attribute lists (`fsT`,
+#' `fsL`, `fsb`, `scoring_matrix` with one entry per data row) and a
+#' `per_obs = TRUE` attribute (the same convention as mirt's
+#' `mirt_per_obs`). Listwise deletion is rejected with an error, because
+#' each local fit would drop a different set of rows.
+#'
+#' Not supported in local mode (v1): `vfsLT = TRUE` (the separate local
+#' fits have no cross-latent sampling covariances, so
+#' `tspa(corrected_se = TRUE)` and corrected grand-standardized SEs are not
+#' available from a local stage 1); `prior_cov` (a `q x q` prior cannot be
+#' reduced to the per-latent priors the local fits use); and
+#' `reliability = TRUE` (the per-latent attribute shape is deferred).
+#' `group`, `std.lv`, `method`, `corrected_fsT`, `prior_mean`, and
+#' `sum_items` are supported.
+#'
+#' The result is downstream-transparent: it feeds [tspa()] directly (no
+#' explicit `fsT`/`fsL` needed) and works through [fs_indiv()] and
+#' [fs_to_group_list()].
+#'
+#' ## Product-score indicators (`product`)
+#'
+#' When `product` is supplied, [get_fs()] computes the double-mean-centered
+#' product indicator columns (`fs_a:fs_b`), their standard errors
+#' (`fs_a:fs_b_se`) and their implied loadings (`fs_a:fs_b_ld`) via
+#' [compute_fs_prod()] and appends them to the result; see
+#' [compute_fs_prod()] for the derivation. Single-group lavaan models only
+#' (v1); not supported with `local = TRUE`.
+#'
+#' @param object A data frame, a fitted [lavaan] model object, or a fitted
+#'        [lme4::lmer] model object (`merMod`).
 #' @param model An optional string specifying the measurement model
-#'              in \code{lavaan} syntax.
+#'              in \code{lavaan} syntax. Only used when `object` is a data frame.
 #'              See \code{\link[lavaan]{model.syntax}} for more information.
 #' @param group Character. Name of the grouping variable for multiple group
 #'              analysis, which is passed to \code{\link[lavaan]{cfa}}.
-#' @param method Character. Method for computing factor scores (options are
-#'               "regression" or "Bartlett"). Currently, the default is
-#'               "regression" to be consistent with
-#'               \code{\link[lavaan]{lavPredict}}, but the Bartlett scores have
-#'               more desirable properties and may be preferred for 2S-PA.
+#'              Only used when `object` is a data frame.
+#' @param local Logical. When `TRUE` (data-frame input only), each latent in
+#'        `model` is scored from its own local measurement model — the
+#'        canonical per-construct 2S-PA stage 1 — instead of the single
+#'        joint multi-factor model. `model` may be a single string (split
+#'        into per-latent `lhs =~ i1 + i2 + ...` statements under a strict
+#'        grammar) or a character vector of length >= 2 (or a named list of
+#'        strings), each element a complete single-factor model string fit
+#'        verbatim (the escape hatch for anything the strict grammar
+#'        rejects, e.g. within-factor residual covariances). See `Details`.
+#'        Default `FALSE` (the joint model, the current behavior).
+#'        `model = NULL` is a no-op (the auto single-factor model is
+#'        trivially local); on a fitted model object (`lavaan`, `merMod`,
+#'        `mirt`) an error is raised.
+#' @param method Character. Method for computing factor scores. For
+#'               `lavaan` and data frame objects: `"regression"` (default,
+#'               consistent with \code{\link[lavaan]{lavPredict}}),
+#'               `"Bartlett"`, or `"mean"` (a third, distinct method: sum
+#'               scores, each score being the plain uncentered mean of the
+#'               items assigned to its factor, using no latent
+#'               distribution), with `"ML"` an alias for `"Bartlett"` and
+#'               `"EB"` an alias for `"regression"`. For `merMod` objects:
+#'               `"EB"` (empirical Bayes, default; identical to the
+#'               first random-effect term's \code{\link[lme4]{ranef}}()
+#'               estimates) or `"ML"` (a prior-free,
+#'               per-cluster OLS estimate of the random effects, using no
+#'               random-effects prior, analogous to Bartlett scores for
+#'               `lavaan` objects). The `"ML"`/`"EB"` aliases apply to the
+#'               lavaan path only; for `merMod` objects the two strings are
+#'               distinct methods. Bartlett scores have more desirable
+#'               properties than regression scores and may be preferred for
+#'               2S-PA. `method = "mean"` takes the item-to-factor
+#'               assignment from `sum_items` (auto-derived from the
+#'               estimated loadings when `NULL`); it errors when the model
+#'               was fitted with missing data retained (e.g. FIML/digamma),
+#'               and is not supported together with `corrected_fsT`,
+#'               `vfsLT`, `reliability`, `prior_mean`, or `prior_cov`.
 #' @param corrected_fsT Logical. Whether to correct for the sampling
 #'                      error in the factor score weights when computing
 #'                      the error variance estimates of factor scores.
+#'                      Currently ignored for `merMod` objects.
 #' @param vfsLT Logical. Whether to return the covariance matrix of `fsT`
-#'              and `fsL`, which can be used as input for [vcov_corrected()]
-#'              to obtain corrected covariances and standard errors for
-#'              [tspa()] results. This is currently ignored.
+#'              and `fsL`, returned as attribute `vfsLT`; used for
+#'              second-order SE correction of 2S-PA results. Currently
+#'              ignored for `merMod` objects.
 #' @param reliability Logical. Whether to return the reliability of factor
-#'                    scores.
-#' @param ... additional arguments passed to \code{\link[lavaan]{cfa}}. See
-#'            \code{\link[lavaan]{lavOptions}} for a complete list.
+#'                    scores. Available only for single-factor lavaan models;
+#'                    for multi-factor models a warning is issued and no
+#'                    `reliability` attribute is returned.
+#' @param prior_mean An optional numeric vector of length `q` (the number of
+#'        latent variables) giving fixed external prior means for the latent
+#'        variables. `NULL` (default) uses the lavaan-estimated (group-specific)
+#'        latent means. Non-NULL values are treated as fixed external priors
+#'        shared across all lavaan groups. For `mirt` `SingleGroupClass`
+#'        objects it instead sets the factor prior mean used for the EAP
+#'        scores; the factor-score intercepts (`fsb`) then vary per observation
+#'        as `Vpost_i %*% solve(psi) %*% prior_mean`, i.e. the latent mean
+#'        scaled by the per-observation shrinkage factor (zero when
+#'        `prior_mean = NULL`), where `psi` is the mirt model's estimated
+#'        factor covariance. For `mirt` `MultipleGroupClass` objects a
+#'        non-NULL `prior_mean` (length `q`) is applied as the factor prior
+#'        mean to every group (mirt's per-group EAP is otherwise centred on a
+#'        zero-mean standard-normal prior); each observation's regression form
+#'        uses the factor covariance of its own group.
+#'        Only supported for lavaan objects with regression (EB) scoring (and
+#'        for mirt); `reliability = TRUE` is not supported together with
+#'        user-supplied `prior_mean`/`prior_cov`, and `prior_cov` is not
+#'        supported for mirt. Conceptually similar to the `mean` argument of
+#'        `mirt::fscores()`.
+#' @param prior_cov An optional numeric `q x q` covariance matrix (a scalar or
+#'        1 x 1 matrix is accepted when `q = 1`) giving fixed external prior
+#'        covariance for the latent variables. `NULL` (default) uses the
+#'        lavaan-estimated (group-specific) latent covariance. Non-NULL values
+#'        must be finite, symmetric and positive definite; when `q > 1` the
+#'        matrix must be named (row and column names matching the latent
+#'        variable names), so its entries map unambiguously onto the model's
+#'        latent variables. Values are treated as fixed external priors shared
+#'        across all lavaan groups. Only supported
+#'        for lavaan objects with regression (EB) scoring;
+#'        `reliability = TRUE` is not supported together with user-supplied
+#'        `prior_mean`/`prior_cov`. With `corrected_fsT = TRUE` or
+#'        `vfsLT = TRUE` the supplied covariance is treated as fixed, i.e. no
+#'        sampling uncertainty from the prior itself is propagated.
+#'        Conceptually similar to the `cov` argument of `mirt::fscores()`.
+#' @param sum_items A named list mapping each factor name to the item names
+#'        that make up its sum score, e.g.
+#'        `list(ind60 = c("x1", "x2", "x3"), dem60 = c("y1", "y2", "y3",
+#'        "y4"))`. `NULL` (default) auto-derives the assignment from the
+#'        estimated loadings, which requires each indicator to load on
+#'        exactly one factor and every factor to have at least one item. A
+#'        supplied list must cover all model factors, and each item may
+#'        belong to only one sum. Only used for `lavaan` and data frame
+#'        objects with `method = "mean"`.
+#' @param product A character string of the form `"a:b + c:d"` (pairs of
+#'        distinct latent names) or a list of length-2 latent-name pairs.
+#'        When supplied, [get_fs()] computes the double-mean-centered
+#'        product indicator columns (`fs_a:fs_b`), their standard errors
+#'        (`fs_a:fs_b_se`) and their implied loadings (`fs_a:fs_b_ld`) via
+#'        [compute_fs_prod()] and appends them to the result; see
+#'        [compute_fs_prod()] for the derivation. Single-group lavaan
+#'        models only (v1); not supported with `local = TRUE`.
+#' @param format Output format when `object` is a lavaan or merMod object.
+#'        `"unified"` (default) returns a single data frame; for multiple
+#'        groups it carries a `group` column and attributes `fsT`, `fsL`,
+#'        `fsb`, and `scoring_matrix` are named lists keyed by group
+#'        label. `"list"` returns the legacy shape: a named list of data
+#'        frames (one per group) with per-group matrix attributes. Use
+#'        [fs_to_group_list()] to convert between the two. For `mirt`
+#'        `SingleGroupClass` and `MultipleGroupClass` objects `format` is
+#'        accepted but the output is always a single per-observation data
+#'        frame; the multi-group result additionally carries a trailing
+#'        `group` column (the model's group levels, `NA` for
+#'        completely-missing rows) and a per-group (`list`) `psi` attribute.
+#' @param ... additional arguments passed to \code{\link[lavaan]{cfa}}
+#'            (when `object` is a data frame). See \code{\link[lavaan]{lavOptions}}
+#'            for a complete list.
 #' @return A data frame containing the factor scores (with prefix `"fs_"`),
 #'         the standard errors (with suffix `"_se"`), the implied loadings
-#'         of factor `"_by_"` factor scores, and the error variance-covariance
-#'         of the factor scores (with prefix `"evfs_"`). The following are
-#'         also returned as attributes:
-#'         * `fsT`: error covariance of factor scores
-#'         * `fsL`: loading matrix of factor scores
-#'         * `fsb`: intercepts of factor scores
-#'         * `scoring_matrix`: weights for computing factor scores from items
+#'         of indicator `_by_` factor scores, and the error variance-covariance
+#'         of the factor scores (with prefix `"ev_"` or `"ecov_"`).
+#'         For multi-group lavaan models in `"unified"` format, a `group` column
+#'         is included. The following attributes are attached:
+#'         * `fsT`: error covariance of factor scores (matrix or named list by group)
+#'         * `fsL`: loading matrix of factor scores (matrix or named list by group)
+#'         * `fsb`: intercepts of factor scores (vector or named list by
+#'           group); with `method = "mean"` the intercept is the mean of the
+#'           factor's item intercepts, the measurement intercept of the score
+#'           regressed on the uncentered latent (same `E[fs] - fsL %*% alpha`
+#'           convention as the other methods; equals the score's column mean
+#'           for models without a mean structure)
+#'         * `scoring_matrix`: weights for computing factor scores from the
+#'           observed data, as a named list. For lavaan models: one
+#'           score x item matrix per group; with `method = "mean"` the
+#'           weights are the item-mean weights, so `S %*% y` reproduces the
+#'           raw scores exactly (no centering offset). For `merMod` models:
+#'           one `num_re` x `n_j` matrix per cluster, where
+#'           `S_j %*% (y_j - X_j %*% beta)` with `y_j`/`X_j` the cluster's
+#'           rows of the model response and the fixed-effects design
+#'           reproduces the cluster's EB scores for method `"EB"` and the
+#'           per-cluster OLS (ML) scores for method `"ML"`.
+#'         * `psi`: effective (prior-adjusted) covariance matrix of the
+#'           latent variables (`q x q`), group-level (not per-pattern), and
+#'           a point estimate only (no sampling SEs of the latents are
+#'           attached). Mirrors the `fsT` shape: a named list keyed by group
+#'           label for `"unified"` output; a direct attribute on each group
+#'           data frame (plus a list-valued attribute on the outer list) for
+#'           `"list"` output; for `merMod` objects a single `q x q` matrix.
+#'           With `prior_cov` supplied it equals the prior (shared across
+#'           groups), otherwise the per-group lavaan estimate. For `merMod`
+#'           objects the matrix is the first random-effects term's
+#'           `VarCorr`, with dimnames renamed to match the `fsL` column
+#'           names (`u0`/`u1`/..., or the legacy `u0_eb`/`u1_eb` names).
+#'         * `alpha`: effective (prior-adjusted) means of the latent
+#'           variables (a named vector of length `q`), with the same group
+#'           nesting and point-estimate semantics as `psi`. With
+#'           `prior_mean` supplied it equals the prior, otherwise the
+#'           per-group lavaan estimate; a named zero vector (`0` per latent)
+#'           when the model has no (estimated) mean structure. For `merMod`
+#'           objects a named zero vector (random effects are mean zero).
+#'         * `fs_pattern`: for lavaan models, a named list by group of
+#'           `list(label, pat)` entries. `label` is a character vector with
+#'           one entry per case in the group giving that case's
+#'           observed-indicator pattern name (`NA` for cases whose indicators
+#'           are all missing); `pat` is a logical matrix with rows =
+#'           indicators and one column per pattern, the columns being named
+#'           by pattern name.
 #'
-#' @importFrom lavaan cfa sem lavInspect lavTech coef
+#'         For a lavaan group without missing data, its `fsT`/`fsL`/`fsb`/
+#'         `scoring_matrix` elements are the plain matrix/vector for the whole
+#'         group. When a group's cases split into multiple observed-indicator
+#'         patterns (missing data), each such element is instead a named list
+#'         with one entry per pattern; the pattern name is the observed
+#'         indicator names joined with `"+"` in indicator order (e.g.
+#'         `"x1+x3"`).
+#'
+#'         With `local = TRUE` and missing data (e.g. `missing = "fiml"`),
+#'         the `fsT`/`fsL`/`fsb`/`scoring_matrix` attributes are instead
+#'         per-row lists (one entry per data row) and the result carries a
+#'         `per_obs = TRUE` attribute (the same convention as mirt's
+#'         `mirt_per_obs`).
+#'
+#'         Note: for a single-group lavaan fit in `"unified"` format, the
+#'         per-group attribute wrappers (`fsT`, `fsL`, `fsb`,
+#'         `scoring_matrix`, `psi`, and `alpha`) are each a one-element list
+#'         named with the empty string `""`; `x[[""]]` does not match in R
+#'         list subsetting, so read these attributes positionally (e.g.
+#'         `attr(fs, "fsT")[[1]]`, `attr(fs, "psi")[[1]]`) rather than by
+#'         name.
+#' @importFrom lavaan cfa sem
+#' @importFrom lavaan lavInspect lavTech coef
+#' @importFrom lavaan vcov
 #' @importFrom stats setNames
+#'
+#' @seealso
+#' - `vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")` for end-to-end stage-1/stage-2 examples.
+#' - `vignette("Scoring Matrices: lavaan CFA and lme4", package = "R2spa")` for the scoring-matrix internals.
+#' - `vignette("EFA Scores", package = "R2spa")` for EFA-based factor scores.
+#' - `vignette("2S-PA with Missing Data", package = "R2spa")` for `missing = "fiml"`.
 #'
 #' @export
 #'
@@ -45,6 +301,25 @@
 #'        model = " ind60 =~ x1 + x2 + x3
 #'                  dem60 =~ y1 + y2 + y3 + y4 ")
 #'
+#' # Local per-construct scoring: each latent is scored from its own
+#' # single-factor model (the canonical 2S-PA stage 1) and the results are
+#' # merged into the usual multi-factor layout
+#' get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4",
+#'                             "y5", "y6", "y7", "y8")],
+#'        model = " ind60 =~ x1 + x2 + x3
+#'                  dem60 =~ y1 + y2 + y3 + y4
+#'                  dem65 =~ y5 + y6 + y7 + y8 ",
+#'        local = TRUE)
+#'
+#' # Vector form: one complete single-factor model string per latent, fit
+#' # verbatim (e.g. a within-factor residual covariance the strict string
+#' # grammar rejects)
+#' get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
+#'        model = c("ind60 =~ x1 + x2 + x3",
+#'                  "dem60 =~ y1 + y2 + y3 + y4
+#'                   y1 ~~ y4"),
+#'        local = TRUE)
+#'
 #' # Multiple-group
 #' hs_model <- ' visual  =~ x1 + x2 + x3 '
 #' fit <- cfa(hs_model,
@@ -54,187 +329,241 @@
 #' # Or without the model
 #' get_fs(HolzingerSwineford1939[c("school", "x4", "x5", "x6")],
 #'        group = "school")
+#'
+#' # Fixed external latent prior (shared across groups) for regression scores;
+#' # conceptually similar to mirt::fscores(mean, cov)
+#' fit <- cfa("visual =~ x1 + x2 + x3",
+#'            data = HolzingerSwineford1939,
+#'            group = "school", group.equal = c("loadings", "intercepts"))
+#' get_fs(fit, prior_mean = c(visual = -0.12), prior_cov = 0.33)
+#'
+#' # Product-score indicator for the ind60 x dem60 interaction (single-group
+#' # lavaan models only, v1); see compute_fs_prod() for the derivation
+#' get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
+#'        model = " ind60 =~ x1 + x2 + x3
+#'                  dem60 =~ y1 + y2 + y3 + y4 ",
+#'        product = "ind60:dem60")
 
-get_fs <- function(data, model = NULL, group = NULL,
-                   method = c("regression", "Bartlett"),
-                   corrected_fsT = FALSE,
-                   vfsLT = FALSE,
-                   reliability = FALSE,
-                   ...) {
-  if (!is.data.frame(data)) data <- as.data.frame(data)
-  if (is.null(model)) {
-    ind_names <- colnames(data)
-    if (!is.null(group)) {
-      ind_names <- setdiff(ind_names, group)
-    }
-    model <- paste("f1 =~",
-                   paste(ind_names, collapse = " + "))
+get_fs <- function(object, ...) {
+  # `local = TRUE` is only defined for the data-frame entry point (the
+  # measurement-model syntax string is what gets split into per-latent
+  # models). A fitted model object is a joint model by construction and
+  # carries no syntax string, so fail fast with an actionable message
+  # instead of silently ignoring the argument in the method's `...`.
+  if (isTRUE(list(...)[["local"]]) &&
+      !is.data.frame(object) && !is.matrix(object)) {
+    stop(
+      "'local = TRUE' is only supported when 'object' is a data frame: ",
+      "a fitted model object (lavaan, merMod, mirt) is a joint model by ",
+      "construction and has no measurement-model syntax string to split ",
+      "into per-latent models.",
+      call. = FALSE
+    )
   }
-  fit <- cfa(model, data = data, group = group, ...)
-  get_fs_lavaan(lavobj = fit, method = method,
-                corrected_fsT = corrected_fsT,
-                vfsLT = vfsLT,
-                reliability = reliability)
+  UseMethod("get_fs")
 }
 
 #' @inherit get_fs
 #' @param lavobj A lavaan model object when using [get_fs_lavaan()].
+#'
+#' @details
+#' `get_fs_lavaan()` is superseded by [get_fs()]. It is retained for backward
+#' compatibility and delegates to `get_fs(object, format = "list")` internally.
+#' New code should call [get_fs()] directly.
+#'
 #' @export
-get_fs_lavaan <- function(lavobj,
-                          method = c("regression", "Bartlett"),
-                          corrected_fsT = FALSE,
-                          vfsLT = FALSE,
-                          reliability = FALSE) {
-  est <- lavInspect(lavobj, what = "est")
-  y <- lavInspect(lavobj, what = "data")
-  if (reliability) corrected_fsT <- TRUE
-  if (corrected_fsT) {
-    add_to_evfs <- correct_evfs(lavobj, method = method)
-  } else {
-    add_to_evfs <- rep(0, lavInspect(lavobj, what = "ngroups"))
-  }
-  miss_pat <- lavobj@Data@Mp
-  prepare_fs_dat <- function(y, est, add, case_idx, mp) {
-    if (is.null(mp)) {
-      fscore <-
-        compute_fscore(y,
-                       lambda = est$lambda,
-                       theta = est$theta,
-                       psi = est$psi,
-                       nu = est$nu,
-                       alpha = est$alpha,
-                       method = method,
-                       fs_matrices = TRUE
-        )
-      augment_fs(fscore, attr(fscore, which = "fsT") + add)
-    } else {
-      fscore <- matrix(NA, nrow = nrow(y), ncol = ncol(est$psi))
-      npat <- mp$npatterns
-      pats <- mp$pat
-      mis_idx <- mp$case.idx
-      for (m in seq_len(npat)) {
-        idx_m <- mis_idx[[m]]
-        pat_m <- pats[m, ]
-        fs_m <-
-          compute_fscore(y[idx_m, pat_m, drop = FALSE],
-                         lambda = est$lambda[pat_m, , drop = FALSE],
-                         theta = est$theta[pat_m, pat_m, drop = FALSE],
-                         psi = est$psi,
-                         nu = est$nu[pat_m, , drop = FALSE],
-                         alpha = est$alpha,
-                         method = method,
-                         fs_matrices = TRUE
-          )
-        fs_dat <- augment_fs(fs_m, attr(fs_m, which = "fsT") + add)
-        if (m == 1) {
-          fscore <- as.data.frame(
-            matrix(NA, nrow = nrow(y), ncol = ncol(fs_dat)))
-          attributes(fscore) <-
-            c(attributes(fs_dat)[1:2],
-              list(row.names = rownames(fscore)),
-              attributes(fs_dat)[-(1:3)])
-        }
-        fscore[idx_m, ] <- fs_dat
-      }
-      fscore
-    }
-  }
-  group <- lavInspect(lavobj, what = "group")
-  if (length(group) == 0) {
-    out <- prepare_fs_dat(y, est = est, add = add_to_evfs[[1]],
-                          mp = miss_pat[[1]])
-  } else {
-    fs_lst <- setNames(
-      vector("list", length = length(est)),
-      lavobj@Data@group.label
-    )
-    for (g in seq_along(fs_lst)) {
-      fs_lst[[g]] <- prepare_fs_dat(
-        y[[g]], est = est[[g]], add = add_to_evfs[[g]],
-        mp = miss_pat[[g]]
+get_fs_lavaan <- function(
+  lavobj,
+  method = c("regression", "Bartlett", "ML", "EB", "mean"),
+  corrected_fsT = FALSE,
+  vfsLT = FALSE,
+  reliability = FALSE,
+  prior_mean = NULL,
+  prior_cov = NULL,
+  sum_items = NULL,
+  ...
+) {
+  get_fs(
+    lavobj,
+    method = method,
+    corrected_fsT = corrected_fsT,
+    vfsLT = vfsLT,
+    reliability = reliability,
+    format = "list",
+    prior_mean = prior_mean,
+    prior_cov = prior_cov,
+    sum_items = sum_items,
+    ...
+  )
+}
+
+#' Convert Unified Factor Scores to Group List (or Vice Versa)
+#'
+#' @description
+#' `fs_to_group_list()` converts a unified factor-score data frame
+#' (single data frame with a `group` column and list-valued attributes)
+#' into the legacy list-of-data-frames shape with per-group attributes.
+#' It acts as its own inverse: if given a group list, it converts back to
+#' the unified shape.
+#'
+#' @param fs Object returned by [get_fs()]. Either a unified data frame
+#'           (with a `group` column and list-valued attributes) or a named
+#'           list of data frames (one per group) with per-group attributes.
+#'
+#' @return If `fs` is a unified data frame, returns a named list of data
+#'         frames, one per group, with `fsT`, `fsL`, `fsb`, `scoring_matrix`,
+#'         and `fs_pattern` attached as per-group attributes on each element
+#'         and as list-valued attributes on the outer list. If `fs` is a
+#'         group list, returns a single data frame with a `group` column and
+#'         list-valued attributes. A single-group input returns a single
+#'         data frame (not a list) in either direction.
+#'
+#' @export
+#'
+#' @examples
+#' library(lavaan)
+#' hs_model <- "visual =~ x1 + x2 + x3"
+#' fit <- cfa(hs_model, data = HolzingerSwineford1939, group = "school")
+#' fs_unified <- get_fs(fit)                     # unified df
+#' fs_list <- fs_to_group_list(fs_unified)       # list-of-df shape
+#' fs_back <- fs_to_group_list(fs_list)          # back to unified
+#' all.equal(fs_unified, fs_back, check.attributes = FALSE)
+fs_to_group_list <- function(fs) {
+  # psi/alpha are the group-level latent moments (see get_fs() @return);
+  # they are carried through the unified <-> list conversion like fsT.
+  attr_keys <- c("fsT", "fsL", "fsb", "scoring_matrix", "fs_pattern",
+                 "psi", "alpha")
+
+  if (is.data.frame(fs)) {
+    # Per-observation results (mirt fits, local = TRUE with missing data)
+    # carry PER-ROW list attributes, not per-group values: converting them
+    # would attach the whole per-row list to every group (or silently drop
+    # NA-group rows in split()), so reject them like tspa()/tspa_mx_model()/
+    # compute_fs_prod() do.
+    if (isTRUE(attr(fs, "per_obs")) || isTRUE(attr(fs, "mirt_per_obs"))) {
+      stop(
+        "'fs' is a per-observation result (marked 'per_obs'/'mirt_per_obs'): ",
+        "its 'fsT'/'fsL'/'fsb'/'scoring_matrix' attributes are per-row ",
+        "lists, not per-group values, so the unified <-> group-list ",
+        "conversion is not defined for it.",
+        call. = FALSE
       )
-      fs_lst[[g]][[group]] <- names(est[g])
     }
-    attr_names <- setdiff(names(attributes(fs_lst[[1]])),
-                          c("names", "class", "row.names", "col.names"))
-    attr_lst <- rep(
-      list(
-        setNames(vector("list", length = length(est)), lavobj@Data@group.label)
-      ),
-      length(attr_names)
-    )
-    for (j in seq_along(attr_lst)) {
-      for (g in seq_along(fs_lst)) {
-        attr_lst[[j]][[g]] <- attr(fs_lst[[g]], which = attr_names[j])
+
+    # A single-group unified result wraps its attributes in one-element
+    # lists; unwrap them. Shared by the two single-group branches below.
+    unwrap_single <- function(out) {
+      for (ak in attr_keys) {
+        outer <- attr(fs, ak)
+        attr(out, ak) <-
+          if (is.list(outer) && length(outer) == 1L) outer[[1L]] else outer
       }
-      attr(fs_lst, which = attr_names[j]) <- attr_lst[[j]]
+      out
     }
-    out <- fs_lst
-  }
-  if (vfsLT) {
-    attr(out, "vfsLT") <- vcov_ld_evfs(lavobj, method = method)
-  }
-  if (reliability) {
-    multifactor <- ifelse(inherits(attr(out, "fsb"), "list"),
-                          length(attr(out, "fsb")[[1]]) > 1,
-                          length(attr(out, "fsb")) > 1)
-    if (multifactor) {
-      warning("Compution of reliability for a multi-factor model is not ",
-              "currently supported. ")
-    } else {
-      if (length(group) == 0) {
-        is_std.lv <- est$psi == 1
-        attr(out, "reliability") <-
-          compute_fsrel(lavobj, method = method)[[1]]
-      } else {
-        is_std.lv = all(unlist(lapply(est, function(x) x$psi)) == 1)
-        rels <- compute_fsrel(lavobj, method = method)
-        group_n <- lavInspect(lavobj, what = "norig")
-        rels[g + 1] <- sum(unlist(rels) * group_n / sum(group_n))
-        attr(out, "reliability") <-
-          setNames(rels, c(lavobj@Data@group.label, "overall"))
-      }
-      if (!is_std.lv) {
-        warning(
-          "Computation of reliability may not be accurate when ",
-          "the latent variables are not standardized. "
-        )
+
+    grp_col <- attr(fs, "group_col")
+    if (is.null(grp_col)) {
+      grp_col <- "group"
+    }
+
+    if (!grp_col %in% names(fs)) {
+      # Single-group unified result without group column — unwrap attributes
+      return(unwrap_single(fs))
+    }
+
+    group_labels <- unique(fs[[grp_col]])
+
+    if (length(group_labels) == 1) {
+      return(unwrap_single(
+        fs[, !names(fs) %in% grp_col, drop = FALSE]
+      ))
+    }
+
+    grp_dfs <- split(fs, fs[[grp_col]])
+    grp_dfs <- grp_dfs[group_labels]
+    for (g in group_labels) {
+      grp_dfs[[g]] <- grp_dfs[[g]][,
+        !names(grp_dfs[[g]]) %in% grp_col,
+        drop = FALSE
+      ]
+      for (ak in attr_keys) {
+        outer <- attr(fs, ak)
+        if (is.list(outer) && !is.null(names(outer))) {
+          attr(grp_dfs[[g]], ak) <- outer[[g]]
+        } else {
+          attr(grp_dfs[[g]], ak) <- outer
+        }
       }
     }
+
+    # Re-attach outer list-level attributes
+    for (ak in attr_keys) {
+      outer <- attr(fs, ak)
+      if (is.list(outer)) {
+        attr(grp_dfs, ak) <- outer
+      }
+    }
+    grp_dfs
+  } else if (is.list(fs)) {
+    group_labels <- names(fs)
+    if (is.null(group_labels) || !all(nzchar(group_labels))) {
+      stop("Group list must be named (by group label).", call. = FALSE)
+    }
+
+    if (length(group_labels) == 1) {
+      out <- fs[[1L]]
+      if ("group" %in% names(out)) {
+        out <- out[, !names(out) %in% "group", drop = FALSE]
+      }
+      return(out)
+    }
+
+    group_dfs <- lapply(group_labels, function(g) {
+      df <- fs[[g]]
+      if ("group" %in% names(df)) {
+        df <- df[, !names(df) %in% "group", drop = FALSE]
+      }
+      df[["group"]] <- g
+      df
+    })
+    unified <- do.call(rbind, group_dfs)
+    attr(unified, "group_col") <- "group"
+
+    for (ak in attr_keys) {
+      per_grp <- lapply(group_labels, function(g) {
+        a <- attr(fs[[g]], ak)
+        if (!is.null(a)) {
+          return(a)
+        }
+        outer <- attr(fs, ak)
+        if (is.list(outer) && !is.null(names(outer))) {
+          return(outer[[g]])
+        }
+        NULL
+      })
+      if (!all(vapply(per_grp, is.null, logical(1)))) {
+        attr(unified, ak) <- setNames(per_grp, group_labels)
+      }
+    }
+    unified
+  } else {
+    stop("'fs' must be data frame or list.", call. = FALSE)
   }
-  out
 }
 
 augment_fs <- function(fs, fs_ev) {
-  fs_se <- t(as.matrix(sqrt(diag(fs_ev))))
-  # fs_se[is.nan(fs_se)] <- 0
-  colnames(fs) <- paste0("fs_", colnames(fs))
-  colnames(fs_se) <- paste0(colnames(fs_se), "_se")
-  num_lvs <- ncol(fs_ev)
-  fs_evs <- rep(NA, num_lvs * (num_lvs + 1) / 2)
-  count <- 1
-  for (i in seq_len(num_lvs)) {
-    for (j in seq_len(i)) {
-      fs_evs[count] <- fs_ev[i, j]
-      if (i == j) {
-        names(fs_evs)[count] <- paste0("ev_", rownames(fs_ev)[i])
-      } else {
-        names(fs_evs)[count] <- paste0("ecov_",
-                                       rownames(fs_ev)[i], "_",
-                                       colnames(fs_ev)[j])
-      }
-      count <- count + 1
-    }
-  }
   fsL <- attr(fs, "fsL")
-  fs_names <- paste0("fs_", colnames(fsL))
-  fs_lds <- lapply(seq_len(ncol(fsL)), function(i) {
-    setNames(fsL[, i],
-             paste(colnames(fsL)[i], fs_names, sep = "_by_"))
-  })
-  fs_lds <- unlist(fs_lds)
-  fs_dat <- cbind(as.data.frame(fs), fs_se, t(as.matrix(fs_lds)),
-                  t(as.matrix(fs_evs)))
+  # Column values (se / loadings / lower-tri error terms) come from the
+  # shared value-only engine fs_row_cols() (R/fs_indiv.R); the r2spa column
+  # naming comes from its naming twin fs_row_colnames().
+  vals <- fs_row_cols(fs, fsL, fs_ev)
+  colnames(fs) <- paste0("fs_", colnames(fs))
+  nm <- fs_row_colnames(fsL, fs_ev)
+  colnames(vals) <- c(nm$se, nm$ld, nm$ev)
+  fs_dat <- cbind(
+    as.data.frame(fs),
+    vals
+  )
   attr(fs_dat, "fsT") <- fs_ev
   attr(fs_dat, "fsL") <- fsL
   attr(fs_dat, "fsb") <- attr(fs, "fsb")
@@ -242,459 +571,202 @@ augment_fs <- function(fs, fs_ev) {
   fs_dat
 }
 
-augment_fs2 <- function(fs, fsL, fsT, fsb = NULL) {
-  fs_se <- sqrt(diag(fsT))
-  fs_lds <- c(fsL)
-  fs_evs <- fsT[upper.tri(fsT, diag = TRUE)]
-  fs_vec <- c(fs_se, fs_lds, fs_evs)
-  if (!is.null(fsb)) {
-    fs_vec <- c(fs_vec, fsb)
+assemble_fs_blocks <- function(
+  blocks_by_group,
+  format = c("unified", "list"),
+  group_col = NULL
+) {
+  format <- match.arg(format)
+  group_labels <- names(blocks_by_group)
+  if (is.null(group_labels) || !all(nzchar(group_labels))) {
+    group_labels <- rep("", length(blocks_by_group))
   }
-  cbind(as.data.frame(fs), matrix(fs_vec, nrow = 1))
-}
+  attr_keys <- c("fsT", "fsL", "fsb", "scoring_matrix", "fs_pattern")
+  # fs_pattern is attached explicitly below (per-pattern label/pat list);
+  # the per-block attribute lists do not carry a fs_pattern element.
+  grp_attr_keys <- setdiff(attr_keys, "fs_pattern")
 
-compute_lav_fs_matrices <- function(
-  acov, psi = NULL, alpha = NULL,
-  method = c("regression", "Bartlett")) {
-  method <- match.arg(method)
-  if (method == "regression") {
-    fsL <- diag(nrow(acov)) - acov %*% solve(psi)
-    fsT <- fsL %*% acov
-    if (is.null(alpha)) {
-      fsb <- NULL
-    } else {
-      fsb <- alpha - fsL %*% alpha
-    }
-  } else if (method == "Bartlett") {
-    fsL <- diag(nrow(acov))
-    fsT <- acov
-    if (is.null(alpha)) {
-      fsb <- NULL
-    } else {
-      fsb <- rep(0, nrow(acov))
-    }
-  }
-  return(list(fsL = fsL, fsT = fsT, fsb = fsb))
-}
+  group_dfs <- vector("list", length(group_labels))
+  names(group_dfs) <- group_labels
 
-create_fsT_names <- function(fs_names) {
-  out <- outer(fs_names,
-    Y = fs_names,
-    FUN = paste, sep = "_"
-  )
-  out[lower.tri(out)] <- t(out)[lower.tri(out)]
-  out[] <- paste0("ecov_", out)
-  diag(out) <- paste0("ev_", fs_names)
-  out
-}
+  for (g in seq_along(group_labels)) {
+    blocks <- blocks_by_group[[g]]
+    n_cases <- max(unlist(lapply(blocks, function(b) max(b$case_idx))))
 
-create_fsL_names <- function(lv_names, fs_names) {
-  out <- outer(lv_names,
-    Y = fs_names, FUN = paste,
-    sep = "_by_"
-  )
-  t(out)
-}
+    aug_list <- lapply(blocks, function(b) {
+      augment_fs(b$fs, b$fsT)
+    })
 
-get_fs_mat_names <- function(lv_names, int = TRUE) {
-  # Initialize data frame
-  fs_names <- paste0("fs_", lv_names)
-  se_names <- paste0("se_", fs_names)
-  ev_names <- create_fsT_names(fs_names)
-  dimnames(ev_names) <- rep(list(fs_names), 2)
-  ld_names <- create_fsL_names(lv_names, fs_names = fs_names)
-  dimnames(ld_names) <- list(fs_names, lv_names)
-  out <- list(
-    fs = fs_names, se = se_names, ld = ld_names, ev = ev_names
-  )
-  if (int) {
-    return(c(out, int = paste0("int_", fs_names)))
-  } else {
-    return(out)
-  }
-}
-
-#' Obtain factor scores and related definition variables from
-#' a `lavaan` object for 2S-PA analyses.
-#'
-#' This function obtained the factor scores, standard errors,
-#' loading matrix, and variance covariance matrix by calling
-#' the [lavaan::lavPredict()] function.
-#'
-#' @param lavobj A fitted [`lavaan::lavaan-class`] object
-#' @param method A character string indicating the scoring method to use.
-#'               Must be either `"regression"` or `"Bartlett"`.
-#' @param drop_list_single logical. Should the results be unlisted
-#'                         for single-group models?
-#' @param ... Additional arguments passed to [lavaan::lavPredict()]
-#' @return A `data.frame` containing the factor scores, the corresponding
-#'         standard errors, the loadings and cross-loadings of the factor
-#'         scores as indicators of the latent variables, the 
-#'         error variance-covariance matrix of the factor scores,
-#'         and the measurement intercepts.
-#'         In addition, three character matrices are added as attributes
-#'         that can be used as input to [tspa_mx_model()]:
-#' * `ld`: cross-loading matrix
-#' * `ev`: error variance-covariance matrix
-#' * `int`: measurement intercepts
-#' @export
-#' @examples
-#' library(lavaan)
-#' hs_model <- ' visual  =~ x1 + x2 + x3 '
-#' fit <- cfa(hs_model,
-#'            data = HolzingerSwineford1939,
-#'            group = "school")
-#' augment_lav_predict(fit)
-augment_lav_predict <- function(
-    lavobj, method = c("regression", "Bartlett"),
-    drop_list_single = TRUE, ...) {
-  method <- match.arg(method)
-  mp_lst <- lavobj@Data@Mp
-  fs_lst <- lavaan::lavPredict(
-    lavobj,
-    type = "lv", method = method,
-    acov = TRUE,
-    ...
-  )
-  if (lavInspect(lavobj, what = "ngroups") == 1) {
-    fs_lst <- list(fs_lst)
-    attr(fs_lst, "acov") <- attr(fs_lst[[1]], "acov")
-  }
-  pars <- lavInspect(lavobj, what = "est",
-                     drop.list.single.group = FALSE)
-  out <- vector("list", length = length(fs_lst))
-  names(out) <- names(fs_lst)
-  has_means <- lavInspect(lavobj, what = "meanstructure")
-  for (g in seq_along(fs_lst)) {
-    mp <- mp_lst[[g]]
-    fs <- fs_lst[[g]]
-    if (is.null(mp)) {
-      case_idx <- list(seq_len(nrow(fs)))
-      acov_g <- list(attr(fs_lst, "acov")[[g]])
-      acov_rank <- 1
-    } else {
-      case_idx <- mp$case.idx
-      # Somehow lavaan sort the `acov` output by the missing data pattern and
-      # does not match the order of the missing pattern
-      # So need to find the order first
-      acov_g <- attr(fs_lst, "acov")[[g]]
-      acov_rank <- rank(mp$id)
-    }
-    # Initialize empty data frame
-    fs_matnames <- get_fs_mat_names(colnames(fs),
-                                    int = has_means)
-    fs_colnames <- unlist(
-      within(fs_matnames, expr = {
-        ld <- c(ld)
-        ev <- ev[upper.tri(ev, diag = TRUE)]
-      })
+    template_cols <- names(aug_list[[1]])
+    # All aug_list columns are numeric (scores / SEs / loadings / error
+    # terms), so the NA scaffold is numeric from the start.
+    grp_df <- as.data.frame(
+      matrix(NA_real_, nrow = n_cases, ncol = length(template_cols))
     )
-    fs_dat <- data.frame(
-      matrix(NA,
-        nrow = nrow(fs),
-        ncol = length(fs_colnames),
-        dimnames = list(NULL, fs_colnames)
-      )
-    )
-    psi <- pars[[g]]$psi
-    alpha <- pars[[g]]$alpha
-    for (i in seq_along(case_idx)) {
-      mat_idx <- acov_rank[i]
-      fs_matrices <- compute_lav_fs_matrices(
-        acov = acov_g[[mat_idx]],
-        psi = psi,
-        alpha = alpha,
-        method = method
-      )
-      fs_dat[case_idx[[i]], ] <- augment_fs2(
-        fs[case_idx[[i]], , drop = FALSE],
-        fsL = fs_matrices$fsL,
-        fsT = fs_matrices$fsT,
-        fsb = fs_matrices$fsb
-      )
-    }
-    out[[g]] <- fs_dat
-  }
-  if (drop_list_single && length(out) == 1) {
-    out <- out[[1]]
-  }
-  attr(out, "ld") <- fs_matnames$ld
-  attr(out, "ev") <- fs_matnames$ev
-  attr(out, "int") <- fs_matnames$int
-  out
-}
+    colnames(grp_df) <- template_cols
 
-#' Compute factor scores
-#'
-#' @param y An N x p matrix where each row is a response vector. If there
-#'          is only one observation, it should be a matrix of one row.
-#' @param lambda A p x q matrix of factor loadings.
-#' @param theta A p x p matrix of unique variance-covariances.
-#' @param psi A q x q matrix of latent factor variance-covariances.
-#' @param nu A vector of length p of measurement intercepts.
-#' @param alpha A vector of length q of latent means.
-#' @param method A character string indicating the method for computing factor
-#'               scores. Currently, only "regression" is supported.
-#' @param center_y Logical indicating whether \code{y} should be mean-centered.
-#'                 Default to \code{TRUE}.
-#' @param fs_matrices Logical indicating whether covariances of the error
-#'                    portion of factor scores (\code{fsT}), factor score
-#'                    loading matrix (\eqn{L}; \code{fsL}) and intercept vector
-#'                    (\eqn{b}; \code{fsb}) should be returned.
-#'                    The loading and intercept matrices are the implied
-#'                    loadings and intercepts by the model when using the
-#'                    factor scores as indicators of the latent variables.
-#'                    If \code{TRUE}, these matrices will be added as
-#'                    attributes.
-#' @param acov Logical indicating whether the asymptotic covariance matrix
-#'             of factor scores should be returned as an attribute.
-#'
-#' @return An N x p matrix of factor scores.
-#' @export
-#'
-#' @examples
-#' library(lavaan)
-#' fit <- cfa(" ind60 =~ x1 + x2 + x3
-#'              dem60 =~ y1 + y2 + y3 + y4 ",
-#'            data = PoliticalDemocracy)
-#' fs_lavaan <- lavPredict(fit, method = "Bartlett")
-#' # Using R2spa::compute_fscore()
-#' est <- lavInspect(fit, what = "est")
-#' fs_hand <- compute_fscore(lavInspect(fit, what = "data"),
-#'                           lambda = est$lambda,
-#'                           theta = est$theta,
-#'                           psi = est$psi,
-#'                           method = "Bartlett")
-#' fs_hand - fs_lavaan  # same scores
-compute_fscore <- function(y, lambda, theta, psi = NULL,
-                           nu = NULL, alpha = NULL,
-                           method = c("regression", "Bartlett"),
-                           center_y = TRUE,
-                           acov = FALSE,
-                           fs_matrices = FALSE) {
-  method <- match.arg(method)
-  if (is.null(nu)) nu <- colMeans(y)
-  if (is.null(alpha)) alpha <- matrix(0, nrow = ncol(as.matrix(lambda)))
-  y1c <- t(as.matrix(y))
-  if (center_y) {
-    meany <- lambda %*% alpha + nu
-    y1c <- y1c - as.vector(meany)
-  }
-  a_mat <- compute_a_from_mat(method,
-                              lambda = lambda, psi = psi, theta = theta)
-  fs <- t(a_mat %*% y1c + as.vector(alpha))
-  if (acov) {
-    # if (is.null(psi)) {
-    #   stop("input of psi (latent covariance) is needed for acov")
-    # }
-    if (method == "regression") {
-      covy <- lambda %*% psi %*% t(lambda) + theta
-      attr(fs, "acov") <-
-        unclass(psi - a_mat %*% covy %*% t(a_mat))
-    } else if (method == "Bartlett") {
-      attr(fs, "acov") <-
-        unclass(a_mat %*% theta %*% t(a_mat))
+    for (bl in seq_along(blocks)) {
+      grp_df[blocks[[bl]]$case_idx, ] <- aug_list[[bl]]
     }
-  }
-  if (fs_matrices) {
-    attr(fs, "scoring_matrix") <- a_mat
-    fsL <- unclass(a_mat %*% lambda)
-    fs_names <- paste0("fs_", colnames(fsL))
-    rownames(fsL) <- fs_names
-    attr(fs, "fsL") <- fsL
-    fsb <- as.numeric(alpha - fsL %*% alpha)
-    names(fsb) <- fs_names
-    attr(fs, "fsb") <- fsb
-    # tv <- fsL %*% psi %*% t(fsL)
-    # fsv <- a_mat %*% covy %*% t(a_mat)
-    # attr(fs, "fsT") <- fsv - tv
-    fsT <- a_mat %*% theta %*% t(a_mat)
-    rownames(fsT) <- colnames(fsT) <- fs_names
-    attr(fs, "fsT") <- fsT
-  }
-  fs
-}
 
-compute_fspars <- function(par, lavobj, method = c("regression", "Bartlett"),
-                           what = c("a", "evfs", "ldfs")) {
-  method <- match.arg(method)
-  what <- match.arg(what)
-  ngrp <- lavInspect(lavobj, what = "ngroups")
-  frees <- lavInspect(lavobj, what = "free")
-  mats <- lavInspect(lavobj, what = "est")
-  if (ngrp == 1) {
-    frees <- list(frees)
-    mats <- list(mats)
-  }
-  out <- vector("list", ngrp)
-  mp <- lavobj@Data@Mp
-  for (g in seq_len(ngrp)) {
-    free <- frees[[g]]
-    mat <- mats[[g]]
-    free_list <- lapply(free, FUN = \(x) x[which(x > 0)])
-    for (l in seq_along(free_list)) {
-      for (i in free_list[[l]]) {
-        mat[[l]][which(free[[l]] == i)] <- par[i]
+    block_attrs <- lapply(blocks, function(b) {
+      list(
+        fsT = b$fsT,
+        fsL = if (!is.null(b$fsL)) b$fsL else attr(b$fs, "fsL"),
+        fsb = if (!is.null(b$fsb)) b$fsb else attr(b$fs, "fsb"),
+        scoring_matrix = if (!is.null(b$scoring_matrix)) {
+          b$scoring_matrix
+        } else {
+          attr(b$fs, "scoring_matrix")
+        }
+      )
+    })
+
+    # Pattern bookkeeping (mirrors lavaan's @Data@Mp in public form): each
+    # block carries the observed-indicator pattern of its cases (pat_label =
+    # observed indicator names joined with "+", pat = one named logical
+    # column per indicator). Blocks without pat_label/pat (hand-built
+    # fixtures) get a positional "pattern_<i>" label and a NULL pat matrix.
+    pat_labels <- vapply(seq_along(blocks), function(m) {
+      if (!is.null(blocks[[m]]$pat_label)) {
+        blocks[[m]]$pat_label
+      } else {
+        paste0("pattern_", m)
+      }
+    }, character(1))
+
+    label_vec <- rep(NA_character_, n_cases)
+    for (m in seq_along(blocks)) {
+      label_vec[blocks[[m]]$case_idx] <- pat_labels[m]
+    }
+
+    if (length(blocks) > 1) {
+      # One attribute value per observed-indicator pattern, keyed by the
+      # pattern label.
+      for (ak in grp_attr_keys) {
+        attr(grp_df, ak) <- setNames(lapply(block_attrs, `[[`, ak), pat_labels)
+      }
+      if (all(vapply(blocks, function(b) !is.null(b$pat), logical(1)))) {
+        attr(grp_df, "fs_pattern") <- list(
+          label = label_vec,
+          pat = do.call(cbind, setNames(lapply(blocks, `[[`, "pat"), pat_labels))
+        )
+      } else {
+        attr(grp_df, "fs_pattern") <- list(label = label_vec, pat = NULL)
+      }
+    } else {
+      for (ak in grp_attr_keys) {
+        attr(grp_df, ak) <- block_attrs[[1]][[ak]]
+      }
+      pat1 <- blocks[[1]]$pat
+      if (!is.null(pat1)) {
+        attr(grp_df, "fs_pattern") <- list(
+          label = label_vec,
+          pat = matrix(
+            pat1,
+            ncol = 1L,
+            dimnames = list(names(pat1), pat_labels)
+          )
+        )
+      } else {
+        attr(grp_df, "fs_pattern") <- list(label = label_vec, pat = NULL)
       }
     }
-    pat <- mp[[g]]$pat
-    if (is.null(pat)) {
-      pat <- matrix(TRUE, nrow = 1, ncol = ncol(mat$theta))
-    }
-    num_mp <- nrow(pat)
-    out[[g]] <- vector("list", num_mp)
-    for (m in seq_len(num_mp)) {
-      idx <- which(pat[m, ])
-      a <- do.call(compute_a_from_mat,
-                   args = c(method, mat[c("lambda", "psi", "theta")],
-                            idx = list(idx)))
-      if (what == "a") {
-        out[[g]][[m]] <- a
-      } else if (what == "evfs") {
-        out[[g]][[m]] <- a %*% mat$theta[idx, idx, drop = FALSE] %*% t(a)
-      } else if (what == "ldfs") {
-        out[[g]][[m]] <- a %*% mat$lambda[idx, , drop = FALSE]
-      }
-      if (num_mp == 1) {
-        out[[g]] <- out[[g]][[1]]
-      }
-    }
+
+    group_dfs[[g]] <- grp_df
   }
-  out
-}
 
-compute_a <- function(par, lavobj, method = c("regression", "Bartlett")) {
-  compute_fspars(par, lavobj = lavobj, method = method, what = "a")
-}
-
-compute_a_from_mat <- function(method = c("regression", "Bartlett"),
-                               lambda, theta, psi = NULL, idx = NULL) {
-  if (!is.null(idx)) {
-    lambda <- lambda[idx, , drop = FALSE]
-    theta <- theta[idx, idx, drop = FALSE]
-  }
-  method <- match.arg(method)
-  if (method == "regression") {
-    if (is.null(psi)) {
-      stop("input of psi (latent covariance) is needed for regression scores")
+  if (format == "list") {
+    if (length(group_labels) == 1 && group_labels == "") {
+      return(group_dfs[[1]])
     }
-    compute_a_reg(lambda, theta = theta, psi = psi)
-  } else if (method == "Bartlett") {
-    compute_a_bartlett(lambda, theta = theta, psi = psi)
-  }
-}
 
-compute_a_reg <- function(lambda, theta, psi) {
-  covy <- lambda %*% psi %*% t(lambda) + theta
-  ginvcovy <- MASS::ginv(covy)
-  tlam_invcov <- crossprod(lambda, ginvcovy)
-  psi %*% tlam_invcov
-}
-
-compute_a_bartlett <- function(lambda, theta, psi = NULL) {
-  ginvth <- MASS::ginv(theta)
-  tlam_invth <- crossprod(lambda, ginvth)
-  solve(tlam_invth %*% lambda, tlam_invth)
-}
-
-correct_evfs <- function(fit, method = c("regression", "Bartlett")) {
-  method <- match.arg(method)
-  ngrp <- lavInspect(fit, what = "ngroups")
-  est_fits <- lavInspect(fit, what = "est")
-  if (ngrp == 1) est_fits <- list(est_fits)
-  outs <- vector("list", ngrp)
-  for (g in seq_len(ngrp)) {
-    est_fit <- est_fits[[g]]
-    p <- nrow(est_fit$psi)
-    jac_a <- vector("list", length = p)
-    for (i in seq_len(p)) {
-      jac_a[[i]] <- lavaan::lav_func_jacobian_complex(
-        function(x, fit, method) {
-          compute_a(x, lavobj = fit, method = method)[[g]][i, ]
-        },
-        coef(fit),
-        fit = fit,
-        method = method
-      )
-    }
-    out <- matrix(nrow = p, ncol = p)
-    th <- est_fit$theta
-    vc_fit <- vcov(fit)
-    for (j in seq_len(p)) {
-      for (i in j:p) {
-        out[i, j] <- sum(diag(th %*% jac_a[[i]] %*% vc_fit %*% t(jac_a[[j]])))
-        if (i > j) {
-          out[j, i] <- out[i, j]
+    if (!is.null(group_col)) {
+      for (g in seq_along(group_labels)) {
+        if (!group_col %in% names(group_dfs[[g]])) {
+          group_dfs[[g]][[group_col]] <- group_labels[g]
         }
       }
     }
-    outs[[g]] <- out
-  }
-  outs
-}
 
-compute_evfs <- function(par, lavobj, method = c("regression", "Bartlett")) {
-  compute_fspars(par, lavobj = lavobj, method = method, what = "evfs")
-}
-
-compute_ldfs <- function(par, lavobj, method = c("regression", "Bartlett")) {
-  compute_fspars(par, lavobj = lavobj, method = method, what = "ldfs")
-}
-
-compute_grad_ld_evfs <- function(fit, method = c("regression", "Bartlett")) {
-  method <- match.arg(method)
-  lavaan::lav_func_jacobian_complex(
-    function(x, fit, method) {
-      evfs <- compute_evfs(x, lavobj = fit, method = method)
-      evfs_lower <- lapply(evfs, function(x) {
-        x[lower.tri(x, diag = TRUE)]
-      })
-      c(unlist(compute_ldfs(x, lavobj = fit, method = method)),
-        unlist(evfs_lower))
-    },
-    coef(fit),
-    fit = fit,
-    method = method
-  )
-}
-
-vcov_ld_evfs <- function(fit, method = c("regression", "Bartlett")) {
-  method <- match.arg(method)
-  jac <- compute_grad_ld_evfs(fit, method = method)
-  jac %*% lavaan::vcov(fit) %*% t(jac)
-}
-
-compute_fsrel <- function(fit, method = c("regression", "Bartlett")) {
-  method <- match.arg(method)
-  ngrp <- lavInspect(fit, what = "ngroups")
-  est_fits <- lavInspect(fit, what = "est")
-  sigmas <- lavInspect(fit, "implied")
-  if (ngrp == 1) {
-    est_fits <- list(est_fits)
-    sigmas <- list(sigmas)
-  }
-  vc_fit <- vcov(fit)
-  a <- compute_a(coef(fit), lavobj = fit, method = method)
-  outs <- vector("list", ngrp)
-  for (g in seq_len(ngrp)) {
-    est_fit <- est_fits[[g]]
-    lam <- est_fit$lambda
-    psi <- est_fit$psi
-    if (ncol(lam) > 1) {
-      stop("reliability is only supported for unidimensional models.")
-    }
-    jac_a <- lavaan::lav_func_jacobian_complex(
-      function(x, fit, method) {
-        compute_a(x, lavobj = fit, method = method)[[g]]
-      },
-      coef(fit),
-      fit = fit,
-      method = method
+    outer_attr_names <- setdiff(
+      names(attributes(group_dfs[[1]])),
+      c("names", "class", "row.names", "col.names")
     )
-    va <- jac_a %*% vc_fit %*% t(jac_a)
-    aa <- crossprod(a[[g]]) + va
-    outs[[g]] <- sum(diag(lam %*% psi %*% t(lam) %*% aa)) /
-      sum(diag(sigmas[[g]]$cov %*% aa))
+    for (ak in outer_attr_names) {
+      attr_lst <- setNames(
+        lapply(group_dfs, function(df) attr(df, ak)),
+        group_labels
+      )
+      attr(group_dfs, ak) <- attr_lst
+    }
+    return(group_dfs)
   }
-  outs
+
+  has_group <- any(nzchar(group_labels))
+  col_name <- if (!is.null(group_col)) group_col else "group"
+  if (has_group) {
+    for (g in seq_along(group_labels)) {
+      group_dfs[[g]][[col_name]] <- group_labels[g]
+    }
+  }
+  unified_df <- do.call(rbind, group_dfs)
+  rownames(unified_df) <- NULL
+  if (has_group) {
+    attr(unified_df, "group_col") <- col_name
+  }
+
+  for (ak in attr_keys) {
+    attr(unified_df, ak) <- setNames(
+      lapply(group_dfs, function(df) attr(df, ak)),
+      group_labels
+    )
+  }
+
+  unified_df
+}
+
+#' Get Factor Scores and the Corresponding Scoring Matrices for
+#' Mixed-Effect Models
+#'
+#' @description
+#' `get_fs_lmer()` is superseded by [get_fs()]. It is retained for backward
+#' compatibility and delegates to `get_fs(object)` internally. New code should
+#' call [get_fs()] directly.
+#'
+#' @param object A fitted model object of class [lme4::lmerMod-class].
+#' @param method `"EB"` (empirical Bayes, default) or `"ML"` (prior-free
+#'        per-cluster OLS), forwarded to [get_fs.merMod()].
+#' @param corrected_fsT Currently not used.
+#' @param vfsLT Currently not used.
+#' @param fsm Currently not used.
+#' @param legacy_names Logical. Passed to [get_fs.merMod()]. Defaults to
+#'        `TRUE` so `get_fs_lmer()` keeps returning the pre-refactor
+#'        `u0_eb`-style *column names* (in the legacy column order).
+#'        Note the legacy output is name-compatible, not byte-identical,
+#'        with the pre-refactor result: it additionally carries
+#'        score-error columns (`u0_eb_se`, ...), per-cluster `fsL`/`fsT`
+#'        array attributes, a per-cluster `scoring_matrix` list attribute
+#'        (see [get_fs()]), and has NULL row names (the pre-refactor
+#'        output had no `_se` columns, no attributes, and used the ranef
+#'        subject IDs as row names).
+#' @param ... Additional arguments, passed on to [get_fs()].
+#'
+#' @export
+get_fs_lmer <- function(
+  object,
+  method = c("EB"),
+  corrected_fsT = FALSE,
+  vfsLT = FALSE,
+  fsm = FALSE,
+  legacy_names = TRUE,
+  ...
+) {
+  get_fs(
+    object,
+    method = method,
+    format = "list",
+    legacy_names = legacy_names,
+    ...
+  )
 }

@@ -16,19 +16,34 @@ knitr::opts_chunk$set(
 )
 ```
 
-## Single-Factor Model
+With missing data, two things change in two-stage path analysis. Stage 1
+must be fitted with a missing-data method (`missing = "fiml"` in `lavaan`),
+and each case is then scored on its *own* observed indicators, so the score
+standard errors, implied loadings, and error variances are **per-row**
+quantities rather than one pooled matrix. And stage 2 has to use those
+per-row values: `tspa()` (the `lavaan` backend) reduces the per-pattern
+values to a single representative matrix (`reduce = `), whereas
+`tspa_mx_model()` (the `OpenMx` backend) carries the per-row values through
+definition variables, and its raw-data FIML evaluation can also handle rows
+whose scores are dropped as `NA`. The stage-2 fits in this vignette therefore
+use `tspa_mx_model()`.
 
-For illustration, we will create an artificial data set with two missing data pattern:
+For illustration, we create two missing data patterns on
+`PoliticalDemocracy`: (1) MCAR missingness in a single item (`x1`, about 30%
+of cases); (2) block missingness, where the last 10 cases are missing all
+four `dem65` indicators — a factor with no observed indicator at all.
+
+## Single-Factor Model
 
 ```{r}
 set.seed(2225)
 library(lavaan)
 library(R2spa)
-library(umx)
+library(OpenMx)
 data(PoliticalDemocracy)
 pd2 <- PoliticalDemocracy
-# Add MCAR missing data
-pd2[!rbinom(75, size = 1, prob = 0.7), 9] <- NA
+# Add MCAR missing data to x1 (about 30% of the 75 cases)
+pd2[!rbinom(75, size = 1, prob = 0.7), "x1"] <- NA
 ```
 
 Factor scores with `lavaan::lavPredict()`:
@@ -36,29 +51,23 @@ Factor scores with `lavaan::lavPredict()`:
 ```{r}
 fit <- cfa("ind60 =~ x1 + x2 + x3", data = pd2, missing = "fiml")
 fs_lavaan <- lavPredict(fit, method = "Bartlett", se = TRUE, fsm = TRUE)
-# # extract scoring matrix
-# fsm <- attr(fs_lavaan, "fsm")[[1]]
-# # se for observations with complete data
-# th <- lavInspect(fit, what = "est")$theta
-# sqrt(diag(fsm %*% th %*% t(fsm)))
-# # se for observations missing item 1 (need conditional normal)
-# fsm_mis1 <- with(lavInspect(fit, what = "est"), {
-#     lambda <- lambda[2:3, , drop = FALSE]
-#     theta <- theta[2:3, 2:3, drop = FALSE]
-#     # covy <- (lambda %*% psi %*% t(lambda) + theta)
-#     # ginvcovy <- MASS::ginv(covy)
-#     # tlam_invcov <- crossprod(lambda, ginvcovy)
-#     # psi %*% tlam_invcov
-#     lamt_th_lam <- crossprod(lambda, solve(theta, lambda))
-#     solve(lamt_th_lam, crossprod(lambda, solve(theta)))
-# })
-# sqrt(diag(fsm_mis1 %*% th[2:3, 2:3, drop = FALSE] %*% t(fsm_mis1)))
 # From R2spa
-fs <- R2spa::get_fs_lavaan(fit, method = "Bartlett")
+fs <- R2spa::get_fs(fit, method = "Bartlett")
+# One SE per missing-data pattern
+round(table(pattern = attr(fs, "fs_pattern")[[1]]$label,
+            se = fs$fs_ind60_se), 4)
 # Compare factor scores
 plot(fs_lavaan, fs$fs_ind60)
 abline(a = 0, b = 1)
 ```
+
+Because each case is scored conditionally on its own observed indicators,
+`get_fs()` returns per-row standard errors and error variances: the 48
+complete cases (pattern `"x1+x2+x3"`) get SE 0.150, and the 27 cases observed
+only on `x2` and `x3` get SE 0.179. The `fsT`/`fsL`/`fsb`/`scoring_matrix`
+attributes are correspondingly *lists* with one entry per pattern, and the
+`fs_pattern` attribute maps each row to its pattern. The plot confirms that
+the `R2spa` scores reproduce `lavPredict()` exactly.
 
 ### Multiple group
 
@@ -68,16 +77,24 @@ mg_fit <- cfa("ind60 =~ x1 + x2 + x3",
   missing = "fiml",
   group = "group"
 )
-R2spa::get_fs_lavaan(mg_fit)
+mg_fs <- R2spa::get_fs(mg_fit)
+head(mg_fs, 10)
+# Both groups contain the same two patterns
+lapply(attr(mg_fs, "fs_pattern"), function(p) table(p$label))
 ```
+
+The multigroup result is a single data frame with a `group` column, and each
+group's `fsT`/`fsL`/`fsb`/`scoring_matrix` attribute is itself a per-pattern
+list.
 
 ## Multiple-Factor Model
 
-### Regression scores
+The measurement model constrains the two factors' loadings to be equal
+(labels `a`–`d`) and adds covariances between the corresponding indicators:
 
 ```{r}
-# Make last 10 cases completely missing on y5-y8
-pd2[66:75, 5:8] <- NA
+# Make last 10 cases completely missing on y5-y8 (all dem65 indicators)
+pd2[66:75, c("y5", "y6", "y7", "y8")] <- NA
 fit2 <- cfa("
   dem60 =~ a * y1 + b * y2 + c * y3 + d * y4
   dem65 =~ a * y5 + b * y6 + c * y7 + d * y8
@@ -86,22 +103,27 @@ fit2 <- cfa("
   y3 ~~ y7
   y4 ~~ y8
 ", data = pd2, missing = "fiml")
-fs2r <- lavPredict(fit2,
-  method = "EBM", se = TRUE,
-  acov = TRUE, fsm = TRUE
-)
-acov_r <- attr(fs2r, "acov")[[1]]
+```
+
+This block-missing pattern is the hard case: for the 10 affected rows,
+`dem65` has no observed indicator at all.
+
+### Regression scores
+
+With regression (EBM) scores, the `dem65` score is still *defined* for those
+rows — regression scoring uses the cross-factor covariances, so `dem65` is
+imputed from the `dem60` indicators. But the per-row measurement information
+is degenerate: the implied loading of the score on `dem65` is 0, i.e. the
+score carries no information about `dem65`, so measurement-error correction
+is impossible. We therefore drop those `dem65` scores; OpenMx's raw-data FIML
+then fits those rows from the structural model alone.
+
+```{r}
 # Obtain tidy-ed factor scores data
 fs_dat <- R2spa::augment_lav_predict(fit2)
-# Run 2spa with OpenMx
-# Build OpenMx model
-fsreg_umx <- umxLav2RAM(
-  "
-    dem65 ~ dem60
-    dem65 + dem60 ~ 1
-  ",
-  printTab = FALSE
-)
+# Per-row definition-variable matrices: each cell names the `fs_dat` column
+# carrying that case's loadings / error variances (the exact, per-row
+# correction that `tspa()`'s `reduce = ` pooling only approximates).
 cross_load <- matrix(c(
   "dem60_by_fs_dem60", "dem60_by_fs_dem65",
   "dem65_by_fs_dem60", "dem65_by_fs_dem65"
@@ -112,12 +134,14 @@ err_cov <- matrix(c(
   "ecov_fs_dem60_fs_dem65", "ev_fs_dem65"
 ), nrow = 2) |>
   `dimnames<-`(rep(list(c("fs_dem60", "fs_dem65")), 2))
-# Need to make factor scores NA when loadings/error variances
-# are inadmissible
+# Drop the non-correctable dem65 scores of the 10 all-missing rows;
+# OpenMx's raw-data FIML then fits those rows as usual.
 fs_dat[66:75, "fs_dem65"] <- NA
-tspa_mx <- tspa_mx_model(fsreg_umx,
+tspa_mx <- tspa_mx_model(
+  "dem65 ~ dem60; dem65 + dem60 ~ 1",
   data = fs_dat,
-  mat_ld = cross_load, mat_ev = err_cov
+  fsL = cross_load, fsT = err_cov,
+  fsb = c(fs_dem60 = "int_fs_dem60", fs_dem65 = "int_fs_dem65")
 )
 # Run OpenMx
 tspa_mx_fit <- mxRun(tspa_mx)
@@ -125,15 +149,31 @@ tspa_mx_fit <- mxRun(tspa_mx)
 summary(tspa_mx_fit)
 ```
 
+The per-row measurement values reach OpenMx as *definition variables*: `fsL`
+and `fsT` are character matrices whose cells name the `fs_dat` column holding
+that case's value, so the stage-2 correction is per-row rather than pooled.
+`fsb` does the same for the per-row measurement intercepts (the `int_*`
+columns; a FIML fit estimates a mean structure, so the intercepts vary with
+the missing-data pattern).
+
 ### Bartlett scores
 
+Bartlett scoring does not use the cross-factor covariances, so for the 10
+rows with no observed `dem65` indicator the score is `NA` by convention — in
+contrast to the EBM case above, where the score was defined but
+non-correctable and had to be dropped.
+
 ```{r}
-# Obtain tidy-ed factor scores data
+# Obtain tidy-ed factor scores data (Bartlett weights)
 fsb_dat <- augment_lav_predict(fit2, method = "Bartlett")
-tspab_mx <- tspa_mx_model(fsreg_umx,
+# fsb_dat[66:75, "fs_dem65"] is already NA (no observed indicator);
+# stated explicitly to mirror the EBM case
+fsb_dat[66:75, "fs_dem65"] <- NA
+tspab_mx <- tspa_mx_model(
+  "dem65 ~ dem60; dem65 + dem60 ~ 1",
   data = fsb_dat,
-  mat_ld = attr(fsb_dat, which = "ld"),
-  mat_ev = attr(fsb_dat, which = "ev")
+  fsL = cross_load, fsT = err_cov,
+  fsb = c(fs_dem60 = "int_fs_dem60", fs_dem65 = "int_fs_dem65")
 )
 # Run OpenMx
 tspab_mx_fit <- mxRun(tspab_mx)
@@ -142,6 +182,9 @@ summary(tspab_mx_fit)
 ```
 
 ### Compared to Joint Model
+
+The gold-standard reference is the joint model, which fits the measurement
+and structural parts simultaneously under FIML:
 
 ```{r}
 jfit <- sem("
@@ -156,12 +199,26 @@ jfit <- sem("
 summary(jfit)
 ```
 
+```{r}
+# The three estimates of the dem65 ~ dem60 path:
+c(EBM.mx = coef(tspa_mx_fit)["m1.A[4,3]"],
+  Bartlett.mx = coef(tspab_mx_fit)["m1.A[4,3]"],
+  joint = coef(jfit)["dem65~dem60"])
+```
+
+Both 2S-PA fits (regression and Bartlett scores) recover the `dem65 ~ dem60`
+path at 0.913, identical to the joint-model estimate to four decimal places.
+
 ### Multiple group
 
-Just to demonstrate the syntax for obtaining the input data
+The same pipeline applies to multigroup fits: `augment_lav_predict()` returns
+a list with one tidy-ed data frame per group, each carrying that group's
+per-row values. All 10 block-missing rows fall in group 2, so only group 2
+contains the pattern with no observed `dem65` indicator. (`lavaan` warns that
+a single label used in a multigroup fit imposes cross-group equality — that
+is intentional here: `a`–`d` are constrained equal in both groups.)
 
 ```{r}
-#| results: hide
 mg_fit2 <- cfa("
   dem60 =~ a * y1 + b * y2 + c * y3 + d * y4
   dem65 =~ a * y5 + b * y6 + c * y7 + d * y8
@@ -173,5 +230,6 @@ mg_fit2 <- cfa("
   data = cbind(pd2, group = rep(1:2, c(40, 35))),
   missing = "fiml", group = "group"
 )
-augment_lav_predict(mg_fit2)
+mg_out <- get_fs(mg_fit2)
+head(mg_out)
 ```

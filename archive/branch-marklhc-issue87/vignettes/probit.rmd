@@ -1,0 +1,93 @@
+---
+title: "2S-PA with Binary Outcomes"
+author: "Mark Lai"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{2S-PA with Binary Outcomes"}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r load-pkg, message = FALSE}
+library(OpenMx)
+library(R2spa)
+```
+
+Similar example from [Get Started](R2spa.html).
+
+First, add missing data so that the error variance of measurement is not constant.
+
+```{r}
+data(PoliticalDemocracy, package = "lavaan")
+# Add missing data
+PoliticalDemocracy$x2[1:5 * 2] <- NA
+```
+
+```{r}
+model <- ' 
+  # latent variable definitions
+     ind60 =~ x1 + x2 + x3
+'
+fs_dat <- get_fs(PoliticalDemocracy, model = model,
+                 std.lv = TRUE,
+                 missing = "fiml",
+                 method = "Bartlett")
+```
+
+Add binary outcome
+
+```{r}
+fs_dat$y5_bin <- as.numeric(PoliticalDemocracy$y5 >
+    median(PoliticalDemocracy$y5))
+# Make binary
+fs_dat$y5_bin <- mxFactor(fs_dat$y5_bin, levels = c(0, 1))
+```
+
+OpenMx model
+
+```{r}
+mx1 <- mxModel(
+    "2spa_bin",
+    mxData(observed = fs_dat, type = "raw"),
+    type = "RAM",
+    manifestVars = c("fs_ind60", "y5_bin"),
+    latentVars = "ind60",
+    # Loading
+    mxPath(from = "ind60", to = "fs_ind60", free = FALSE, values = 1),
+    # Measurement error variance
+    mxPath(from = "fs_ind60", arrows = 2, free = FALSE,
+           labels = "data.ev_fs_ind60"),
+    # Latent regression
+    mxPath(from = "ind60", to = "y5_bin", values = 0, labels = "b1"),
+    # Threshold for y
+    mxThreshold("y5_bin", nThresh = 1),
+    # Latent response scale
+    mxPath(from = "y5_bin", arrows = 2, values = 1, free = FALSE),
+    # Latent predictor variance
+    mxPath(from = "ind60", arrows = 2, values = 1, free = TRUE,
+           labels = "vx"),
+    # Latent intercept
+    mxPath(from = "one", to = c("ind60")),
+    # Compute standardized coefficients
+    mxAlgebra(b1 * sqrt(vx), name = "beta"),
+    mxCI("beta"),
+    mxFitFunctionML()
+)
+mx1_fit <- mxTryHardOrdinal(mx1)
+```
+
+```{r}
+# Re-run to get CI
+mx1_fit <- mxRun(mx1_fit, intervals = TRUE)
+summary(mx1_fit)
+# Standard errors for X-Standardized coefficients
+mxSE(beta, mx1_fit)
+```

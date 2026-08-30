@@ -3,7 +3,9 @@
 # Loading packages and functions
 library(lavaan)
 library(OpenMx)
-library(umx)
+if (requireNamespace("umx", quietly = TRUE)) {
+  library(umx)
+}
 
 ########## Single-group example ##########
 
@@ -22,8 +24,8 @@ dem60 =~ y1 + y2 + y3 + y4
 "
 
 # get factor scores
-fs_single1 <- get_fs(PoliticalDemocracy, cfa_single1)
-fs_single2 <- get_fs(PoliticalDemocracy, cfa_single2)
+fs_single1 <- get_fs(PoliticalDemocracy, cfa_single1, format = "list")
+fs_single2 <- get_fs(PoliticalDemocracy, cfa_single2, format = "list")
 fs_dat_single <- cbind(fs_single1, fs_single2)
 
 cfa_model_single <- '
@@ -125,9 +127,9 @@ cfa_3var3 <- '
                            '
 
 # get factor scores
-fs_3var1 <- get_fs(PoliticalDemocracy, cfa_3var1)
-fs_3var2 <- get_fs(PoliticalDemocracy, cfa_3var2)
-fs_3var3 <- get_fs(PoliticalDemocracy, cfa_3var3)
+fs_3var1 <- get_fs(PoliticalDemocracy, cfa_3var1, format = "list")
+fs_3var2 <- get_fs(PoliticalDemocracy, cfa_3var2, format = "list")
+fs_3var3 <- get_fs(PoliticalDemocracy, cfa_3var3, format = "list")
 fs_dat_3var <- cbind(fs_3var1, fs_3var2, fs_3var3)
 
 sem_model_3var <- '
@@ -153,86 +155,6 @@ tspa_3var <- tspa(
     dem65 = 0.5724405
   )
 )
-
-# Compare to Mx
-model_umx <- umxLav2RAM("
-  dem60 ~ ind60
-  dem65 ~ ind60 + dem60
-  dem65 + dem60 + ind60 ~ 1
-  ", printTab = FALSE)
-# Loading
-matL <- mxMatrix(
-  type = "Iden", nrow = 3,
-  free = FALSE,
-  name = "L"
-)
-# Error
-matE <- mxMatrix(
-  type = "Diag", nrow = 3, ncol = 3,
-  free = FALSE,
-  values = c(0.6756472, 0.5724405, 0.1213615)^2,
-  name = "E"
-)
-tspa_mx <- tspa_mx_model(model_umx, data = fs_dat_3var,
-                         mat_ld = matL, mat_ev = matE,
-                         fs_lv_names = c(ind60 = "fs_ind60",
-                                         dem60 = "fs_dem60",
-                                         dem65 = "fs_dem65"))
-tspa_mx_fit <- mxRun(tspa_mx)
-# Check same coefficients and standard errors
-test_that("test same regression coefficients with Mx", {
-  expect_equal(
-    coef(tspa_mx_fit)[c(2, 3, 1, 6, 4, 5)],
-    expected = coef(tspa_3var),
-    tolerance = 1e-5,
-    ignore_attr = TRUE
-  )
-})
-test_that("test same standard errors with Mx", {
-  vc_mx <- diag(vcov(tspa_mx_fit))
-  vc_lavaan <- diag(vcov(tspa_3var))
-  expect_equal(
-    vc_mx[c(2, 3, 1, 6, 4, 5)],
-    expected = vc_lavaan,
-    tolerance = 1e-4,
-    ignore_attr = TRUE
-  )
-})
-# Use numeric matrices
-tspa_mx2 <- tspa_mx_model(
-  model_umx,
-  data = fs_dat_3var,
-  mat_ld = diag(3) |>
-    `dimnames<-`(list(
-      c("fs_ind60", "fs_dem60", "fs_dem65"),
-      c("ind60", "dem60", "dem65")
-    )),
-  mat_ev = diag(c(0.1213615, 0.6756472, 0.5724405)^2) |>
-    `dimnames<-`(rep(list(c("fs_ind60", "fs_dem60", "fs_dem65")), 2))
-)
-tspa_mx_fit2 <- mxRun(tspa_mx2)
-# Use column names for VC
-err_cov <- matrix(c("ev_fs_ind60", NA, NA,
-                    NA, "ev_fs_dem60", NA,
-                    NA, NA, "ev_fs_dem65"), nrow = 3) |>
-  `dimnames<-`(rep(list(c("fs_ind60", "fs_dem60", "fs_dem65")), 2))
-tspa_mx3 <- tspa_mx_model(model_umx, data = fs_dat_3var,
-                          mat_ld = matL, mat_ev = err_cov,
-                          fs_lv_names = c(ind60 = "fs_ind60",
-                                          dem60 = "fs_dem60",
-                                          dem65 = "fs_dem65"))
-tspa_mx_fit3 <- mxRun(tspa_mx3)
-test_that("Same results with different Mx matrices input", {
-  expect_equal(
-    coef(tspa_mx_fit2),
-    expected = coef(tspa_mx_fit)
-  )
-  expect_equal(
-    coef(tspa_mx_fit3),
-    expected = coef(tspa_mx_fit),
-    tolerance = 1e-5
-  )
-})
 
 ########## Testing section #############
 
@@ -287,12 +209,14 @@ test_that("test if the se of variance is similar for two methods", {
 ########## Multi-group example ##########
 
 # get factor scores
-fs_dat_visual <- get_fs(data = HolzingerSwineford1939,
+fs_dat_visual <- get_fs(HolzingerSwineford1939,
                         model = "visual =~ x1 + x2 + x3",
-                        group = "school")
-fs_dat_speed <- get_fs(data = HolzingerSwineford1939,
+                        group = "school",
+                        format = "list")
+fs_dat_speed <- get_fs(HolzingerSwineford1939,
                        model = "speed =~ x7 + x8 + x9",
-                       group = "school")
+                       group = "school",
+                       format = "list")
 fs_dat_multi <- cbind(
   do.call(rbind, fs_dat_visual),
   do.call(rbind, fs_dat_speed)
@@ -328,6 +252,22 @@ tspa_multi <- tspa(
   ),
   group = "school"
   # group.equal = "regressions"
+)
+
+# the same single-factor fit with the data passed as a list of per-group
+# data frames (the get_fs(format = "list") results cbind()ed per group);
+# tspa() coerces the list to a data frame before the stage-2 fit
+fs_dat_multi_list <- Map(
+  function(a, b) cbind(a, b), fs_dat_visual, fs_dat_speed
+)
+tspa_multi_list <- tspa(
+  model = "visual ~ speed",
+  data = fs_dat_multi_list,
+  se_fs = data.frame(
+    visual = c(0.3391326, 0.3118280),
+    speed = c(0.2786875, 0.2740507)
+  ),
+  group = "school"
 )
 
 ########## Testing section #############
@@ -378,6 +318,13 @@ test_that("test if the se of variance is similar for two methods", {
   )
 })
 
+test_that("tspa(): single-factor list-of-frames data matches the rbind'd-frame fit", {
+  expect_equal(
+    lavInspect(tspa_multi_list, "est"),
+    lavInspect(tspa_multi, "est")
+  )
+})
+
 # Test tspa_mf()
 mod4 <- "
   # latent variables
@@ -387,7 +334,7 @@ mod4 <- "
 
 "
 fs_dat4 <- get_fs(HolzingerSwineford1939, model = mod4, std.lv = TRUE,
-                  group = "school")
+                  group = "school", format = "list")
 tspa_mod_m <- tspa_mf(
   model = "visual ~ speed
            textual ~ visual + speed",
@@ -409,7 +356,7 @@ test_that("The order of factors in the model from tspa_mf()", {
                factors_order_m$rhs)
 })
 test_that("The order of loadings in the model from tspa_mf()", {
-  expect_equal(rep(c("visual", "textual", "speed"), each = 3) |> rep(2),
+  expect_equal(rep(rep(c("visual", "textual", "speed"), each = 3), 2),
                loadings_order_m$lhs)
   expect_equal(rep(c("fs_visual", "fs_textual", "fs_speed"), 6),
                loadings_order_m$rhs)
@@ -425,7 +372,7 @@ tspa_fit_m <- tspa(
   fsL = attr(fs_dat4, "fsL")
 )
 fs_dat4b <- get_fs(HolzingerSwineford1939, model = mod4,
-                   group = "school", method = "Bartlett")
+                    group = "school", method = "Bartlett", format = "list")
 sem_fit_m <- sem(
   model = "visual =~ fs_visual
            speed =~ fs_speed
@@ -466,9 +413,9 @@ cov_mat <- matrix(c(
 ), nrow = 9, ncol = 9, byrow = TRUE)
 set.seed(123)
 sim_dat <- MASS::mvrnorm(n = 2000, mu = mean_vec, Sigma = cov_mat,
-                         empirical = TRUE) |>
-  `colnames<-`(c("s_g3", "s_g5", "s_g8", "r_g3", "r_g5", "r_g8",
-                 "m_g3", "m_g5", "m_g8"))
+                         empirical = TRUE)
+colnames(sim_dat) <- c("s_g3", "s_g5", "s_g8", "r_g3", "r_g5", "r_g8",
+                       "m_g3", "m_g5", "m_g8")
 
 strict_mod <- "
 # factor loadings
@@ -508,7 +455,7 @@ m_g3 ~ i3 * 1
 m_g5 ~ i3 * 1
 m_g8 ~ i3 * 1
 "
-fs_growth_dat <- get_fs(sim_dat, model = strict_mod)
+fs_growth_dat <- get_fs(sim_dat, model = strict_mod, format = "list")
 
 growth_mod <- "
 i =~ 1 * eta1 + 1 * eta2 + 1 * eta3
@@ -564,6 +511,48 @@ test_that("Need to provide none or both fsT and fsL", {
   )
 })
 
+test_that("tspa(): non-numeric or non-finite se_fs is a clear error", {
+  # non-numeric: a cryptic 'non-numeric argument' from the schema otherwise
+  expect_error(
+    tspa("dem60 ~ ind60", data = fs_dat_single,
+         se_fs = c(ind60 = "0.12", dem60 = "0.68")),
+    "numeric standard errors"
+  )
+  # non-finite: a NaN fixed value in the model string is a parse failure
+  # in lavaan, not an actionable error
+  expect_error(
+    tspa("dem60 ~ ind60", data = fs_dat_single,
+         se_fs = c(ind60 = 0.12, dem60 = NA_real_)),
+    "not all finite"
+  )
+})
+
+test_that("tspa(): non-finite or unnamed fsT/fsL values are clear errors", {
+  data("PoliticalDemocracy", package = "lavaan")
+  fit <- cfa("ind60 =~ x1 + x2 + x3
+              dem60 =~ y1 + y2 + y3 + y4",
+             data = PoliticalDemocracy, std.lv = TRUE)
+  fs <- get_fs(fit)
+  Tm <- attr(fs, "fsT")[[1L]]
+  Lm <- attr(fs, "fsL")[[1L]]
+  # an NA in fsT renders as "NA" in the model string, which lavaan parses
+  # as a parameter label: the fixed value silently becomes a free estimate
+  T_bad <- Tm
+  T_bad[1L, 1L] <- NA
+  expect_error(
+    tspa("dem60 ~ ind60", data = fs, fsT = T_bad, fsL = Lm),
+    "non-finite"
+  )
+  # unnamed fsL would render NA indicator names into the model string
+  # (a cryptic rbind failure downstream)
+  L_bare <- Lm
+  dimnames(L_bare) <- list(NULL, colnames(Lm))
+  expect_error(
+    tspa("dem60 ~ ind60", data = fs, fsT = Tm, fsL = L_bare),
+    "row and column names"
+  )
+})
+
 test_that(
   "Names of factor score variables need to match those in the input data",
   {
@@ -574,10 +563,10 @@ test_that(
     dem60 =~ y1 + y2 + y3 + y4
     dem65 =~ y5 + y6 + y7 + y8
   "
-    fs_dat2 <- get_fs(PoliticalDemocracy, model = mod2, std.lv = TRUE)
+    fs_dat2 <- get_fs(PoliticalDemocracy, model = mod2, std.lv = TRUE, format = "list")
     ecov_fs <- attr(fs_dat2, "fsT")
     dimnames(ecov_fs) <- lapply(dimnames(ecov_fs),
-      FUN = \(x) paste0("bs_", x)
+      FUN = function(x) paste0("bs_", x)
     )
     expect_error(
       tspa(
@@ -601,6 +590,188 @@ test_that(
   }
 )
 
+# Single-group unified get_fs() output carries length-1 list attributes;
+# tspa() must accept them in any combination with plain matrices (e.g. an
+# identity `fsL` for Bartlett scores).
+mod2sg <- "
+  # latent variables
+    ind60 =~ x1 + x2 + x3
+    dem60 =~ y1 + y2 + y3 + y4
+"
+fs_dat_uni <- get_fs(PoliticalDemocracy, model = mod2sg, std.lv = TRUE)
+
+test_that("Single-group list-valued attributes mixed with plain matrices", {
+  fsT_u <- attr(fs_dat_uni, "fsT")
+  fsL_u <- attr(fs_dat_uni, "fsL")
+  expect_true(is.list(fsT_u) && length(fsT_u) == 1)
+  expect_true(is.list(fsL_u) && length(fsL_u) == 1)
+  identity_ld <- `dimnames<-`(diag(2),
+                              list(c("fs_ind60", "fs_dem60"),
+                                   c("ind60", "dem60")))
+  # list fsT + matrix fsL (the Bartlett identity-loadings case)
+  fit_tl <- tspa(model = "dem60 ~ ind60", data = fs_dat_uni,
+                 fsT = fsT_u, fsL = identity_ld)
+  fit_mm <- tspa(model = "dem60 ~ ind60", data = fs_dat_uni,
+                 fsT = fsT_u[[1]], fsL = identity_ld)
+  expect_equal(
+    parameterestimates(fit_tl)[c("est", "se")],
+    parameterestimates(fit_mm)[c("est", "se")],
+    tolerance = 1e-10
+  )
+  # matrix fsT + list fsL (the reverse combination)
+  fit_lt <- tspa(model = "dem60 ~ ind60", data = fs_dat_uni,
+                 fsT = fsT_u[[1]], fsL = fsL_u)
+  fit_mm2 <- tspa(model = "dem60 ~ ind60", data = fs_dat_uni,
+                  fsT = fsT_u[[1]], fsL = fsL_u[[1]])
+  expect_equal(
+    parameterestimates(fit_lt)[c("est", "se")],
+    parameterestimates(fit_mm2)[c("est", "se")],
+    tolerance = 1e-10
+  )
+})
+
+test_that("Multigroup fsT/fsL shape mismatch is a clear error", {
+  expect_error(
+    tspa(model = "visual ~ speed
+                 textual ~ visual + speed",
+         data = fs_dat4,
+         group = "school",
+         fsT = attr(fs_dat4, "fsT"),
+         fsL = attr(fs_dat4, "fsL")[[1]]),
+    "must be a list of the same length"
+  )
+  expect_error(
+    tspa(model = "visual ~ speed
+                 textual ~ visual + speed",
+         data = fs_dat4,
+         group = "school",
+         fsT = attr(fs_dat4, "fsT")[[1]],
+         fsL = attr(fs_dat4, "fsL")),
+    "must be a list of the same length"
+  )
+})
+
+# Nested (per-pattern) fsT/fsL are what get_fs() emits for a group with
+# k >= 2 observed-indicator patterns (missing data). tspa() pools them
+# (PLAN 09), but only when the data frame is a resolvable get_fs() result;
+# with a plain (non-get_fs) data frame the pooler must error informatively
+# instead of silently mis-pooling a single-group k-pattern list as k groups.
+nested_fs_matrices <- function(vT, vL, pats) {
+  tlist <- lapply(pats, function(p) {
+    matrix(vT, 2, 2, dimnames = list(c("fs_a", "fs_b"), c("fs_a", "fs_b")))
+  })
+  llist <- lapply(pats, function(p) {
+    matrix(vL, 2, 2, dimnames = list(c("fs_a", "fs_b"), c("a", "b")))
+  })
+  list(fsT = setNames(tlist, pats), fsL = setNames(llist, pats))
+}
+
+test_that("tspa(): per-unit fsT/fsL with a non-get_fs data frame errors informatively (SG shape)", {
+  pats <- c("a+b", "a")
+  nm <- nested_fs_matrices(0.1, 1, pats)
+  dat <- data.frame(fs_a = 0:3, fs_b = 0:3)
+  # attr() shape emitted by a single-group k=2 missing-data get_fs(): a
+  # length-1 list whose element is a named list of per-pattern matrices
+  # (a plain data frame carries no fs_pattern attribute, so the pooler
+  # cannot resolve the rows and stops instead of mis-pooling)
+  expect_error(
+    tspa("b ~ a", data = dat,
+         fsT = list(nm$fsT), fsL = list(nm$fsL)),
+    "get_fs\\(\\) result"
+  )
+})
+
+test_that("tspa(): per-unit fsT/fsL with a non-get_fs data frame errors informatively (MG shape); nested fsb alone keeps the backstop", {
+  pats <- c("a+b", "a")
+  nm <- nested_fs_matrices(0.1, 1, pats)
+  dat <- data.frame(fs_a = c(0, 1, 2, 3), fs_b = c(0, 1, 2, 3),
+                    school = c("V", "V", "G", "G"))
+  expect_error(
+    tspa("b ~ a", data = dat,
+         fsT = setNames(rep(list(nm$fsT), 2), c("V", "G")),
+         fsL = setNames(rep(list(nm$fsL), 2), c("V", "G")),
+         group = "school"),
+    "get_fs\\(\\) result"
+  )
+  # nested fsb (per-pattern intercept vectors, the single-group attr()
+  # shape) is rejected even with plain matrix fsT/fsL
+  fsT_m <- matrix(0.1, 2, 2, dimnames = list(c("fs_a", "fs_b"), c("fs_a", "fs_b")))
+  fsL_m <- matrix(1, 2, 2, dimnames = list(c("fs_a", "fs_b"), c("a", "b")))
+  fsb_ng <- setNames(list(c(a = 0, b = 0), c(a = 0, b = 0)), c("a+b", "a"))
+  expect_error(
+    tspa("b ~ a", data = dat,
+         fsT = list(fsT_m), fsL = list(fsL_m),
+         fsb = list(fsb_ng)),
+    "does not yet support groups with multiple missing-data patterns"
+  )
+})
+
+test_that("tspa() accepts complete-data attributes unchanged", {
+  pats <- c("a+b")
+  nm <- nested_fs_matrices(0.1, 1, pats)
+  # fs_a/fs_b must not be perfectly correlated (singular sample covariance)
+  dat <- data.frame(fs_a = c(0, 1, 2, 3), fs_b = c(3, 1, 2, 0))
+  # k = 1 single-group output: plain matrix and length-1 list both accepted
+  expect_no_error(
+    fit1 <- suppressWarnings(tspa("b ~ a", data = dat,
+                                  fsT = nm$fsT[[1]], fsL = nm$fsL[[1]]))
+  )
+  expect_no_error(
+    fit2 <- suppressWarnings(tspa("b ~ a", data = dat,
+                                  fsT = list(nm$fsT[[1]]),
+                                  fsL = list(nm$fsL[[1]])))
+  )
+  expect_equal(
+    parameterestimates(fit1)["est"],
+    parameterestimates(fit2)["est"],
+    tolerance = 1e-10
+  )
+})
+
+# Per deep-value checks of the pooled per-group matrices (test-tspa_pooled.R),
+# this only asserts that the real FIML get_fs() output now FITS and that the
+# pooled (not the nested) values are what get attached to the fit.
+test_that("tspa() fits real get_fs() missing-data output", {
+  hs <- HolzingerSwineford1939
+  set.seed(1334)
+  hs[!rbinom(301, size = 1, prob = 0.7), 7] <- NA
+  hs[!rbinom(301, size = 1, prob = 0.7), 8] <- NA
+  hs[!rbinom(301, size = 1, prob = 0.7), 9] <- NA
+  mod2 <- "
+  # latent variables
+    visual =~ x1 + x2 + x3
+    speed  =~ x7 + x8 + x9
+  "
+  # multigroup: both groups carry nested per-pattern matrices, pooled to one
+  # plain matrix per group
+  fit_mg <- suppressWarnings(
+    cfa(mod2, data = hs, group = "school", missing = "fiml")
+  )
+  fs_mg <- get_fs(fit_mg)
+  expect_no_error(
+    fit_mg2 <- suppressWarnings(
+      tspa("visual ~ speed", data = fs_mg, group = "school",
+           fsT = attr(fs_mg, "fsT"), fsL = attr(fs_mg, "fsL"))
+    )
+  )
+  T_mg <- attr(fit_mg2, "fsT")
+  expect_true(is.list(T_mg) && !is.null(names(T_mg)))
+  expect_true(all(vapply(T_mg, is.matrix, logical(1))))   # no nesting left
+  expect_equal(attr(fit_mg2, "pooled_fs"), "mean")
+  # single group: the length-1 attribute list wrapping a nested pattern
+  # list (the "misread as k groups" trap) pools to a plain matrix
+  fit_sg <- suppressWarnings(cfa(mod2, data = hs, missing = "fiml"))
+  fs_sg <- get_fs(fit_sg)
+  expect_no_error(
+    fit_sg2 <- suppressWarnings(
+      tspa("visual ~ speed", data = fs_sg,
+           fsT = attr(fs_sg, "fsT"), fsL = attr(fs_sg, "fsL"))
+    )
+  )
+  expect_true(is.matrix(attr(fit_sg2, "fsT")))
+  expect_equal(attr(fit_sg2, "pooled_fs"), "mean")
+})
+
 test_that("Test indicator names not starting with 'fs_'", {
   data("PoliticalDemocracy", package = "lavaan")
   mod2 <- "
@@ -609,11 +780,11 @@ test_that("Test indicator names not starting with 'fs_'", {
     dem60 =~ y1 + y2 + y3 + y4
     dem65 =~ y5 + y6 + y7 + y8
   "
-  fs_dat2 <- get_fs(PoliticalDemocracy, model = mod2, std.lv = TRUE)
+  fs_dat2 <- get_fs(PoliticalDemocracy, model = mod2, std.lv = TRUE, format = "list")
   names(fs_dat2) <- gsub("fs_", "bs_", names(fs_dat2))
   ecov_fs <- attr(fs_dat2, "fsT")
   dimnames(ecov_fs) <- lapply(dimnames(ecov_fs),
-                              FUN = \(x) gsub("fs_", "bs_", x))
+                              FUN = function(x) gsub("fs_", "bs_", x))
   mat_ld <- attr(fs_dat2, "fsL")
   rownames(mat_ld) <- gsub("fs_", "bs_", rownames(mat_ld))
   expect_no_error(
@@ -625,7 +796,7 @@ test_that("Test indicator names not starting with 'fs_'", {
   )
   fs_fit <- tspa(model = "dem60 ~ ind60
                           dem65 ~ ind60 + dem60",
-                 data = get_fs(PoliticalDemocracy, model = mod2, std.lv = TRUE),
+                  data = get_fs(PoliticalDemocracy, model = mod2, std.lv = TRUE, format = "list"),
                  fsT = attr(fs_dat2, "fsT"),
                  fsL = attr(fs_dat2, "fsL"))
   expect_identical(
@@ -644,4 +815,29 @@ test_that("Missing group argument for a multigroup model", {
     ),
     "Please specify 'group = ' to fit a multigroup model in lavaan"
   )
+})
+
+########## tspa_args self-contained replay ##########
+
+test_that("tspa() records a self-contained replayable argument list", {
+  # Single-group multi-factor fit (the vcov_corrected() SG use case).
+  mod2s <- "ind60 =~ x1 + x2 + x3
+            dem60 =~ y1 + y2 + y3 + y4"
+  fs_sg_mf <- get_fs(cfa(mod2s, data = PoliticalDemocracy))
+  fit_sg_mf <- tspa(
+    model = "dem60 ~ ind60",
+    data = fs_sg_mf,
+    fsT = attr(fs_sg_mf, "fsT"),
+    fsL = attr(fs_sg_mf, "fsL")
+  )
+  for (fit in list(tspa_single, tspa_multi, tspa_fit_m, fit_sg_mf)) {
+    args <- attr(fit, "tspa_args")
+    expect_true(is.list(args))
+    # Evaluated values only: no calls/symbols (a match.call() style record
+    # would trip this).
+    expect_false(any(vapply(args, is.language, logical(1))))
+    refit <- do.call(tspa, args)
+    expect_equal(coef(refit), coef(fit), tolerance = 1e-10)
+    expect_equal(vcov(refit), vcov(fit), ignore_attr = TRUE, tolerance = 1e-10)
+  }
 })

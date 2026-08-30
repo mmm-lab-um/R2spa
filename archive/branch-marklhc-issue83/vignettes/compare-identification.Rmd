@@ -1,0 +1,541 @@
+---
+title: "Comparing Methods for Standardized Structural Coefficients"
+author: "Mark Lai"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{compare-identification}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r}
+library(lavaan)
+library(R2spa)
+```
+
+## Simulate Data
+
+```{r}
+set.seed(1116)
+# Low reliability, high SE for measurement parameters
+num_obs <- 50
+beta <- .7
+Lambda <- matrix(c(.8, .5, .6, rep(0, 6), .6, .7, .5), ncol = 2)
+Theta <- diag(.75, nrow(Lambda))
+Psi <- matrix(c(1, beta, beta, 1), nrow = 2)
+eta_delta <- MASS::mvrnorm(num_obs,
+  mu = rep(0, sum(dim(Lambda))),
+  Sigma = Matrix::bdiag(list(Psi, Theta)),
+  empirical = TRUE
+)
+ind <- eta_delta[, 1:2] %*% t(Lambda) + eta_delta[, -(1:2)]
+dat <- data.frame(ind)
+names(dat) <- c(paste0("x", 1:3), paste0("y", 1:3))
+```
+
+## Approach 1: Joint Modeling
+
+```{r}
+mod <- "
+  fy =~ y1 + y2 + y3
+  fx =~ x1 + x2 + x3
+  fy ~ fx
+"
+mjoint <- sem(mod, data = dat)
+standardizedSolution(mjoint)
+```
+
+## Approach 2: Global SAM
+
+```{r}
+mgsam <- sam(mod, data = dat, sam.method = "global")
+summary(mgsam)
+standardizedSolution(mgsam)
+```
+
+## Approach 3: Local SAM
+
+```{r}
+mlsam <- sam(mod, data = dat)
+summary(mlsam)
+standardizedSolution(mlsam) # same SE
+```
+
+## Approach 4: 2S-PA with both loading and error
+
+```{r}
+cfa_mod <- "
+  fy =~ y1 + y2 + y3
+  fx =~ x1 + x2 + x3
+"
+cfa_fit <- cfa(cfa_mod, std.lv = TRUE, data = dat)
+fs <- get_fs_lavaan(cfa_fit, method = "Bartlett", vfsLT = TRUE)
+m2spa1 <- tspa(" fy ~ fx",
+  data = fs,
+  fsT = attr(fs, "fsT"), fsL = attr(fs, "fsL")
+)
+standardizedSolution(m2spa1, type = "std.lv")
+```
+
+### Corrected Standard Errors
+
+Using information matrix
+
+```{r}
+v1 <- attr(fs, "vfsLT")[c(5, 7), c(5, 7)]
+# First consider unstandardized coefficients
+est <- lavInspect(m2spa1, "est")
+
+# Numeric Hessian
+# Define objective function with respect to
+# (a) free structural parameters and
+# (b) constraint variables from the first stage
+ff <- function(par, par_id, obj) {
+  est1 <- partable(obj)$est
+  est1[par_id] <- par
+  glist1 <- obj@Model@GLIST
+  pt1 <- lavInspect(obj, "partable")
+  for (l in seq_along(glist1)) {
+    to_fill <- which(pt1[[l]] != 0)
+    glist1[[l]][to_fill] <- est1[pt1[[l]][to_fill]]
+  }
+  lavaan:::lav_model_objective(
+    obj@Model,
+    GLIST = glist1,
+    lavsamplestats = obj@SampleStats,
+    lavdata = obj@Data
+  )
+}
+ff(with(est, c(beta[1, 2], diag(psi), diag(theta))),
+  par_id = c(8:10, 5, 7), obj = m2spa1
+)
+# Compute numerical Hessian
+hess <- numDeriv::hessian(ff,
+  x = with(est, c(beta[1, 2], diag(psi), diag(theta))),
+  par_id = c(8:10, 5, 7), obj = m2spa1
+)
+# Compute correction
+i21 <- hess[1:3, 4:5]
+i22 <- hess[1:3, 1:3]
+inv_i22_i21 <- solve(i22, i21)
+correction <- inv_i22_i21 %*% v1 %*% t(inv_i22_i21)
+sqrt((vcov(m2spa1) + correction)[1, 1])
+```
+
+```{r}
+# For standardized solution, we need to first obtain
+# the gradient of the transformation
+# Unstandardized to standardized
+unstd2std <- function(par, par_id, obj) {
+  est1 <- partable(obj)$est
+  est1[par_id] <- par
+  glist1 <- obj@Model@GLIST
+  pt1 <- lavInspect(obj, "partable")
+  for (l in seq_along(glist1)) {
+    to_fill <- which(pt1[[l]] != 0)
+    glist1[[l]][to_fill] <- est1[pt1[[l]][to_fill]]
+  }
+  standardizedSolution(obj,
+    type = "std.lv",
+    est = est1,
+    GLIST = glist1
+  )$est[par_id]
+}
+unstd2std(with(est, c(beta[1, 2], diag(psi) + 0.1)),
+  par_id = 8:10, obj = m2spa1
+)
+jac <- numDeriv::jacobian(
+  unstd2std,
+  x = with(est, c(beta[1, 2], diag(psi))),
+  par_id = 8:10, obj = m2spa1
+)
+vc_corrected <- jac %*% (vcov(m2spa1) + correction) %*% t(jac)
+```
+
+### Correction using jacobian
+
+This is similar to above, but use the first derivative instead of the information matrix
+
+Let $\gamma_1$ be the vector of paramters in stage 1 analyses that are used as input for stage 2, and $\gamma_2$ be the vector of structural parameters in stage 2 analyses. In large samples, we assume $\hat \gamma_1$ $\sim$ $N(\gamma_1, V_{\hat \gamma_1})$, and $\hat \gamma_2 | \gamma_1$ $\sim$ $N(\gamma_2, V_{\hat \gamma_2 | \gamma_1})$, where $V_{\hat \gamma_2 | \gamma_1}$ is the naive variance assuming $\gamma_1$ is known. Using the law of total variance,
+
+$$
+\begin{aligned}
+  V_{\hat \gamma_2} & = E[Var(\hat \gamma_2 | \gamma_1)] + Var[E(\hat \gamma_2 | \gamma_1)] \\
+  & = V_{\hat \gamma_2 | \gamma_1} + J_{\hat \gamma_2} V_{\hat \gamma_1} J^\top_{\hat \gamma_2}
+\end{aligned}
+$$
+
+```{r}
+std_est <- function(ev) {
+  fsT1 <- attr(m2spa1, which = "fsT")
+  diag(fsT1) <- ev
+  mm2spa1 <- tspa(" fy ~ fx",
+    data = fs,
+    fsT = fsT1, fsL = attr(fs, "fsL")
+  )
+  standardizedSolution(mm2spa1, type = "std.lv")$est.std[8]
+}
+std_est(with(est, diag(theta)))
+# Jacobian
+grad_std <- numDeriv::grad(std_est,
+  x = with(est, diag(theta))
+)
+vc_corrected2 <- lavInspect(m2spa1, what = "vcov.std")[1, 1] +
+  t(grad_std) %*% v1 %*% grad_std
+```
+
+<!-- Corrected SE with Bayesian priors
+
+```{r}
+#| include: false
+#| eval: false
+kl_gam <- function(ab, mu, sigma) {
+  integrate(
+    \(x) {
+      (dnorm(x, mean = mu, sd = sigma, log = TRUE) -
+        dgamma(x, ab[1], ab[2], log = TRUE)) *
+        dnorm(x, mean = mu, sd = sigma)
+    },
+    lower = 0, upper = Inf
+  )$value
+}
+optim(c(1, 1),
+  fn = kl_gam, mu = sqrt(0.6818182),
+  sigma = sqrt(1 / 0.6818182 * 0.2062564 / 4)
+)$par
+optim(c(1, 1),
+  fn = kl_gam, mu = sqrt(0.6),
+  sigma = 1 / sqrt(0.6) / 2 * sqrt(0.1838520)
+)$par
+
+library(blavaan)
+modb <- "
+  fy =~ fs_fy
+  fx =~ fs_fx
+  fs_fy ~~ prior('gamma(7.440204, 8.997541)[sd]') * fs_fy
+  fs_fx ~~ prior('gamma(6.362274, 8.190564)[sd]') * fs_fx
+  fy ~ fx
+"
+m2spa_bayes <- bsem(modb, data = fs)
+summary(m2spa_bayes)
+standardizedSolution(m2spa_bayes)
+```
+
+-->
+
+## Approach 5: 2S-PA with reliability constraints
+
+```{r}
+mod2 <- "
+  fy =~ NA * fs_fy + ly * fs_fy
+  fx =~ NA * fs_fx + lx * fs_fx
+  fs_fy ~~ ev1 * fs_fy
+  fs_fx ~~ ev2 * fs_fx
+  fx ~~ 1 * fx
+  fy ~ beta * fx
+  fy ~~ dvy * fy
+  # constraints
+  ev2 == 0.6 * lx^2
+  1 == beta^2 + dvy
+  ev1 == 0.6818182 * ly^2
+"
+m2spa2 <- sem(mod2, data = fs)
+standardizedSolution(m2spa2)$est
+```
+
+### Correction using jacobian
+
+```{r}
+# 1. Estimate the model using eps
+mod2 <- "
+  fy =~ NA * fs_fy + ly * fs_fy
+  fx =~ NA * fs_fx + lx * fs_fx
+  fs_fy ~~ ev1 * fs_fy
+  fs_fx ~~ ev2 * fs_fx
+  fx ~~ 1 * fx
+  fy ~ beta * fx
+  fy ~~ dvy * fy
+  # constraints
+  ev2 == ep2 * lx^2
+  1 == beta^2 + dvy
+  ev1 == ep1 * ly^2
+"
+compute_std_est <- function(ep) {
+  mod_tmp <- gsub("ep2", ep[2], mod2)
+  mod_tmp <- gsub("ep1", ep[1], mod_tmp)
+  standardizedSolution(sem(mod_tmp, data = fs))$est[6:7]
+}
+compute_std_est(diag(attr(fs, which = "fsT")))
+# Jacobian
+jac_std <- numDeriv::jacobian(compute_std_est,
+  x = with(est, diag(theta))
+)
+vc_corrected3 <- lavInspect(m2spa2, what = "vcov.std")[5:6, 5:6] +
+  jac_std %*% v1 %*% t(jac_std)
+```
+
+### Corrected SE with Monte Carlo Method
+
+Simulating new $\theta^*$ values from a multivariate normal distribution
+
+```{r}
+# 1. Simulate new error variables
+sim_ep <- MASS::mvrnorm(200,
+  mu = diag(attr(fs, which = "fsT")),
+  Sigma = v1
+)
+# 2. Estimate the model using different eps
+new_est <- apply(sim_ep, MARGIN = 1, FUN = compute_std_est)
+vc_corrected_mc <- lavInspect(m2spa2, what = "vcov.std")[5:6, 5:6] +
+  cov(t(new_est))
+```
+
+<!--
+
+## Approach 6: 2S-PA with both loading and error (regression scores)
+
+```{r}
+#| eval: false
+fsr <- get_fs_lavaan(cfa_fit, method = "regression", vfsLT = TRUE)
+m2spa3 <- tspa(" fy ~ fx",
+  data = fsr,
+  fsT = attr(fsr, "fsT"), fsL = attr(fsr, "fsL")
+)
+standardizedSolution(m2spa3, type = "std.lv")
+```
+
+### Correction using jacobian
+
+```{r}
+#| eval: false
+std_est <- function(ldev) {
+  fsL1 <- attr(m2spa3, which = "fsL")
+  fsL1[] <- ldev[1:4]
+  fsT1 <- attr(m2spa3, which = "fsT")
+  fsT1[lower.tri(fsT1, diag = TRUE)] <- ldev[5:7]
+  fsT1[1, 2] <- fsT1[2, 1]
+  mm2spa3 <- tspa(" fy ~ fx",
+    data = fsr,
+    fsT = fsT1, fsL = fsL1
+  )
+  standardizedSolution(mm2spa3, type = "std.lv")$est.std[8]
+}
+std_est(c(
+  attr(m2spa3, which = "fsL"),
+  attr(m2spa3, which = "fsT")[c(1, 2, 4)]
+))
+# Jacobian
+grad_std <- numDeriv::grad(std_est,
+  x = c(
+    attr(m2spa3, which = "fsL"),
+    attr(m2spa3, which = "fsT")[c(1, 2, 4)]
+  )
+)
+vc_corrected4 <- lavInspect(m2spa3, what = "vcov.std")[1, 1] +
+  t(grad_std) %*% attr(fsr, which = "vfsLT") %*% grad_std
+```
+
+-->
+
+## Comparisons
+
+```{r}
+cbind(
+  joint = unlist(standardizedSolution(mjoint)[7, c("est.std", "se")]),
+  `sam-g` = unlist(standardizedSolution(mgsam)[7, c("est.std", "se")]),
+  `sam-l` = unlist(standardizedSolution(mlsam)[7, c("est.std", "se")]),
+  `2spa-ev` = unlist(standardizedSolution(m2spa1)[8, c("est.std", "se")]),
+  `2spa-ev-cor` = c(.70, sqrt(diag(vc_corrected)[1])),
+  `2spa-rel` = unlist(standardizedSolution(m2spa2)[6, c("est.std", "se")]),
+  `2spa-rel-cor1` = c(.70, sqrt(diag(vc_corrected3)[1])),
+  `2spa-rel-cor2` = c(.70, sqrt(diag(vc_corrected_mc)[1]))
+)
+```
+
+## Simulation
+
+```{r}
+#| eval: false
+num_sim <- 1000
+
+# Numeric Hessian
+# Define objective function with respect to
+# (a) free structural parameters and
+# (b) constraint variables from the first stage
+ff <- function(par, par_id, obj) {
+  est1 <- partable(obj)$est
+  est1[par_id] <- par
+  glist1 <- obj@Model@GLIST
+  pt1 <- lavInspect(obj, "partable")
+  for (l in seq_along(glist1)) {
+    to_fill <- which(pt1[[l]] != 0)
+    glist1[[l]][to_fill] <- est1[pt1[[l]][to_fill]]
+  }
+  lavaan:::lav_model_objective(
+    obj@Model,
+    GLIST = glist1,
+    lavsamplestats = obj@SampleStats,
+    lavdata = obj@Data
+  )
+}
+
+unstd2std <- function(par, par_id, obj) {
+  est1 <- partable(obj)$est
+  est1[par_id] <- par
+  glist1 <- obj@Model@GLIST
+  pt1 <- lavInspect(obj, "partable")
+  for (l in seq_along(glist1)) {
+    to_fill <- which(pt1[[l]] != 0)
+    glist1[[l]][to_fill] <- est1[pt1[[l]][to_fill]]
+  }
+  standardizedSolution(obj,
+    type = "std.lv",
+    est = est1,
+    GLIST = glist1
+  )$est[par_id]
+}
+
+std_est <- function(ev, obj) {
+  fsT1 <- attr(obj, which = "fsT")
+  diag(fsT1) <- ev
+  mobj <- tspa(" fy ~ fx",
+    data = fs,
+    fsT = fsT1, fsL = attr(fs, "fsL")
+  )
+  standardizedSolution(mobj, type = "std.lv")$est.std[8]
+}
+
+compute_std_est <- function(ep, mod) {
+  mod_tmp <- gsub("ep2", ep[2], mod)
+  mod_tmp <- gsub("ep1", ep[1], mod_tmp)
+  standardizedSolution(sem(mod_tmp, data = fs))$est[6:7]
+}
+
+est <- se <- matrix(nrow = 7, ncol = num_sim)
+for (r in seq_len(num_sim)) {
+  # Data generation
+  eta_delta <- MASS::mvrnorm(num_obs,
+    mu = rep(0, sum(dim(Lambda))),
+    Sigma = Matrix::bdiag(list(Psi, Theta))
+  )
+  ind <- eta_delta[, 1:2] %*% t(Lambda) + eta_delta[, -(1:2)]
+  dat <- data.frame(ind)
+  names(dat) <- c(paste0("x", 1:3), paste0("y", 1:3))
+
+  # Joint Model
+  mod <- "
+  fy =~ y1 + y2 + y3
+  fx =~ x1 + x2 + x3
+  fy ~ fx
+    "
+  mjoint <- sem(mod, data = dat)
+  joint_est <- standardizedSolution(mjoint)[7, ]
+
+  # SAM
+  ## Global
+  mgsam <- sam(mod, data = dat, sam.method = "global")
+  gsam_est <- standardizedSolution(mgsam)[7, ]
+  ## Local
+  mlsam <- sam(mod, data = dat)
+  lsam_est <- standardizedSolution(mlsam)[7, ]
+
+  # 2S-PA
+  ## Error
+  cfa_mod <- "
+  fy =~ y1 + y2 + y3
+  fx =~ x1 + x2 + x3
+    "
+  cfa_fit <- cfa(cfa_mod,
+    std.lv = TRUE, data = dat,
+    bounds = "pos.ov.var"
+  )
+  fs <- get_fs_lavaan(cfa_fit, method = "Bartlett", vfsLT = TRUE)
+  m2spa1 <- tspa(" fy ~ fx",
+    data = fs,
+    fsT = attr(fs, "fsT"), fsL = attr(fs, "fsL")
+  )
+  tspa1_est <- standardizedSolution(m2spa1)[8, ]
+  ### Corrected Standard Errors
+  v1 <- attr(fs, "vfsLT")[c(5, 7), c(5, 7)]
+  # Gradient
+  grad_std <- numDeriv::grad(std_est,
+    x = diag(attr(fs, "fsT")), obj = m2spa1
+  )
+  vc_corrected2 <- lavInspect(m2spa1, what = "vcov.std")[1, 1] +
+    t(grad_std) %*% v1 %*% grad_std
+
+  ## Reliability
+  mod2 <- "
+  fy =~ NA * fs_fy + ly * fs_fy
+  fx =~ NA * fs_fx + lx * fs_fx
+  fs_fy ~~ ev1 * fs_fy
+  fs_fx ~~ ev2 * fs_fx
+  fx ~~ 1 * fx
+  fy ~ beta * fx
+  fy ~~ dvy * fy
+  # constraints
+  ev2 == ep2 * lx^2
+  1 == beta^2 + dvy
+  ev1 == ep1 * ly^2
+    "
+  ep <- diag(attr(fs, "fsT"))
+  mod_tmp <- gsub("ep2", ep[2], mod2)
+  mod_tmp <- gsub("ep1", ep[1], mod_tmp)
+  m2spa2 <- sem(mod_tmp, data = fs)
+  tspa2_est <- standardizedSolution(m2spa2)[6, ]
+
+  ## Corrected standard errors
+  # Jacobian
+  jac_std <- numDeriv::jacobian(compute_std_est,
+    x = diag(attr(fs, "fsT")), mod = mod2
+  )
+  vc_corrected3 <- lavInspect(m2spa2, what = "vcov.std")[5:6, 5:6] +
+    jac_std %*% v1 %*% t(jac_std)
+
+  # Save results
+  est[, r] <- c(
+    joint_est[["est.std"]],
+    gsam_est[["est.std"]],
+    lsam_est[["est.std"]],
+    tspa1_est[["est.std"]],
+    tspa1_est[["est.std"]],
+    tspa2_est[["est.std"]],
+    tspa2_est[["est.std"]]
+  )
+  se[, r] <- c(
+    joint_est[["se"]],
+    gsam_est[["se"]],
+    lsam_est[["se"]],
+    tspa1_est[["se"]],
+    sqrt(vc_corrected2[1, 1]),
+    tspa2_est[["se"]],
+    sqrt(vc_corrected3[1, 1])
+  )
+}
+```
+
+```{r}
+#| eval: false
+saveRDS(list(est = est, se = se), file = "compare-identification.rds")
+```
+
+```{r}
+#| include: false
+lst <- readRDS("compare-identification.rds")
+est <- lst$est
+se <- lst$se
+```
+
+```{r}
+rowMeans(est, na.rm = TRUE)
+rowMeans(se, na.rm = TRUE)
+apply(est, MARGIN = 1, FUN = sd, na.rm = TRUE)
+```

@@ -6,46 +6,195 @@
 \usage{
 get_fs_lavaan(
   lavobj,
-  method = c("regression", "Bartlett"),
+  method = c("regression", "Bartlett", "ML", "EB", "mean"),
   corrected_fsT = FALSE,
   vfsLT = FALSE,
-  reliability = FALSE
+  reliability = FALSE,
+  prior_mean = NULL,
+  prior_cov = NULL,
+  sum_items = NULL,
+  ...
 )
 }
 \arguments{
 \item{lavobj}{A lavaan model object when using \code{\link[=get_fs_lavaan]{get_fs_lavaan()}}.}
 
-\item{method}{Character. Method for computing factor scores (options are
-"regression" or "Bartlett"). Currently, the default is
-"regression" to be consistent with
-\code{\link[lavaan]{lavPredict}}, but the Bartlett scores have
-more desirable properties and may be preferred for 2S-PA.}
+\item{method}{Character. Method for computing factor scores. For
+\code{lavaan} and data frame objects: \code{"regression"} (default,
+consistent with \code{\link[lavaan]{lavPredict}}),
+\code{"Bartlett"}, or \code{"mean"} (a third, distinct method: sum
+scores, each score being the plain uncentered mean of the
+items assigned to its factor, using no latent
+distribution), with \code{"ML"} an alias for \code{"Bartlett"} and
+\code{"EB"} an alias for \code{"regression"}. For \code{merMod} objects:
+\code{"EB"} (empirical Bayes, default; identical to the
+first random-effect term's \code{\link[lme4]{ranef}}()
+estimates) or \code{"ML"} (a prior-free,
+per-cluster OLS estimate of the random effects, using no
+random-effects prior, analogous to Bartlett scores for
+\code{lavaan} objects). The \code{"ML"}/\code{"EB"} aliases apply to the
+lavaan path only; for \code{merMod} objects the two strings are
+distinct methods. Bartlett scores have more desirable
+properties than regression scores and may be preferred for
+2S-PA. \code{method = "mean"} takes the item-to-factor
+assignment from \code{sum_items} (auto-derived from the
+estimated loadings when \code{NULL}); it errors when the model
+was fitted with missing data retained (e.g. FIML/digamma),
+and is not supported together with \code{corrected_fsT},
+\code{vfsLT}, \code{reliability}, \code{prior_mean}, or \code{prior_cov}.}
 
 \item{corrected_fsT}{Logical. Whether to correct for the sampling
 error in the factor score weights when computing
-the error variance estimates of factor scores.}
+the error variance estimates of factor scores.
+Currently ignored for \code{merMod} objects.}
 
 \item{vfsLT}{Logical. Whether to return the covariance matrix of \code{fsT}
-and \code{fsL}, which can be used as input for \code{\link[=vcov_corrected]{vcov_corrected()}}
-to obtain corrected covariances and standard errors for
-\code{\link[=tspa]{tspa()}} results. This is currently ignored.}
+and \code{fsL}, returned as attribute \code{vfsLT}; used for
+second-order SE correction of 2S-PA results. Currently
+ignored for \code{merMod} objects.}
 
 \item{reliability}{Logical. Whether to return the reliability of factor
-scores.}
+scores. Available only for single-factor lavaan models;
+for multi-factor models a warning is issued and no
+\code{reliability} attribute is returned.}
+
+\item{prior_mean}{An optional numeric vector of length \code{q} (the number of
+latent variables) giving fixed external prior means for the latent
+variables. \code{NULL} (default) uses the lavaan-estimated (group-specific)
+latent means. Non-NULL values are treated as fixed external priors
+shared across all lavaan groups. For \code{mirt} \code{SingleGroupClass}
+objects it instead sets the factor prior mean used for the EAP
+scores; the factor-score intercepts (\code{fsb}) then vary per observation
+as \code{Vpost_i \%*\% solve(psi) \%*\% prior_mean}, i.e. the latent mean
+scaled by the per-observation shrinkage factor (zero when
+\code{prior_mean = NULL}), where \code{psi} is the mirt model's estimated
+factor covariance. For \code{mirt} \code{MultipleGroupClass} objects a
+non-NULL \code{prior_mean} (length \code{q}) is applied as the factor prior
+mean to every group (mirt's per-group EAP is otherwise centred on a
+zero-mean standard-normal prior); each observation's regression form
+uses the factor covariance of its own group.
+Only supported for lavaan objects with regression (EB) scoring (and
+for mirt); \code{reliability = TRUE} is not supported together with
+user-supplied \code{prior_mean}/\code{prior_cov}, and \code{prior_cov} is not
+supported for mirt. Conceptually similar to the \code{mean} argument of
+\code{mirt::fscores()}.}
+
+\item{prior_cov}{An optional numeric \verb{q x q} covariance matrix (a scalar or
+1 x 1 matrix is accepted when \code{q = 1}) giving fixed external prior
+covariance for the latent variables. \code{NULL} (default) uses the
+lavaan-estimated (group-specific) latent covariance. Non-NULL values
+must be finite, symmetric and positive definite; when \code{q > 1} the
+matrix must be named (row and column names matching the latent
+variable names), so its entries map unambiguously onto the model's
+latent variables. Values are treated as fixed external priors shared
+across all lavaan groups. Only supported
+for lavaan objects with regression (EB) scoring;
+\code{reliability = TRUE} is not supported together with user-supplied
+\code{prior_mean}/\code{prior_cov}. With \code{corrected_fsT = TRUE} or
+\code{vfsLT = TRUE} the supplied covariance is treated as fixed, i.e. no
+sampling uncertainty from the prior itself is propagated.
+Conceptually similar to the \code{cov} argument of \code{mirt::fscores()}.}
+
+\item{sum_items}{A named list mapping each factor name to the item names
+that make up its sum score, e.g.
+\code{list(ind60 = c("x1", "x2", "x3"), dem60 = c("y1", "y2", "y3", "y4"))}. \code{NULL} (default) auto-derives the assignment from the
+estimated loadings, which requires each indicator to load on
+exactly one factor and every factor to have at least one item. A
+supplied list must cover all model factors, and each item may
+belong to only one sum. Only used for \code{lavaan} and data frame
+objects with \code{method = "mean"}.}
+
+\item{...}{additional arguments passed to \code{\link[lavaan]{cfa}}
+(when \code{object} is a data frame). See \code{\link[lavaan]{lavOptions}}
+for a complete list.}
 }
 \value{
 A data frame containing the factor scores (with prefix \code{"fs_"}),
 the standard errors (with suffix \code{"_se"}), the implied loadings
-of factor \code{"_by_"} factor scores, and the error variance-covariance
-of the factor scores (with prefix \code{"evfs_"}). The following are
-also returned as attributes:
-* \code{fsT}: error covariance of factor scores
-* \code{fsL}: loading matrix of factor scores
-* \code{fsb}: intercepts of factor scores
-* \code{scoring_matrix}: weights for computing factor scores from items
+of indicator \verb{_by_} factor scores, and the error variance-covariance
+of the factor scores (with prefix \code{"ev_"} or \code{"ecov_"}).
+For multi-group lavaan models in \code{"unified"} format, a \code{group} column
+is included. The following attributes are attached:
+* \code{fsT}: error covariance of factor scores (matrix or named list by group)
+* \code{fsL}: loading matrix of factor scores (matrix or named list by group)
+* \code{fsb}: intercepts of factor scores (vector or named list by
+group); with \code{method = "mean"} the intercept is the mean of the
+factor's item intercepts, the measurement intercept of the score
+regressed on the uncentered latent (same \code{E[fs] - fsL \%*\% alpha}
+convention as the other methods; equals the score's column mean
+for models without a mean structure)
+* \code{scoring_matrix}: weights for computing factor scores from the
+observed data, as a named list. For lavaan models: one
+score x item matrix per group; with \code{method = "mean"} the
+weights are the item-mean weights, so \code{S \%*\% y} reproduces the
+raw scores exactly (no centering offset). For \code{merMod} models:
+one \code{num_re} x \code{n_j} matrix per cluster, where
+\code{S_j \%*\% (y_j - X_j \%*\% beta)} with \code{y_j}/\code{X_j} the cluster's
+rows of the model response and the fixed-effects design
+reproduces the cluster's EB scores for method \code{"EB"} and the
+per-cluster OLS (ML) scores for method \code{"ML"}.
+* \code{psi}: effective (prior-adjusted) covariance matrix of the
+latent variables (\verb{q x q}), group-level (not per-pattern), and
+a point estimate only (no sampling SEs of the latents are
+attached). Mirrors the \code{fsT} shape: a named list keyed by group
+label for \code{"unified"} output; a direct attribute on each group
+data frame (plus a list-valued attribute on the outer list) for
+\code{"list"} output; for \code{merMod} objects a single \verb{q x q} matrix.
+With \code{prior_cov} supplied it equals the prior (shared across
+groups), otherwise the per-group lavaan estimate. For \code{merMod}
+objects the matrix is the first random-effects term's
+\code{VarCorr}, with dimnames renamed to match the \code{fsL} column
+names (\code{u0}/\code{u1}/..., or the legacy \code{u0_eb}/\code{u1_eb} names).
+* \code{alpha}: effective (prior-adjusted) means of the latent
+variables (a named vector of length \code{q}), with the same group
+nesting and point-estimate semantics as \code{psi}. With
+\code{prior_mean} supplied it equals the prior, otherwise the
+per-group lavaan estimate; a named zero vector (\code{0} per latent)
+when the model has no (estimated) mean structure. For \code{merMod}
+objects a named zero vector (random effects are mean zero).
+* \code{fs_pattern}: for lavaan models, a named list by group of
+\code{list(label, pat)} entries. \code{label} is a character vector with
+one entry per case in the group giving that case's
+observed-indicator pattern name (\code{NA} for cases whose indicators
+are all missing); \code{pat} is a logical matrix with rows =
+indicators and one column per pattern, the columns being named
+by pattern name.
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{    For a lavaan group without missing data, its `fsT`/`fsL`/`fsb`/
+    `scoring_matrix` elements are the plain matrix/vector for the whole
+    group. When a group's cases split into multiple observed-indicator
+    patterns (missing data), each such element is instead a named list
+    with one entry per pattern; the pattern name is the observed
+    indicator names joined with `"+"` in indicator order (e.g.
+    `"x1+x3"`).
+
+    With `local = TRUE` and missing data (e.g. `missing = "fiml"`),
+    the `fsT`/`fsL`/`fsb`/`scoring_matrix` attributes are instead
+    per-row lists (one entry per data row) and the result carries a
+    `per_obs = TRUE` attribute (the same convention as mirt's
+    `mirt_per_obs`).
+
+    Note: for a single-group lavaan fit in `"unified"` format, the
+    per-group attribute wrappers (`fsT`, `fsL`, `fsb`,
+    `scoring_matrix`, `psi`, and `alpha`) are each a one-element list
+    named with the empty string `""`; `x[[""]]` does not match in R
+    list subsetting, so read these attributes positionally (e.g.
+    `attr(fs, "fsT")[[1]]`, `attr(fs, "psi")[[1]]`) rather than by
+    name.
+}\if{html}{\out{</div>}}
 }
 \description{
-Get Factor Scores and the Corresponding Standard Error of Measurement
+\code{get_fs()} is an S3 generic that extracts factor scores from fitted models.
+Methods are available for \code{data.frame} (fits a CFA internally), \code{lavaan}
+objects, \code{lmerMod} objects, and fitted \code{mirt} models (single-group
+\code{SingleGroupClass} and multi-group \code{MultipleGroupClass}; \code{mirt} is a
+\code{Suggests} dependency). Multi-group mirt results carry a trailing \code{group}
+column and a per-group (\code{list}) \code{psi} attribute.
+}
+\details{
+\code{get_fs_lavaan()} is superseded by \code{\link[=get_fs]{get_fs()}}. It is retained for backward
+compatibility and delegates to \code{get_fs(object, format = "list")} internally.
+New code should call \code{\link[=get_fs]{get_fs()}} directly.
 }
 \examples{
 library(lavaan)
@@ -56,6 +205,25 @@ get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
        model = " ind60 =~ x1 + x2 + x3
                  dem60 =~ y1 + y2 + y3 + y4 ")
 
+# Local per-construct scoring: each latent is scored from its own
+# single-factor model (the canonical 2S-PA stage 1) and the results are
+# merged into the usual multi-factor layout
+get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4",
+                            "y5", "y6", "y7", "y8")],
+       model = " ind60 =~ x1 + x2 + x3
+                 dem60 =~ y1 + y2 + y3 + y4
+                 dem65 =~ y5 + y6 + y7 + y8 ",
+       local = TRUE)
+
+# Vector form: one complete single-factor model string per latent, fit
+# verbatim (e.g. a within-factor residual covariance the strict string
+# grammar rejects)
+get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
+       model = c("ind60 =~ x1 + x2 + x3",
+                 "dem60 =~ y1 + y2 + y3 + y4
+                  y1 ~~ y4"),
+       local = TRUE)
+
 # Multiple-group
 hs_model <- ' visual  =~ x1 + x2 + x3 '
 fit <- cfa(hs_model,
@@ -65,4 +233,26 @@ get_fs(HolzingerSwineford1939, hs_model, group = "school")
 # Or without the model
 get_fs(HolzingerSwineford1939[c("school", "x4", "x5", "x6")],
        group = "school")
+
+# Fixed external latent prior (shared across groups) for regression scores;
+# conceptually similar to mirt::fscores(mean, cov)
+fit <- cfa("visual =~ x1 + x2 + x3",
+           data = HolzingerSwineford1939,
+           group = "school", group.equal = c("loadings", "intercepts"))
+get_fs(fit, prior_mean = c(visual = -0.12), prior_cov = 0.33)
+
+# Product-score indicator for the ind60 x dem60 interaction (single-group
+# lavaan models only, v1); see compute_fs_prod() for the derivation
+get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
+       model = " ind60 =~ x1 + x2 + x3
+                 dem60 =~ y1 + y2 + y3 + y4 ",
+       product = "ind60:dem60")
+}
+\seealso{
+\itemize{
+\item \code{vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")} for end-to-end stage-1/stage-2 examples.
+\item \code{vignette("Scoring Matrices: lavaan CFA and lme4", package = "R2spa")} for the scoring-matrix internals.
+\item \code{vignette("EFA Scores", package = "R2spa")} for EFA-based factor scores.
+\item \code{vignette("2S-PA with Missing Data", package = "R2spa")} for \code{missing = "fiml"}.
+}
 }

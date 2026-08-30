@@ -1,0 +1,145 @@
+---
+title: "Vignette Title"
+author: "Vignette Author"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r}
+library(sirt)
+library(lavaan)
+```
+
+## Example
+
+Simulate data
+
+```{r}
+set.seed(65)
+num_groups <- 4
+num_items <- 5
+latent_means <- c(0, .5, -.4, -.1)
+latent_vars <- c(1, .8, 1.1, 0.9)
+lambda <- c(1, 1.2, 0.8, 1.1, 0.9)
+# Add random noninvariance
+lambda_dev <- matrix(
+    round(rnorm(num_groups * num_items, sd = .1), 2),
+    nrow = num_groups, ncol = num_items)
+lambdas <- matrix(lambda,
+    byrow = TRUE,
+    nrow = num_groups, ncol = num_items
+) +
+    lambda_dev
+nu <- c(0.5, 1.0, 0, 0.5, 0.3)
+# Add random noninvariance
+nu_dev <- matrix(
+    round(rnorm(num_groups * num_items, sd = .05), 2),
+    nrow = num_groups, ncol = num_items)
+nus <- matrix(nu,
+    byrow = TRUE,
+    nrow = num_groups, ncol = num_items
+) +
+    nu_dev
+# Error variances
+ths <- matrix(2 - lambda, byrow = TRUE,
+    nrow = num_groups, ncol = num_items
+)
+# Means and covariance matrices
+vnames <- paste0("y", seq_len(num_items))
+mus <- lapply(seq_len(num_groups),
+    FUN = function(i) {
+        setNames(nus[i, ] + lambdas[i, ] * latent_means[i],
+                 vnames)
+    }
+)
+sigmas <- lapply(seq_len(num_groups),
+    FUN = function(i) {
+        sigma_i <- tcrossprod(lambdas[i, ]) * latent_vars[i] + diag(ths[i, ])
+        dimnames(sigma_i) <- rep(list(vnames), 2)
+        sigma_i
+    }
+)
+```
+
+Configural model
+
+```{r}
+# Configural model
+num_obs <- c(100, 150, 60, 90)
+config_fit <- cfa(" f =~ y1 + y2 + y3 + y4 + y5 ",
+    sample.cov = sigmas, sample.mean = mus,
+    sample.nobs = num_obs,
+    std.lv = TRUE
+)
+```
+
+Alignment
+
+```{r}
+config_pars <- lavInspect(config_fit, what = "est")
+config_lambda <- vapply(config_pars, FUN = `[[`,
+                        FUN.VALUE = lambda, i = "lambda") |> t()
+config_nu <- vapply(config_pars, FUN = `[[`,
+                    FUN.VALUE = nu, i = "nu") |> t()
+aligned_pars <- invariance.alignment(
+    lambda = config_lambda,
+    nu = config_nu,
+    wgt = matrix(num_obs, nrow = num_groups, ncol = num_items)
+)
+```
+
+Covariance matrix of aligned parameters
+
+```{r}
+# Configural covariance matrix of loadings and intercepts
+lambda_index <- lavInspect(config_fit) |>
+    lapply(FUN = \(x) as.vector(x[["lambda"]])) |>
+    do.call(what = rbind)
+nu_index <- lavInspect(config_fit) |>
+    lapply(FUN = \(x) as.vector(x[["nu"]])) |>
+    do.call(what = rbind)
+config_theta <- vapply(config_pars,
+    FUN = \(x) diag(x[["theta"]]),
+    FUN.VALUE = nu
+) |> t()
+theta_index <- lavInspect(config_fit) |>
+    lapply(FUN = \(x) as.vector(diag(x[["theta"]]))) |>
+    do.call(what = rbind)
+# lambda_nu_index <- c(lambda_index, nu_index)
+# config_vc <- vcov(config_fit)[lambda_nu_index, lambda_nu_index]
+# Jacobian of aligned parameters as function of configural parameters
+get_aligned <- function(x) {
+    new_lam <- config_lambda
+    new_lam[] <- x[lambda_index]
+    new_nu <- config_nu
+    new_nu[] <- x[nu_index]
+    new_th <- config_theta
+    new_th[] <- x[theta_index]
+    new_pars <- invariance.alignment(
+        lambda = new_lam,
+        nu = new_nu,
+        wgt = matrix(num_obs, nrow = num_groups, ncol = num_items)
+    )
+    c(t(new_pars$lambda.aligned), t(new_pars$nu.aligned), t(new_th))
+}
+jac <- numDeriv::jacobian(get_aligned, x = coef(config_fit))
+```
+
+Covariance matrix of aligned parameters
+
+```{r}
+vc_aligned <- jac %*% vcov(config_fit) %*% t(jac)
+```
+
+Compute reliability

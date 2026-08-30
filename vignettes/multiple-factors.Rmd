@@ -2,7 +2,7 @@
 title: "Multi-Factor Measurement Model"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{multiple-factors}
+  %\VignetteIndexEntry{Multi-Factor Measurement Model}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -69,41 +69,21 @@ We can also use `R2spa::get_fs()`:
 (fs_dat <- get_fs(PoliticalDemocracy, model = my_cfa, std.lv = TRUE)) |> head()
 ```
 
-Therefore, we need to specify cross-loadings when using 2S-PA.
+Therefore, cross-loadings must be accounted for in stage 2. Because `fs_dat`
+comes from `get_fs()`, `tspa()` reads the implied loading matrix `fsL` (which
+here carries the cross-loadings) and the score error covariance `fsT` from the
+result's attributes, so the `fsT`/`fsL` arguments no longer need to be passed
+(they can still be passed explicitly if preferred).
 
 ```{r}
-tspa_fit <- tspa(model = "dem60 ~ ind60", data = fs_dat,
-                 fsT = attr(fs_dat, "fsT"), 
-                 fsL = attr(fs_dat, "fsL"))
+tspa_fit <- tspa(model = "dem60 ~ ind60", data = fs_dat)
 cat(attr(tspa_fit, "tspaModel"))
 parameterestimates(tspa_fit)
 ```
 
-
-```{r include=FALSE, eval=FALSE}
-# Compute factor scores using lavPredict
-fs_dat <- lavPredict(cfa_fit, acov = "standard")
-colnames(fs_dat) <- c("fs_ind60", "fs_dem60")
-# alambda %*% attr(fs_dat, "acov")[[1]] %*% t(alambda)
-my2spa <- "
-  # latent variables (indicated by factor scores)
-    ind60 =~ 0.95538579 * fs_ind60 + 0.05816994 * fs_dem60
-    dem60 =~ 0.01834111 * fs_ind60 + 0.86888887 * fs_dem60
-  # constrain the errors
-    fs_ind60 ~~ 0.034595518 * fs_ind60
-    fs_dem60 ~~ 0.090775708 * fs_dem60
-    fs_ind60 ~~ 0.004017388 * fs_dem60
-  # latent variances
-    ind60 ~~ ind60
-    dem60 ~~ dem60
-  # regressions
-    dem60 ~ ind60
-"
-tspa_fit <- sem(model = my2spa, data  = fs_dat)
-standardizedSolution(tspa_fit)
-```
-
-which is more consistent with the SEM results.
+The non-diagonal `fsL` (cross-loadings) is what makes the score-based model
+recover the joint-model structure, because each score is a weighted composite of
+all the indicators.
 
 ## Three-factor model example
 
@@ -135,48 +115,17 @@ We can also use `R2spa::get_fs()`:
   head()
 ```
 
-Therefore, we need to specify cross-loadings when using 2S-PA.
+As before, `tspa()` reads the cross-loadings (`fsL`) and the score error
+covariance (`fsT`) from the `get_fs()` result.
 
 ```{r}
 tspa_fit_3fac <- tspa(model = "dem60 ~ ind60
-              dem65 ~ ind60 + dem60",
-              data = fs_dat_3fac,
-              fsT = attr(fs_dat_3fac, "fsT"),
-              fsL = attr(fs_dat_3fac, "fsL"))
+                               dem65 ~ ind60 + dem60",
+              data = fs_dat_3fac)
 cat(attr(tspa_fit_3fac, "tspaModel"))
 parameterestimates(tspa_fit_3fac)
 ```
 
-
-```{r include=FALSE, eval=FALSE}
-# Compute factor scores using lavPredict
-fs_3fac_dat <- lavPredict(cfa_3fac_fit, acov = "standard")
-colnames(fs_3fac_dat) <- c("fs_ind60", "fs_dem60", "fs_dem65")
-# alambda %*% attr(fs_dat, "acov")[[1]] %*% t(alambda)
-mod_2spa_3fac <- "
-  # latent variables (indicated by factor scores)
-    ind60 =~ 0.95064774 * fs_ind60 + (-0.02069724) * fs_dem60 + 
-             0.09868528 * fs_dem65
-    dem60 =~ (-0.005967124) * fs_ind60 + 0.533020047 * fs_dem60 +
-             0.401095944 * fs_dem65
-    dem65 =~ 0.02951139 * fs_ind60 + 0.41603787 * fs_dem60 +
-             0.49133377 * fs_dem65
-  # constrain the errors
-    fs_ind60 ~~ 0.0340104952 * fs_ind60 + 0.0003881641 * fs_dem60 + 
-                0.005026024 * fs_dem65
-    fs_dem60 ~~ 0.0586870314 * fs_dem60 + 0.0533752458 * fs_dem65
-    fs_dem65 ~~ 0.051573299 * fs_dem65
-  # latent variances
-    ind60 ~~ ind60
-    dem60 ~~ dem60
-    dem65 ~~ dem65
-  # regressions
-    dem60 ~ ind60
-    dem65 ~ ind60 + dem60
-"
-tspa_fit_3fac <- sem(model = mod_2spa_3fac, data = fs_3fac_dat)
-standardizedSolution(tspa_fit_3fac)
-```
 
 Compare to SEM:
 
@@ -192,5 +141,73 @@ sem_3fac <- sem("
   ",
   data = PoliticalDemocracy
 )
-standardizedSolution(sem_3fac)
+standardizedsolution(sem_3fac)
 ```
+
+The `lavaan::sem()` fit above is the **gold-standard** joint model: it estimates
+the measurement model and the structural paths together, treating the indicators
+as observed, so no separate measurement-error correction is needed. `tspa()`
+reaches the same structural estimates a different way — by correcting the stage-1
+*scores* for their measurement error — so the two agree when the sample is large.
+The simulation studies find 2S-PA tracks the joint model closely while staying
+more reliable, with less biased standard errors and better coverage, in small
+samples and with unreliable or categorical items (Lai & Hsiao, 2022; Lai et
+al., 2023). `PoliticalDemocracy` is a real data set, so there is no "true value"
+to compare against here; the point of putting the two side by side is that they
+target the same structural model.
+
+## Local vs joint scores
+
+The `get_fs()` calls above all score from a *joint* multi-factor measurement
+model: one fit with all the latents estimated together. With freely correlated
+factors, each score is a weighted composite of **all** the indicators (the
+off-diagonals of the `alambda` matrices above), so the stage-2 model has to
+account for the cross-loadings explicitly. The canonical 2S-PA setup (Lai &
+Hsiao, 2022) instead scores each latent from its **own** local measurement
+model. `get_fs(..., local = TRUE)` does this in one call and merges the
+per-construct results into the usual multi-factor layout:
+
+```{r}
+(fs_local <- get_fs(PoliticalDemocracy,
+                    model = cfa_3fac,
+                    std.lv = TRUE,
+                    local = TRUE)) |> head()
+```
+
+The merged result has the same layout as the joint output, with the cross
+terms *exactly* zero: the `fsT` and `fsL` attributes are block-diagonal, the
+`psi` attribute is diagonal, and the off-diagonal `_by_` loading columns and
+all `ecov_*` columns are zero. Each score is a *pure* per-construct score —
+the cross-factor structure is not estimated by design:
+
+```{r}
+attr(fs_local, "fsL")[[1]]
+sapply(c("fs_ind60", "fs_dem60", "fs_dem65"),
+       function(col) max(abs(fs_local[[col]] - fs_dat_3fac[[col]])))
+```
+
+So local scores are not the same as joint scores: with freely correlated
+factors they differ (the maximum score differences above), because the joint
+fit scores every latent from all the indicators — even the joint fit's own
+per-factor estimates shift under free correlation. With the factors
+constrained uncorrelated (e.g. `ind60 ~~ 0 * dem60` in the joint model), the
+likelihood factorizes and the two agree to optimizer tolerance.
+
+Because the merged result carries the usual `fsT`/`fsL` attributes (with the
+zero cross terms), it feeds `tspa()` directly with no explicit `fsT`/`fsL`
+arguments — the stage-2 model picks up the zero cross-loadings and score
+error covariances from the attributes:
+
+```{r}
+tspa_fit_local <- tspa(model = "dem60 ~ ind60
+                        dem65 ~ ind60 + dem60",
+                       data = fs_local)
+parameterestimates(tspa_fit_local)
+```
+
+`model` may also be a character vector (or a named list) of complete
+single-factor model strings, each element fit verbatim — the escape hatch for
+anything the strict string grammar rejects, e.g. a within-factor residual
+covariance (`y1 ~~ y4`). `vfsLT` (and hence `tspa(corrected_se = TRUE)`),
+`prior_cov`, and `reliability` are not supported in `local` mode (v1); see
+`?get_fs` (Details) for the full contract.

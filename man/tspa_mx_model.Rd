@@ -2,117 +2,173 @@
 % Please edit documentation in R/tspa_mx.R
 \name{tspa_mx_model}
 \alias{tspa_mx_model}
-\title{Two-Stage Path Analysis with Definition Variables Using OpenMx}
+\title{Two-Stage Path Analysis (OpenMx)}
 \usage{
 tspa_mx_model(
-  mx_model,
+  model,
   data,
-  mat_ld,
-  mat_ev,
-  mat_int = NULL,
-  fs_lv_names = NULL,
+  se_fs = NULL,
+  fsL = NULL,
+  fsT = NULL,
+  fsb = NULL,
   ...
 )
 }
 \arguments{
-\item{mx_model}{A model object of class \link[OpenMx:MxRAMModel-class]{OpenMx::MxRAMModel}, created
-by \code{\link[OpenMx:mxModel]{OpenMx::mxModel()}} or the \code{umx} package. This
-is the structural model part.}
+\item{model}{A character string describing the structural path model in
+\code{lavaan} syntax, using the \strong{latent} (factor) names. Phase 1 restricts
+every variable in \code{model} to a corrected latent (one that has a factor
+score). Latent variances are added automatically, so do not declare them
+here.}
 
-\item{data}{A data frame containing factor scores.}
+\item{data}{A data frame carrying the factor-score columns
+(\verb{fs_<latent>}) and, for definition-variable entries, the per-observation
+columns they reference. A \code{\link[=get_fs]{get_fs()}} result works directly: with
+\code{se_fs}/\code{fsL}/\code{fsT}/\code{fsb} omitted, the measurement inputs are derived
+from its attributes (see Details), and the \verb{int_fs_*} intercept
+columns are appended automatically --- \code{fs_indiv()} is no longer
+needed to obtain them. \code{\link[=fs_indiv]{fs_indiv()}} on a \code{\link[=get_fs]{get_fs()}} result produces
+the equivalent fully explicit table. Definition-variable columns must
+be numeric and free of \code{NA}.}
 
-\item{mat_ld}{A \eqn{p \times p} matrix indicating the loadings of the
-factor scores on the latent variables. The \emph{i}th row indicate
-loadings of the \emph{i}th factor score variable on the latent
-variables. This could be one of the following:
-\itemize{
-\item A matrix created by \code{\link[OpenMx:mxMatrix]{OpenMx::mxMatrix()}} with loading
-values.
-\item A named numeric matrix, with rownames and column names
-matching the factor score and latent variables.
-\item A named character matrix, with rownames and column names
-matching the factor score and latent variables, and the
-character values indicating the variable names in \code{data} for
-the corresponding loadings.
-}}
+\item{se_fs}{A named numeric vector of standard errors (one per latent) for
+the single-score-per-latent case; implies fixed unit loadings and error
+variances \code{se_fs^2}. An explicit \code{se_fs} always wins over derivation;
+when omitted (along with \code{fsL}, \code{fsT}, and \code{fsb}), the measurement
+inputs are derived from a \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see
+Details).}
 
-\item{mat_ev}{Similar to \code{mat_ld} but for the error variance-covariance
-matrix of the factor scores.}
+\item{fsL}{A \verb{q x p} loading matrix including cross-loadings: rows = score
+names (\verb{fs_<latent>}), columns = latent names. The matrix must be
+uniformly numeric (every cell a fixed loading) or uniformly character
+(every cell a definition-variable column name); mixing fixed values and
+column names in one matrix is not supported.
+Or omitted, in which case the value is derived from the \code{fsL} attribute
+of a \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see Details); an explicit \code{fsL}
+always wins.}
 
-\item{mat_int}{Similar to \code{mat_ld} but for the measurement intercept
-matrix of the factor scores.}
+\item{fsT}{A \verb{q x q} error variance-covariance matrix over the score names;
+the lower triangle (incl. diagonal) is used, and every score must have
+an error variance (a complete diagonal). The matrix must be uniformly
+numeric (every cell fixed) or uniformly character (every cell a
+definition-variable column name); mixing fixed values and column names in
+one matrix is not supported.
+Or omitted, in which case the value is derived from the \code{fsT} attribute
+of a \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see Details); an explicit \code{fsT}
+always wins.}
 
-\item{fs_lv_names}{A named character vector where each element is
-the name of a factor score variable, and the
-names of the vector are the corresponding name
-of the latent variables.}
+\item{fsb}{A vector of score intercepts (length \code{q}, named by score, either
+order), uniformly numeric (every entry fixed) or uniformly character
+(every entry a definition-variable column name); mixing fixed values and
+column names is not supported.
+\code{NULL} (default) fixes all score intercepts at zero.
+Or omitted, in which case the value is derived from the \code{fsb} attribute
+of a \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see Details); the derivation
+omits it --- fixed zero intercepts --- when the result carries no \code{fsb}
+attribute.}
 
-\item{...}{Additional arguments passed to \code{\link[OpenMx:mxModel]{OpenMx::mxModel()}}.}
+\item{...}{Additional arguments passed on to \code{\link[OpenMx:mxRun]{OpenMx::mxRun()}}
+(e.g. \code{intervals = TRUE}).}
 }
 \value{
-An object of class \link[OpenMx:MxModel-class]{OpenMx::MxModel}. Note that the
-model has not been run.
+A fitted \code{OpenMx} \code{MxModel}. \code{coef()}, \code{vcov()}, and \code{summary()}
+work as usual.
 }
 \description{
-Fit a two-stage path analysis (2S-PA) model.
+Fit a two-stage path analysis (2S-PA) model in OpenMx. This is the OpenMx
+counterpart of \code{\link[=tspa]{tspa()}}: the structural path model is expressed on the
+(true) latent factors, each factor score is a single indicator with known
+measurement error, and --- unlike \code{lavaan::tspa()} --- the measurement
+quantities (loadings / error variances / intercepts) may be fixed
+per-group constants \emph{or} per-observation definition-variable columns.
+The per-row definition-variable form is the exact (non-pooled) correction
+that \code{lavaan::tspa(reduce = )} only approximates.
+}
+\details{
+The internal design is a single-level RAM model (no sub-model, no \code{umx}):
+the lavaan structural string is parsed with \code{\link[lavaan:lavaanify]{lavaan::lavaanify()}}, the
+corrected latents are given auto latent variances, the score indicators and
+their errors/intercepts are attached per \href{https://www.rdocumentation.org/packages/R2spa}{tspa()'s} schema, and the whole thing
+is fit with \code{mxFitFunctionML()} (raw-data FIML).
+\subsection{Auto-derivation from a \code{\link[=get_fs]{get_fs()}} result}{
+
+\code{tspa_mx_model()} derives its measurement inputs from a \code{\link[=get_fs]{get_fs()}}
+result passed as \code{data}, so the canonical call is
+\code{tspa_mx_model(model, data = get_fs(...))}. Derivation fires only
+when all of \code{se_fs}, \code{fsL}, \code{fsT}, and \code{fsb} are omitted; explicit
+arguments always win. Derivation is provenance-gated: \code{data} must
+resolve as a \code{\link[=get_fs]{get_fs()}} result, so a hand-rolled frame with plain
+matrix \code{fsT}/\code{fsL} attributes but no such provenance is rejected
+with an informative error.
+
+Attributes are dispatched by shape: constant quantities (plain
+matrices --- complete-data, \code{local = TRUE}, and \code{format = "list"}
+results; a plain \code{fsb} vector) become fixed numeric matrices, while
+per-row quantities (\code{mirt_per_obs}/\code{per_obs}-marked results),
+per-cluster quantities (\code{merMod} results: 3-D \code{fsL}/\code{fsT} arrays, one
+row per cluster), and per-pattern quantities (single-group FIML, keyed
+by \code{fs_pattern$label}) become definition-variable matrices referencing
+the result's own \verb{*_by_*}, \verb{ev_*}, and \verb{ecov_*} columns. A \code{merMod}
+result carries no \code{fsb} attribute, so its score intercepts stay fixed
+at zero. A non-\code{NULL} \code{fsb} attribute appends \verb{int_fs_*} intercept
+columns to a working copy of \code{data} (the \code{fs_indiv(include_intercept = TRUE)}
+equivalent); \code{NULL} keeps the default fixed-zero intercepts. Unlike
+\code{\link[=tspa]{tspa()}} (whose \verb{reduce = } argument pools per-unit quantities),
+there is no pooling here --- the OpenMx route is exact-or-fail. A
+multigroup result (the \code{group_col} attribute) is refused with the
+Phase-1 message; a \code{mirt} multigroup result (a \code{group} column, no
+\code{group_col} attribute) derives as a single pooled per-row-corrected
+fit (no per-group structural parameters; the \code{group} column is
+inert). A \code{get_fs(product = )} result derives identically: its extra
+\code{fs_a:fs_b} (and \verb{_se}/\verb{_ld}) columns are inert to derivation, but the
+\code{:} they carry is illegal in \code{OpenMx::mxData()} column names, so the
+frame is un-fittable until the product columns are dropped (a
+pre-existing limitation that affects the explicit-argument route too).
+}
+
+\subsection{Mean structure}{
+
+Both routes fit the same model, so the covariance/structural quantities
+(paths, latent variances/covariances, and their SEs) agree to optimizer
+tolerance. The two differ only in the unidentifiable split of the mean
+structure between the corrected latents and their (observed) factor-score
+indicators: \code{\link[=tspa]{tspa()}} fixes the exogenous latent mean at zero and lets the
+factor-score mean estimate the data value, whereas this OpenMx route fixes
+the score residual means at zero and estimates the latent means (the
+latent mean carries the data value). Read the means accordingly --- compare
+the two routes on the covariance quantities, not on how the mean is split
+between latent and indicator. (In the no-mean-structure case the
+difference is flat: the split is arbitrary and only the total is
+identifiable.)
+}
 }
 \examples{
-library(mirt)
-library(umx)
-library(OpenMx)
-# Simulate data with mirt
-set.seed(1324)
-num_obs <- 100
-# Simulate theta
-eta <- MASS::mvrnorm(num_obs, mu = c(0, 0), Sigma = diag(c(1, 1 - 0.5^2)),
-                     empirical = TRUE)
-th1 <- eta[, 1]
-th2 <- -1 + 0.5 * th1 + eta[, 2]
-# items and response data
-a1 <- matrix(1, 10)
-d1 <- matrix(rnorm(10))
-a2 <- matrix(runif(10, min = 0.5, max = 1.5))
-d2 <- matrix(rnorm(10))
-dat1 <- mirt::simdata(a = a1, d = d1,
-                      N = num_obs, itemtype = "2PL", Theta = th1)
-dat2 <- mirt::simdata(a = a2, d = d2, N = num_obs,
-                      itemtype = "2PL", Theta = th2)
-# Factor scores
-mod1 <- mirt(dat1, model = 1, itemtype = "Rasch", verbose = FALSE)
-mod2 <- mirt(dat2, model = 1, itemtype = "2PL", verbose = FALSE)
-fs1 <- fscores(mod1, full.scores.SE = TRUE)
-fs2 <- fscores(mod2, full.scores.SE = TRUE)
-# Combine factor scores and standard errors into data set
-fs_dat <- as.data.frame(cbind(fs1, fs2))
-names(fs_dat) <- c("fs1", "se_fs1", "fs2", "se_fs2")
-# Compute reliability and error variances
-fs_dat <- within(fs_dat, expr = {
-  rel_fs1 <- 1 - se_fs1^2
-  rel_fs2 <- 1 - se_fs2^2
-  ev_fs1 <- se_fs1^2 * (1 - se_fs1^2)
-  ev_fs2 <- se_fs2^2 * (1 - se_fs2^2)
-})
-# OpenMx model (from umx so that lavaan syntax can be used)
-fsreg_umx <- umxLav2RAM(
-  "
-    fs2 ~ fs1
-    fs2 + fs1 ~ 1
-  ",
-  printTab = FALSE)
-# Prepare loading and error covariance matrices
-cross_load <- matrix(c("rel_fs2", NA, NA, "rel_fs1"), nrow = 2) |>
-  `dimnames<-`(rep(list(c("fs2", "fs1")), 2))
-err_cov <- matrix(c("ev_fs2", NA, NA, "ev_fs1"), nrow = 2) |>
-  `dimnames<-`(rep(list(c("fs2", "fs1")), 2))
-# Create 2S-PA model (with definition variables)
-tspa_mx <-
-  tspa_mx_model(fsreg_umx,
-    data = fs_dat,
-    mat_ld = cross_load,
-    mat_ev = err_cov
-  )
-# Run OpenMx
-tspa_mx_fit <- mxRun(tspa_mx)
-# Summarize the results
-summary(tspa_mx_fit)
+\dontrun{
+## Measurement inputs derived from a get_fs() result:
+fs <- get_fs(PoliticalDemocracy, "dem60 =~ y1 + y2 + y3 + y4
+                                  ind60 =~ x1 + x2 + x3")
+# measurement inputs derived from the get_fs() result
+tspa_mx_model("dem60 ~ ind60; dem60 + ind60 ~ 1", data = fs)
+
+## Equivalent, fully explicit (per-row definition variables via
+## fs_indiv()):
+dat <- fs_indiv(fs, include_intercept = TRUE)
+tspa_mx_model("dem60 ~ ind60; dem60 + ind60 ~ 1",
+  data = dat,
+  fsL = matrix(c("ind60_by_fs_ind60", "ind60_by_fs_dem60",
+                 "dem60_by_fs_ind60", "dem60_by_fs_dem60"),
+               nrow = 2, dimnames = list(c("fs_ind60", "fs_dem60"),
+                                         c("ind60", "dem60"))),
+  fsT = matrix(c("ev_fs_ind60", "ecov_fs_ind60_fs_dem60", NA,
+                 "ev_fs_dem60"),
+               nrow = 2, dimnames = list(c("fs_ind60", "fs_dem60"),
+                                         c("fs_ind60", "fs_dem60"))),
+  fsb = c(fs_ind60 = "int_fs_ind60", fs_dem60 = "int_fs_dem60"))
+}
+}
+\seealso{
+\itemize{
+\item \code{vignette("2S-PA with OpenMx and IRT (mirt)", package = "R2spa")} for the OpenMx route and IRT stage 1.
+\item \code{vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")} for the lavaan route.
+}
 }

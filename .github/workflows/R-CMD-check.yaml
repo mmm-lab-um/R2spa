@@ -29,6 +29,18 @@ jobs:
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
+      # Single-thread the BLAS so the corrected-SE goldens (T3 in
+      # test-tspa_corrected_se.R) are run-to-run deterministic. There is no
+      # cross-OS BLAS *version* pinning available as a CI action (r-lib/actions
+      # has no setup-blas), so the residual Accelerate (macOS) vs OpenBLAS
+      # (Linux) difference is absorbed by the goldens' 1e-4 tolerance instead
+      # (~250x the observed max cross-BLAS drift of 3.9e-7 on ubuntu).
+      # VECLIB_MAXIMUM_THREADS targets the macOS Accelerate/vecLib path; the
+      # others cover OpenBLAS/OpenMP/MKL.
+      OPENBLAS_NUM_THREADS: 1
+      OMP_NUM_THREADS: 1
+      MKL_NUM_THREADS: 1
+      VECLIB_MAXIMUM_THREADS: 1
 
     steps:
       - uses: actions/checkout@v4
@@ -50,3 +62,126 @@ jobs:
         with:
           upload-snapshots: true
           build_args: 'c("--no-manual","--compact-vignettes=gs+qpdf")'
+
+  # Lavaan version axis (PLAN 04, decision 3): the estimation path couples to
+  # lavaan internals in R/lavaan_compat.R. The pinned baseline is the
+  # "tested up to" reference; the dev slot is the partable-drift tripwire and
+  # runs only the scoped test subset (OpenMx-heavy full check stays
+  # affordable). No 0.6.x slot: the code requires the 0.7-x `lavTech` export.
+  lavaan-baseline:
+    runs-on: ubuntu-latest
+    name: lavaan 0.7-2 pinned (full check)
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+
+      - name: Pin lavaan 0.7-2 (current CRAN, then archive)
+        # 0.7-2 is still the current CRAN release, so the archive URL 404s
+        # until a newer lavaan pushes it into /Archive/. Try current CRAN
+        # first, then the archive, and hard-fail if neither yields the pin.
+        #
+        # Three R gotchas this step works around (all verified live):
+        # - as.character(packageVersion(...)) renders "0.7-2" as "0.7.2"
+        #   (dash normalized to dot), so the version is compared as
+        #   package_version objects, never as strings.
+        # - install.packages(url, repos = <non-NULL>) treats the URL as a
+        #   package *name* looked up in the repo index and never downloads
+        #   it ("not available for this version of R"), so the tarball is
+        #   fetched with download.file() and the local file is installed
+        #   with repos = NULL.
+        # - A namespace that fails to load in a session stays marked failed,
+        #   so the final check runs in a fresh Rscript subprocess.
+        run: |
+          want <- "0.7-2"
+          have <- tryCatch(packageVersion("lavaan"), error = function(e) NA)
+          cat("lavaan before pin:", ifelse(is.na(have), "<absent or broken>", as.character(have)), "\n")
+          if (!identical(have, package_version(want))) {
+            # lavaan's non-base Imports, in case the library is short of them.
+            install.packages(c("mnormt", "pbivnorm", "numDeriv", "quadprog"))
+            urls <- c(
+              paste0("https://cran.r-project.org/src/contrib/lavaan_", want, ".tar.gz"),
+              paste0("https://cran.r-project.org/src/contrib/Archive/lavaan/lavaan_", want, ".tar.gz")
+            )
+            tf <- tempfile(fileext = ".tar.gz")
+            got <- FALSE
+            for (url in urls) {
+              got <- tryCatch(download.file(url, tf, quiet = TRUE, mode = "wb") == 0L,
+                              error = function(e) FALSE)
+              if (got) break
+              unlink(tf)
+            }
+            if (!got) stop("could not download lavaan ", want, " from CRAN")
+            install.packages(tf, repos = NULL, type = "source")
+            unlink(tf)
+          }
+          chk <- tempfile(fileext = ".R")
+          writeLines(c(
+            'if (!requireNamespace("lavaan", quietly = TRUE)) quit(status = 1L)',
+            sprintf('stopifnot(identical(packageVersion("lavaan"), package_version(%s)))', deparse(want))
+          ), chk)
+          ok <- system(paste("Rscript", shQuote(chk)), ignore.stdout = TRUE, ignore.stderr = TRUE) == 0L
+          unlink(chk)
+          if (!ok) stop("lavaan pin failed: installed lavaan is not ", want)
+          cat("pin OK: lavaan", as.character(packageVersion("lavaan")), "\n")
+        shell: Rscript {0}
+
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          upload-snapshots: true
+          build_args: 'c("--no-manual","--compact-vignettes=gs+qpdf")'
+          check_args: 'c("--no-manual")'
+
+  lavaan-dev-tripwire:
+    runs-on: ubuntu-latest
+    name: lavaan dev (partable drift tripwire, scoped subset)
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::remotes
+          needs: heavy
+
+      - name: Install lavaan (development)
+        # Upstream account was renamed: Lavaan/lavaan (404s since 2026-08).
+        run: |
+          remotes::install_github("yrosseel/lavaan", dependencies = FALSE, quiet = TRUE)
+        shell: Rscript {0}
+
+      - name: Install R2spa
+        run: R CMD INSTALL --no-multiarch --with-keep.source .
+        shell: bash
+
+      - name: Run scoped test subset (tspa/compat/product)
+        run: |
+          testthat::test_local(
+            ".",
+            filter = "^(tspa|tspa_render|lavaan_compat|compute_fs_prod)$",
+            load_package = "installed",
+            stop_on_failure = TRUE
+          )
+        shell: Rscript {0}

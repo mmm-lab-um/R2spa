@@ -33,7 +33,11 @@ model, in \code{lavaan} syntax.}
 standardized parameters will be computed.}
 
 \item{acov_par}{An asymptotic variance-covariance matrix for a fitted
-model object.}
+model object; defaults to \code{vcov(object)}. Supplying the
+covariance of an SE-corrected \code{tspa()} fit (produced
+with \code{tspa(corrected_se = TRUE)}) carries the first-order
+correction through to the grand-standardized standard
+errors reported by this function.}
 
 \item{free_list}{A list of model matrices that indicate the position of
 the free parameters in the parameter vector.}
@@ -41,10 +45,38 @@ the free parameters in the parameter vector.}
 \item{level}{The confidence level required.}
 }
 \value{
-A matrix of the standardized model parameters and standard errors.
+A data frame (class \code{lavaan.data.frame}) with one row per structural
+(\code{~}) parameter in partable order: \code{lhs}, \code{op}, \code{rhs}, \code{exo}, \code{group},
+\code{block}, \code{label}, the grand standardized estimate \code{est.std}, and, when
+\code{se = TRUE}, \code{se}, \code{z}, \code{pvalue}, \code{ci.lower}, and \code{ci.upper}.
 }
 \description{
 Grand standardized solution of a two-stage path analysis model.
+}
+\details{
+For a \strong{multigroup} fit the grand standardized solution is computed
+from the grand (pooled) means and variance-covariances and is \strong{not}
+equivalent to \code{\link[lavaan:standardizedSolution]{lavaan::standardizedSolution()}}, which matches it only
+in the single-group case (the function emits that message when it
+applies). When the input fit is an SE-corrected \code{tspa()} fit (produced
+with \code{tspa(corrected_se = TRUE)}, attribute \code{tspa_corrected = TRUE}) —
+or when \code{acov_par = vcov(corrected_fit)} is supplied — the reported
+standard errors are the first-order corrected grand-standardized
+standard errors, while the point estimates (\code{est.std}) are unchanged.
+
+Structural slopes may be free or user-fixed. A user-fixed slope is
+reported alongside the free ones: its \code{est.std} is the user value rescaled
+by the (grand) SD ratio, and its \code{se} is the first-order delta
+approximation, both matching \code{lavaan::standardizedSolution()} (which also
+reports a delta SE for fixed slopes). A structural regression whose outcome
+or predictor is not part of the beta matrix (e.g. observed-on-observed) is
+still rejected with an error. The delta-method SEs are propagated over
+the free \code{beta}/\code{psi} (and \code{alpha}, single group) elements as marked by
+the lavaan free-position matrices; a free parameter whose block matrix
+carries no mark contributes no first-order term (in lavaan 0.7-x the
+free-position matrices do not mark, e.g., some observed-variable
+intercept blocks, whose omission only matters when their sampling
+uncertainty affects the group means pooled into the grand covariance).
 }
 \examples{
 library(lavaan)
@@ -102,4 +134,9 @@ fit4 <- sem(mod4, data = HolzingerSwineford1939,
             group = "school",
             group.equal = c("loadings", "intercepts"))
 grand_standardized_solution(fit4)
+}
+\seealso{
+\itemize{
+\item \code{vignette("Grand Standardized Coefficients", package = "R2spa")} for the grand-standardization workflow.
+}
 }

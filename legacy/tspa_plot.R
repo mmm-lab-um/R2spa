@@ -1,6 +1,6 @@
 #' Diagnostic plots of fitted 2S-PA model
 #'
-#' @param tspa_fit An object of class [lavaan][lavaan-class],
+#' @param tspa_fit An object of class [lavaan][lavaan:lavaan-class],
 #'                 representing the output generated from the [tspa()]
 #'                 function.
 #' @param title Character. Set the name of scatter plot. The default value is

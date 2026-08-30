@@ -5,10 +5,6 @@ vignette: >
   %\VignetteIndexEntry{gr-std-coef}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
-header-includes:
-  - \DeclareMathOperator{\Var}{\mathrm{Var}}
-  - \DeclareMathOperator{\E}{\mathrm{E}}
-  - \newcommand{\bv}[1]{\boldsymbol{\mathbf{#1}}}  %APA-consistent bold
 ---
 
 ```{r, include = FALSE}
@@ -18,7 +14,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-This vignette shows how to obtain grand standardized estimates for the latent variables for multi-group `lavaan` objects, using the `R2spa::grandStandardizdSolution()` function.
+This vignette shows how to obtain grand standardized estimates for the latent variables for multi-group `lavaan` objects, using the `R2spa::grandStandardizedSolution()` function.
 
 ```{r setup}
 library(lavaan)
@@ -33,10 +29,10 @@ For single groups, standardized solution can be obtained by first obtaining the 
 
 $$
   \begin{aligned}
-    \bv \eta & = \bv \alpha + \bv \Gamma \bv X + \bv B \bv \eta + \bv \zeta \\
-    (\bv I - \bv B) \bv \eta & = \bv \alpha + \bv \Gamma \bv X + \bv \zeta \\
-    (\bv I - \bv B) \Var(\bv \eta) (\bv I - \bv B)^\top & = \Var(\bv \Gamma \bv X) + \bv \Psi \\
-    \Var(\bv \eta) & = (\bv I - \bv B)^{-1} [\Var(\bv \Gamma \bv X) + \bv \Psi] {(\bv I - \bv B)^\top}^{-1}
+    \mathbf{\eta} & = \mathbf{\alpha} + \mathbf{\Gamma} \mathbf{X} + \mathbf{B} \mathbf{\eta} + \mathbf{\zeta} \\
+    (\mathbf{I} - \mathbf{B}) \mathbf{\eta} & = \mathbf{\alpha} + \mathbf{\Gamma} \mathbf{X} + \mathbf{\zeta} \\
+    (\mathbf{I} - \mathbf{B}) \mathrm{Var}(\mathbf{\eta}) (\mathbf{I} - \mathbf{B})^\top & = \mathrm{Var}(\mathbf{\Gamma} \mathbf{X}) + \mathbf{\Psi} \\
+    \mathrm{Var}(\mathbf{\eta}) & = (\mathbf{I} - \mathbf{B})^{-1} [\mathrm{Var}(\mathbf{\Gamma} \mathbf{X}) + \mathbf{\Psi}] {(\mathbf{I} - \mathbf{B})^\top}^{-1}
   \end{aligned}
 $$
 
@@ -52,18 +48,18 @@ fit <- sem(model = myModel,
            data  = PoliticalDemocracy)
 # Latent variable covariances
 lavInspect(fit, "cov.lv")
-# Using R2spa::veta()`
+# Using R2spa:::veta() (internal helper; the ::: is deliberate since it is not exported)
 fit_est <- lavInspect(fit, "est")
 R2spa:::veta(fit_est$beta, psi = fit_est$psi)
 ```
 
-The standardized estimates in the $\bv B$ matrix are obtained as
+The standardized estimates in the $\mathbf{B}$ matrix are obtained as
 
 $$
-\bv B_s = \bv S_\eta^{-1} \bv B \bv S_\eta^{-1}
+\mathbf{B}_s = \mathbf{S}_\eta^{-1} \mathbf{B} \mathbf{S}_\eta^{-1}
 $$
 
-where $\bv S_\eta$ is a diagonal matrix containing the square root of the diagonal elements of $\Var(\bv \eta)$
+where $\mathbf{S}_\eta$ is a diagonal matrix containing the square root of the diagonal elements of $\mathrm{Var}(\mathbf{\eta})$
 
 ```{r}
 S_eta <- diag(
@@ -117,15 +113,15 @@ solve(S_eta2) %*% reg_fit_est[[2]]$beta %*% S_eta2
 
 ### Grand standardization
 
-For each group we have the group-specific covariance matrix $\Var(\bv \eta_g)$. The group-specific latent means are
+For each group we have the group-specific covariance matrix $\mathrm{Var}(\mathbf{\eta}_g)$. The group-specific latent means are
 
-$$\E(\bv \eta_g) = (\bv I - \bv B)^{-1}[\bv \alpha + \Gamma \E(\bv X)]$$
+$$\mathrm{E}(\mathbf{\eta}_g) = (\mathbf{I} - \mathbf{B})^{-1}[\mathbf{\alpha} + \Gamma \mathrm{E}(\mathbf{X})]$$
 
-The grand mean is $\E(\bv \eta) = \sum_{g = 1}^G n_g \E(\bv \eta_g) / N$
+The grand mean is $\mathrm{E}(\mathbf{\eta}) = \sum_{g = 1}^G n_g \mathrm{E}(\mathbf{\eta}_g) / N$
 
 The grand covariance matrix is:
 
-$$\Var(\bv \eta) = \frac{1}{N} \sum_{g = 1}^G n_g \left\{\Var(\bv \eta_g) + [\E(\bv \eta_g) - \E(\bv \eta)][\E(\bv \eta_g) - \E(\bv \eta)]^\top \right\}$$
+$$\mathrm{Var}(\mathbf{\eta}) = \frac{1}{N} \sum_{g = 1}^G n_g \left\{\mathrm{Var}(\mathbf{\eta}_g) + [\mathrm{E}(\mathbf{\eta}_g) - \mathrm{E}(\mathbf{\eta})][\mathrm{E}(\mathbf{\eta}_g) - \mathrm{E}(\mathbf{\eta})]^\top \right\}$$
 
 So we need to involve the mean as well
 
@@ -141,7 +137,7 @@ R2spa:::veta_grand(ns, beta_list = lapply(reg_fit_est, `[[`, "beta"),
                    alpha_list = lapply(reg_fit_est, `[[`, "alpha"))
 ```
 
-The function `grandStandardizdSolution()` automates the computation of grand standardized coefficients, with the asymptotic standard error obtained using the delta method:
+The function `grandStandardizedSolution()` automates the computation of grand standardized coefficients, with the asymptotic standard error obtained using the delta method:
 
 ```{r}
 grandStandardizedSolution(reg_fit)
