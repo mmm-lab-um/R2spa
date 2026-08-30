@@ -1,5 +1,5 @@
 Package: R2spa
-Title: An R package for two-stage path analysis (2S-PA) to adjust for measurement errors
+Title: An R Package for Two-Stage Path Analysis to Adjust for Measurement Errors
 Version: 0.0.5
 Authors@R: 
   c(
@@ -24,7 +24,7 @@ Authors@R:
            email = "gengruiz@usc.edu",
            comment = c(ORCID = "0000-0002-2062-6620"))
            )
-Description: `R2spa` is a free and open source R package that performs two-stage path analysis (2S-PA).
+Description: A free and open source R package that performs two-stage path analysis (2S-PA).
     With 2S-PA, researchers can perform path analysis by first obtaining factor scores and then adjusting for measurement errors 
     using estimates of observation-specific reliability or standard error of those factor scores. As a viable alternative to SEM, 
     2S-PA has been shown to give equally-good estimates as SEM in relatively simple models and large sample sizes, 
