@@ -2,9 +2,6 @@
 
 # Loading packages and functions
 library(lavaan)
-if (requireNamespace("umx", quietly = TRUE)) {
-  library(umx)
-}
 
 ########## Single-group example ##########
 

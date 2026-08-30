@@ -40,11 +40,7 @@ Imports:
 Suggests: 
     boot,
     brms,
-    DiagrammeR,
-    ggplot2,
     knitr,
-    lintr,
-    magrittr,
     Matrix,
     mirt,
     OpenMx,
@@ -53,9 +49,7 @@ Suggests:
     reformulas,
     rmarkdown,
     psych,
-    testthat (>= 3.0.0),
-    tidyr,
-    umx
+    testthat (>= 3.0.0)
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 URL: https://mmm-lab-um.github.io/R2spa/

@@ -11,6 +11,7 @@
 
 library(lavaan)
 skip_if_not_installed("OpenMx")
+library(OpenMx)
 
 # --- coefficient extraction by (from -> to), robust to RAM var ordering ----
 mx_path_val <- function(m, from, to, model = "m1") {

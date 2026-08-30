@@ -1,9 +1,6 @@
 # Loading packages and functions
 library(lavaan)
 library(lme4)
-if (requireNamespace("umx", quietly = TRUE)) {
-  library(umx)
-}
 
 ########## Single-group example ##########
 
