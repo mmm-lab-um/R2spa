@@ -1,4 +1,4 @@
-# R2spa 0.0.4
+# R2spa 0.0.5
 
 ## New Features
 - `get_fs()` gains a `brmsfit` method: Bayesian Gaussian mixed models (brms)
