@@ -90,6 +90,8 @@ scale (the noise level, `u1`) — so it contributes two scores, `fs_u0` and
 are cached; the analysis below loads them:
 
 ```{r load, echo = FALSE, include = FALSE}
+library(lavaan)
+library(R2spa)
 x <- readRDS("sim_brms_ls_vignette.rds")
 fs <- x$fs; fs_d <- x$fs_d; beta1 <- x$beta1; re_summary <- x$re_summary
 ```
