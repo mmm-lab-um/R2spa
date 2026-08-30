@@ -59,6 +59,26 @@ slopes from mixed models (Lai & Liu, 2026).
 loadings, error covariances and intercepts) and `tspa()` / `tspa_mx_model()`
 are stage 2.
 
+## Why the standardized coefficients are of interest
+
+The latent constructs in a 2S-PA — like the latents in any latent-variable
+model — have **no intrinsic scale**. A latent variable is not directly
+observed; its units are arbitrary and are fixed only by an identification
+constraint in the measurement model (a loading pinned to 1, or a variance
+pinned to 1 via `std.lv = TRUE`). The unstandardized stage-2 path coefficients
+therefore inherit that arbitrary scale (units of latent `dem60` per unit of
+latent `ind60`), and their magnitudes shift if the latent is rescaled.
+
+The **standardized** coefficients are dimensionless — each path is the effect
+of a one-SD change in the predictor on the outcome, in SD units — and are
+invariant to the arbitrary choice of latent metric. They are therefore usually
+the parameters of substantive interest, and they are comparable across
+constructs and between 2S-PA and the joint SEM (the two agree when the sample
+is large). Inspect them with `summary(fit, standardized = TRUE)` or
+`lavaan::standardizedSolution(fit)`. For multigroup fits, `standardizedSolution()`
+standardizes within group and `grandStandardizedSolution()` pools across groups
+(see the [Grand Standardized Coefficients](gr-std-coef.html) vignette).
+
 ## How the measurement error is supplied
 
 `tspa()` needs each score's measurement error, in one of two forms:
@@ -185,6 +205,9 @@ tspa_fit <- tspa(model = "dem60 ~ ind60",
 summary(tspa_fit, standardized = TRUE)
 ```
 
+The **standardized** coefficients (the `est.std` column) are usually the
+parameters of interest, because the latent constructs have no intrinsic scale
+(see the 'Why the standardized coefficients are of interest' section above).
 To view the Two-Stage Path Analysis model, use `attributes([model name])$tspaModel`. Function `cat()` can help tidy up the model output. In the output, the values of error constraints are computed by squaring standard errors from the previous section.
 
 ```{r}
@@ -305,10 +328,14 @@ cat(attributes(tspa_fit)$tspaModel)
 
 ## References
 
+- Bollen, K. A. (1989). *Structural equations with latent variables*.
+  New York, NY: Wiley.
 - Cole, D. A., & Preacher, K. J. (2014). Manifest variable path analysis:
   Potentially serious and misleading consequences due to uncorrected measurement
   error. *Psychological Methods, 19*(2), 300–315.
   [https://doi.org/10.1037/a0033805](https://doi.org/10.1037/a0033805)
+- Kline, R. B. (2016). *Principles and practice of structural equation
+  modeling* (4th ed.). New York, NY: The Guilford Press.
 - Lai, M. H. C., & Hsiao, Y.-Y. (2022). Two-stage path analysis with definition
   variables: An alternative framework to account for measurement error.
   *Psychological Methods, 27*(4), 568–588.
