@@ -68,6 +68,16 @@ tspa_fit <- tspa(
 parameterestimates(tspa_fit)
 ```
 
+Because the latent constructs have no intrinsic scale, the **standardized**
+coefficients are usually the parameters of substantive interest (see the
+*Two-Stage Path Analysis* vignette, `vignette("R2spa")`, for the reasoning and
+references):
+
+```{r}
+standardizedSolution(tspa_fit) |>
+  subset(op %in% c("~", "~~") & !grepl("^fs_", lhs))
+```
+
 This package is based upon work supported by the National Science Foundation under Grant No. 2141790.
 
 <!-- `devtools::build_readme()` -->

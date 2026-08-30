@@ -89,6 +89,20 @@ parameterestimates(tspa_fit)
 #> 7    dem60 ~~    dem60 2.842 0.543 5.235      0    1.778    3.906
 ```
 
+Because the latent constructs have no intrinsic scale, the
+**standardized** coefficients are usually the parameters of substantive
+interest (see the *Two-Stage Path Analysis* vignette,
+`vignette("R2spa")`, for the reasoning and references):
+
+``` r
+standardizedSolution(tspa_fit) |>
+  subset(op %in% c("~", "~~") & !grepl("^fs_", lhs))
+#>     lhs op   rhs est.std    se     z pvalue ci.lower ci.upper
+#> 5 dem60  ~ ind60   0.453 0.101 4.480      0    0.255    0.651
+#> 6 ind60 ~~ ind60   1.000 0.000    NA     NA    1.000    1.000
+#> 7 dem60 ~~ dem60   0.795 0.092 8.668      0    0.615    0.974
+```
+
 This package is based upon work supported by the National Science
 Foundation under Grant No. 2141790.
 
