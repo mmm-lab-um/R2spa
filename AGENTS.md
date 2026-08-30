@@ -9,8 +9,10 @@ that corrects for measurement error (or an OpenMx model via `tspa_mx_model()`). 
 machinery: factor-score computation, schema-driven stage-2 model assembly. Both stage-2
 entrypoints auto-derive the measurement inputs (`fsT`/`fsL`/`fsb`/`se_fs`) from a `get_fs()`
 result when omitted (PLANs 13/15). The first-order delta-method SE correction (`vcov_corrected()`, also exposed
-in-place via `tspa(corrected_se = TRUE)`), multigroup grand standardization, and the
-`tspa_mx_model()` OpenMx path have all been **re-integrated** into `R/` (2026-08). The
+in-place via `tspa(corrected_se = TRUE)`; its stage-2 Jacobian is a refit-free analytic
+influence-function form by default since PLAN 16, with a finite-difference fallback),
+multigroup grand standardization, and the `tspa_mx_model()` OpenMx path have all been
+**re-integrated** into `R/` (2026-08). The
 latent-interaction function `get_fs_int()` was **removed** and replaced by the
 joint-model `compute_fs_prod()` / `get_fs(product = )` (2026-08, branch
 `rejoin/fs-prod`); its column conventions (`fs_a:fs_b`, `fs_a:fs_b_se`,
@@ -47,11 +49,11 @@ measurement-error covariances in the stage-2 model.
    branches deleted 2026-08-27 (`marklhc/issue83`, `marklhc/issue87`, `openmx`,
    `vignette`; provenance: `archive/BRANCH_SALVAGE_2026-08-27.md`). Both directories
    are ignored for development.
-- **Actively developed** — intensive 2026-08 re-integration + plan work (PLAN 06–15; see
+- **Actively developed** — intensive 2026-08 re-integration + plan work (PLAN 06–16; see
    `STATUS.md` for the full issue log). Version 0.0.4 is still "developmental". Suite
-   ~4,060 expectations passing, 0 fail; `R CMD check` (as-cran, `--no-manual` on this
+   ~4,230 expectations passing, 0 fail; `R CMD check` (as-cran, `--no-manual` on this
    LaTeX-less machine) 0/0/1 NOTE (title case + CRAN-incoming URL 404, both pre-existing)
-   as of 2026-08-27.
+   as of 2026-08-30.
 - Target dev environment: Linux (WSL/Ubuntu-like), R 4.6.1.
 - No `TODO`/`FIXME`/`HACK` markers in the codebase.
 - No `library()`/`require()` in function bodies — only in roxygen `@examples` blocks.
@@ -170,17 +172,29 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
    reporting in `grandStandardizedSolution()`, PLAN 12).
 6. **`helper.R`** / **`globals.R`** — `block_diag()`, NSE NOTE suppression. Low risk.
 7. **`tspa_corrected_se.R`** — `vcov_corrected()`, the first-order (delta-method) corrected-SE
-   path (re-integrated 2026-08-23). Central-difference stage-2 Jacobian `J` over the free
-   `fsL`/`fsT` elements at `h0 = 1e-5` (refits via `do.call(tspa, tspa_args)`), returning
-   `vcov(fit) + J %*% vfsLT %*% t(J)`; in-place via `tspa(corrected_se = TRUE, vfsLT = ...)`,
-   which overwrites the fit covariance through the `tsp_set_vcov()` lavaan-compat boundary
-    (`fit@vcov[["vcov"]]` only, `est.std` unchanged → `standardizedSolution()` reports
-    corrected std SEs). Single- **and** multi-group: `which_free` positions run per group
-    (group 1's `fsL`, group 2's, … then all groups' lower-tri `fsT`) in the same order as the
-    `vfsLT` attribute; a double-correction guard rejects an already-`tspa_corrected` fit.
-    `grandStandardizedSolution()` threads the corrected covariance, so a corrected fit reports
-    corrected grand-standardized SEs (point estimates unchanged). Helpers:
-    `tsp_tri2full_colmajor()`, `check_refit_convergence()`.
+   path (re-integrated 2026-08-23; generalized to a refit-free analytic default, PLAN 16,
+   2026-08-30). Returns `vcov(fit) + J %*% vfsLT %*% t(J)`; in-place via
+   `tspa(corrected_se = TRUE, vfsLT = ...)`, which overwrites the fit covariance through the
+   `tsp_set_vcov()` lavaan-compat boundary (`fit@vcov[["vcov"]]` only, `est.std` unchanged →
+   `standardizedSolution()` reports corrected std SEs). The stage-2 Jacobian `J` (rows = free
+   structural params in coef order, cols = the free `fsL`/`fsT` `which_free` positions, per
+   group) has two engines, `engine = "analytic"` (default) / `"fd"`. **Analytic**
+   (`vcov_jacobian_analytic()`): `J = -H^{-1} C` with `H` (the log-likelihood Hessian over the
+   free params) and `C` (the cross-derivative w.r.t. the fixed `fsL`/`fsT`) both obtained by
+   central-differencing the exact unweighted normal-ML score `s(θ,η)` (a pure matrix function
+   of the implied-covariance geometry) at `h = 1e-6·max(1,|param|)` — refit-free and
+   bit-deterministic; covers saturated, restricted (df > 0), multigroup, and mean-structure
+   models (fixed score means read from the partable's `est$nu`, not assumed 0). Returns `NULL`
+   → the FD fallback when the shape is out of scope (unrecognised free param, unequal
+   per-group free counts, per-group row-count ≠ lavaan `nobs`, non-ML `estimator.orig`, or
+   case weights). **FD**: the original central-difference over the free `fsL`/`fsT` at
+   `h0 = 1e-5` (refits via `do.call(tspa, tspa_args)`) — now the fallback and the explicit
+   `engine = "fd"` route. Single- **and** multi-group: `which_free` positions run per group
+   (group 1's `fsL`, group 2's, … then all groups' lower-tri `fsT`) in the same order as the
+   `vfsLT` attribute; a double-correction guard rejects an already-`tspa_corrected` fit.
+   `grandStandardizedSolution()` threads the corrected covariance, so a corrected fit reports
+   corrected grand-standardized SEs (point estimates unchanged). Helpers:
+   `tsp_tri2full_colmajor()`, `check_refit_convergence()`.
 8. **`compute_fs_prod.R`** — `compute_fs_prod()` (+ `get_fs(product = )`), the
    double-mean-centered product factor-score indicators for single-group lavaan
    models (v1). Attribute-driven: per-pattern `fsL`/`fsT` via
