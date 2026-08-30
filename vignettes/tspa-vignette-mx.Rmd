@@ -12,13 +12,17 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
+# OpenMx and mirt are optional Suggests; guard the chunks that need them so the
+# vignette builds whether or not they are installed.
+have_openmx <- requireNamespace("OpenMx", quietly = TRUE)
+have_mirt   <- requireNamespace("mirt", quietly = TRUE)
 ```
 
 ```{r, message = FALSE}
 library(lavaan)
 library(R2spa)
-library(OpenMx)
-library(mirt)
+if (have_openmx) library(OpenMx)
+if (have_mirt)   library(mirt)
 ```
 
 Two-stage path analysis (2S-PA) can be fit with `OpenMx` as well as the
@@ -55,7 +59,7 @@ attributes of the `get_fs()` output. The score columns (`fs_ind60`,
 `fs_dem60`) and the latent names (`ind60`, `dem60`) must already be present
 in `data` / the model string.
 
-```{r}
+```{r, eval = have_openmx}
 tspa_mx <- tspa_mx_model(model = "dem60 ~ ind60", data = fs_dat,
                          fsL = attr(fs_dat, "fsL"),
                          fsT = attr(fs_dat, "fsT"))
@@ -92,7 +96,7 @@ parameterEstimates(tspa_fit, standardized = TRUE)
 
 OpenMx
 
-```{r}
+```{r, eval = have_openmx}
 tspa_mx <- tspa_mx_model(model = "dem60 ~ ind60\ndem60 + ind60 ~ 1",
                          data = fs_dat)
 # We recently supported dropping fsL, fsT, and fsb when they can
@@ -137,7 +141,7 @@ Example from Lai & Hsiao (2022, Psychological Methods)
 
 ## Not accounting for error
 
-```{r}
+```{r, eval = have_mirt}
 # Simulate data with mirt
 set.seed(1235)
 num_obs <- 1000
@@ -173,7 +177,7 @@ non-zero: each `fsb_i` is the prior mean scaled by that row's shrinkage factor
 (the posterior variance `Vpost_i`), so the intercepts — and the score means —
 track the prior mean, and vary from row to row.
 
-```{r}
+```{r, eval = have_mirt}
 fs  <- get_fs(mod1)
 fse <- get_fs(mod1, prior_mean = c(F1 = 2))
 head(fs, 3)                                   # score / SE / loading / error variance
@@ -199,7 +203,7 @@ are appended from the `fsb` attribute (the `fs_indiv()` round-trip, now
 automatic). The minimal model that exercises the score-intercept row, on
 the nonzero-prior and the zero-mean results:
 
-```{r}
+```{r, eval = have_openmx && have_mirt}
 # All measurement inputs (per-row loadings, error variances, and the
 # int_fs_* intercept columns) are derived from the get_fs() result:
 tspa_mx_fit <- tspa_mx_model("F1 ~ 1", data = fse)
@@ -228,7 +232,7 @@ these scores ($\tilde \eta_i$ for person $i$):
 - Standard error of measurement for $\tilde \eta_i$ is equal to $\rho_{\tilde \eta, i} \text{SE}$
 - Based on the above, the total variance of $\tilde \eta_i$ is also $\rho_{\tilde \eta, i}$.
 
-```{r}
+```{r, eval = have_mirt}
 # Combine into data set
 fs_eap <- cbind(fs1, fs2) |>
     as.data.frame() |>
@@ -247,7 +251,7 @@ variables*: each `fsL` / `fsT` cell holds the name of the `data` column that
 carries that person's value. The structural latent names (`f1`, `f2`) are kept
 distinct from the score columns (`fs1`, `fs2`).
 
-```{r}
+```{r, eval = have_openmx && have_mirt}
 cross_load <- matrix(c("rel_fs1", NA, NA, "rel_fs2"), nrow = 2) |>
     `dimnames<-`(list(c("fs1", "fs2"), c("f1", "f2")))
 err_cov <- matrix(c("ev_fs1", NA, NA, "ev_fs2"), nrow = 2) |>
@@ -275,7 +279,7 @@ The gold-standard comparison is a joint (one-step) MIMIC/SEM fit. With 2PL
 items this uses the polychoric-WLS approximation here; a full FIML fit is
 computationally prohibitive at this scale.
 
-```{r}
+```{r, eval = have_mirt}
 dat <- cbind(dat1, dat2)
 colnames(dat) <- paste0("i", 1:20)
 wls_fit <- sem("
@@ -296,7 +300,7 @@ $V(\boldsymbol \eta)$ = $\boldsymbol{\psi}$.
 - Error matrix ($\mathbf{E}$, from software output) = $(\mathbf{I} - \boldsymbol{\Lambda}_{\tilde \eta, i})\boldsymbol{\psi}$. Therefore, $\boldsymbol{\Lambda}_{\tilde \eta, i} = \mathbf{I} - \mathbf{E} \boldsymbol{\psi}^{-1}$.
 - Error variance of $\tilde \eta_i$ is $\boldsymbol{\Lambda}_{\tilde \eta, i} \mathbf{E}$.
 
-```{r}
+```{r, eval = have_mirt}
 dat <- cbind(dat1, dat2)
 colnames(dat) <- paste0("Item_", 1:20)
 # Multidimensional IRT
@@ -309,7 +313,7 @@ CONSTRAIN = (1-10, a1)
 mfit <- mirt(dat, model = mod, itemtype = "2PL", verbose = FALSE)
 ```
 
-```{r}
+```{r, eval = have_mirt}
 # Factor scores, plus the per-row loadings and error covariances and
 # score intercepts get_fs() attaches (the same full-factor-covariance
 # correction the EAP section above derives from the hand-computed
@@ -317,7 +321,7 @@ mfit <- mirt(dat, model = mod, itemtype = "2PL", verbose = FALSE)
 fs_dat <- get_fs(mfit)
 ```
 
-```{r}
+```{r, eval = have_openmx && have_mirt}
 # Structural model on the two latent dimensions (the mirt factor names, kept
 # distinct from the score columns). All measurement inputs are derived from
 # the get_fs() result's attributes: the per-row loadings and error

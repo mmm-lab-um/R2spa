@@ -31,7 +31,7 @@
 
 library(lavaan)
 library(lme4)
-library(OpenMx)
+skip_if_not_installed("OpenMx")
 
 # --- coefficient extraction by (from -> to), robust to RAM var ordering ----
 # (same pattern as test-tspa_mx.R)

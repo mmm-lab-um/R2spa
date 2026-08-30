@@ -36,8 +36,7 @@ Roxygen: list(markdown = TRUE)
 Imports: 
     lavaan,
     lme4,
-    MASS,
-    OpenMx
+    MASS
 Suggests: 
     boot,
     brms,
@@ -48,6 +47,7 @@ Suggests:
     magrittr,
     Matrix,
     mirt,
+    OpenMx,
     numDeriv,
     posterior,
     reformulas,

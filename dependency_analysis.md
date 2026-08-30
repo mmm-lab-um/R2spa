@@ -44,11 +44,11 @@
 - **Internal calls:** `update_tspa()`
 - **Central:** NO — post-hoc correction, depends on `tspa()` output
 
-### 8. `tspa_mx_model()`  (tspa_mx.R:100)
-**Purpose:** Build OpenMx definition-variable 2S-PA model.
-- **External deps:** `OpenMx::mxModel`, `OpenMx::mxData`, `OpenMx::mxMatrix`, `OpenMx::mxAlgebraFromString`, `OpenMx::mxExpectationNormal`, `OpenMx::mxFitFunctionML`
-- **Internal calls:** `make_mx_ld()`, `make_mx_vc()`, `make_mx_int()`
-- **Central:** NO — alternative OpenMx pathway
+### 8. `tspa_mx_model()`  (tspa_mx.R:152)
+**Purpose:** Build an OpenMx definition-variable 2S-PA model (a single-level RAM assembled from `lavaan::lavaanify`).
+- **External deps:** `OpenMx::mxModel`, `OpenMx::mxData`, `OpenMx::mxPath`, `OpenMx::mxFitFunctionML`, `OpenMx::mxRun` — all guarded by `require_openmx()`. `OpenMx` is a `Suggests` (optional), **not** an `Import`; the `lavaan`-based `tspa()` route does not need it.
+- **Internal calls:** `tspa_mx_spec()`, `tspa_mx_derive_measurement()`, `tspa_mx_model_string()`, `lav_to_mx_ram()`, `tspa_mx_paths()`, `tspa_mx_defvar_col()`, `require_openmx()`
+- **Central:** NO — alternative (optional) OpenMx pathway
 
 ### 9. `tspa_plot()`  (tspa_plot.R:55)
 **Purpose:** Diagnostic scatterplots and residual plots.
