@@ -204,8 +204,8 @@ summary(tspa_mx_fit)
 #> AIC:       134.9387               414.9387                 415.8083
 #> BIC:      -177.9222               426.5261                 410.7675
 #> To get additional fit indices, see help(mxRefModels)
-#> timestamp: 2026-08-30 12:15:59 
-#> Wall clock time: 0.03460097 secs 
+#> timestamp: 2026-08-30 12:27:06 
+#> Wall clock time: 0.02846885 secs 
 #> optimizer:  SLSQP 
 #> OpenMx version number: 2.22.11 
 #> Need help?  See help(mxSummary)
@@ -266,8 +266,8 @@ summary(tspab_mx_fit)
 #> AIC:      266.42127               546.4213                 547.2908
 #> BIC:      -46.43962               558.0087                 542.2500
 #> To get additional fit indices, see help(mxRefModels)
-#> timestamp: 2026-08-30 12:15:59 
-#> Wall clock time: 0.01983118 secs 
+#> timestamp: 2026-08-30 12:27:06 
+#> Wall clock time: 0.01627207 secs 
 #> optimizer:  SLSQP 
 #> OpenMx version number: 2.22.11 
 #> Need help?  See help(mxSummary)
