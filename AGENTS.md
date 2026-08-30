@@ -182,9 +182,11 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
    (`vcov_jacobian_analytic()`): `J = -H^{-1} C` with `H` (the log-likelihood Hessian over the
    free params) and `C` (the cross-derivative w.r.t. the fixed `fsL`/`fsT`) both obtained by
    central-differencing the exact unweighted normal-ML score `s(θ,η)` (a pure matrix function
-   of the implied-covariance geometry) at `h = 1e-6·max(1,|param|)` — refit-free and
-   bit-deterministic; covers saturated, restricted (df > 0), multigroup, and mean-structure
-   models (fixed score means read from the partable's `est$nu`, not assumed 0). Returns `NULL`
+    of the implied-covariance geometry) at `h = 1e-6·max(1,|param|)` — refit-free (no
+    optimizer noise) and deterministic per BLAS backend (drifts ~1e-8-1e-7 relative across
+    backends, so cross-BLAS goldens use a ~1e-4 floor); covers saturated, restricted
+    (df > 0), multigroup, and mean-structure models (fixed score means read from the
+    partable's `est$nu`, not assumed 0). Returns `NULL`
    → the FD fallback when the shape is out of scope (unrecognised free param, unequal
    per-group free counts, per-group row-count ≠ lavaan `nobs`, non-ML `estimator.orig`, or
    case weights). **FD**: the original central-difference over the free `fsL`/`fsT` at

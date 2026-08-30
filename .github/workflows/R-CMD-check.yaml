@@ -33,7 +33,8 @@ jobs:
       # test-tspa_corrected_se.R) are run-to-run deterministic. There is no
       # cross-OS BLAS *version* pinning available as a CI action (r-lib/actions
       # has no setup-blas), so the residual Accelerate (macOS) vs OpenBLAS
-      # (Linux) difference is absorbed by the goldens' 1e-2 tolerance instead.
+      # (Linux) difference is absorbed by the goldens' 1e-4 tolerance instead
+      # (~250x the observed max cross-BLAS drift of 3.9e-7 on ubuntu).
       # VECLIB_MAXIMUM_THREADS targets the macOS Accelerate/vecLib path; the
       # others cover OpenBLAS/OpenMP/MKL.
       OPENBLAS_NUM_THREADS: 1

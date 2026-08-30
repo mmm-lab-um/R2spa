@@ -18,10 +18,13 @@
 # covariance, and the central-difference Hessian) and calls eigen(), so it
 # is deterministic per BLAS backend but drifts ~1e-8-1e-7 relative across
 # backends (Accelerate vs OpenBLAS; observed on CI 2026-08-30). The
-# tolerance is therefore the cross-BLAS drift floor (1e-2), matching the
+# tolerance is therefore the cross-BLAS drift floor (1e-4, ~250x the observed
+# max drift of 3.9e-7 on ubuntu OpenBLAS -- margin for the unmeasured macOS
+# Accelerate backend, confirmed across all CI slots), matching the
 # single-threaded-BLAS CI design in .github/workflows/R-CMD-check.yaml, not
 # the per-machine bit-stability floor. (The former FD goldens drifted
-# ~1.6e-3 relative across platforms, hence the same 1e-2; PLAN 16 D6.)
+# ~1.6e-3 relative across platforms, hence their looser 1e-2; the analytic
+# engine's ~1e-8-1e-7 drift allows the tighter 1e-4. PLAN 16 D6.)
 # Re-derive: cfa(3-factor joint, PoliticalDemocracy) ->
 # get_fs_lavaan(vfsLT = TRUE) -> tspa("dem60 ~ ind60; dem65 ~ ind60 +
 # dem60") -> vcov_corrected(fit, vfsLT, engine = "analytic") - vcov(fit),
@@ -165,13 +168,14 @@ test_that("T3: q = 3 correction is non-zero and matches golden values (B1 guard)
   # analytic (default) correction. Deterministic per BLAS backend but not
   # across backends (the engine's solve()/eigen() + central-difference
   # Hessian drift ~1e-8-1e-7 relative, see header), so the tolerance is the
-  # cross-BLAS drift floor (1e-2), not the per-machine bit-stability floor.
+  # cross-BLAS drift floor (1e-4, ~250x the observed max drift of 3.9e-7 on
+  # ubuntu OpenBLAS), not the per-machine bit-stability floor.
   expect_equal(cor["dem60~~dem60", "dem60~~dem60"], 17.3504614099,
-               tolerance = 1e-2)
+               tolerance = 1e-4)
   expect_equal(cor["dem65~dem60", "dem65~dem60"], 1.19612678113,
-               tolerance = 1e-2)
+               tolerance = 1e-4)
   expect_equal(cor["dem60~ind60", "dem60~ind60"], 1.42392555412,
-               tolerance = 1e-2)
+               tolerance = 1e-4)
 })
 
 test_that("T4: corrected SEs are within a loose tolerance of the bootstrap MAD", {
@@ -588,9 +592,11 @@ test_that("T17: engine = 'analytic' matches the FD on the 2-factor saturated fit
   expect_true(all(is.finite(va)))
 })
 
-test_that("T18: the analytic engine is bit-deterministic on every A/B shape", {
+test_that("T18: the analytic engine is run-to-run bit-identical (per backend) on every A/B shape", {
   # No refits and no RNG -> the corrected vcov is a pure function of the base
-  # fit + vfsLT, so repeated calls are bit-identical (the property the FD lacks).
+  # fit + vfsLT, so repeated calls on the same machine/BLAS are bit-identical
+  # (the property the FD lacks). This is per-backend: across BLAS backends the
+  # result drifts ~1e-8-1e-7 relative (see the T3 header), not bit-stable.
   expect_identical(
     vcov_corrected(tspa_joint3_nsat, vfsLT = attr(fs_joint3, "vfsLT"),
                    engine = "analytic"),
