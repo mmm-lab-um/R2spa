@@ -8,7 +8,7 @@ vcov_corrected(
   tspa_fit,
   vfsLT,
   which_free = NULL,
-  engine = c("fd", "analytic"),
+  engine = c("analytic", "fd"),
   ...
 )
 }
@@ -52,17 +52,22 @@ element as free. A non-\code{NULL} \code{which_free} of length
 \code{k} requires \code{vfsLT} to be the matching \verb{k x k}
 principal submatrix (see \code{vfsLT}).}
 
-\item{engine}{The engine used to evaluate the Jacobian \code{J = d(thetahat)/d(eta)}. \code{"fd"} (the default) uses central
-finite differences (one stage-2 refit on each side of each
-free element). \code{"analytic"} uses a refit-free, deterministic
-closed form for the saturated single-group path model (PLAN
-16, section 2.4) — free structural regressions and latent
-variances only — and transparently falls back to \code{"fd"}
-otherwise (multigroup, a model that is not exactly saturated
-(df > 0), or a saturated model with other free parameters
-such as free latent covariances or means). The two engines
-agree to the finite-difference noise floor whenever
-\code{"analytic"} applies.}
+\item{engine}{The engine used to evaluate the Jacobian \code{J = d(thetahat)/d(eta)}. \code{"analytic"} (the default) uses a
+refit-free, deterministic influence-function closed form
+(PLAN 16, sections 2.4 and 4.3): \verb{J = -H^\{-1\} C}, with \code{H}
+(the log-likelihood Hessian over the free params) and \code{C}
+(the cross-derivative w.r.t. the fixed \code{fsL}/\code{fsT} entries)
+obtained by central-differencing the analytic log-likelihood
+score. It covers single- and multi-group models, saturated
+and restricted (df > 0) structural models, and mean-structure
+models, and is a pure function of the base fit + \code{vfsLT}
+(bit-reproducible, no refits). \code{"fd"} uses central finite
+differences (one stage-2 refit on each side of each free
+element) and is retained as the A/B reference; the analytic
+path transparently falls back to it only for a shape it cannot
+handle (an unrecognised free parameter or unequal per-group
+free-param counts). The two agree to the finite-difference
+noise floor whenever \code{"analytic"} applies.}
 
 \item{...}{Currently not used.}
 }
@@ -78,11 +83,11 @@ First-order correction of sampling covariance for 2S-PA estimates
 approximation: the stage-2 covariance \code{vcov(tspa_fit)} is augmented by
 \code{J \%*\% vfsLT \%*\% t(J)}, where \code{J} is the Jacobian of the stage-2
 estimates with respect to the selected \code{fsL}/\code{fsT} free elements. With the
-default \code{engine = "fd"}, \code{J} is estimated by central differences, one full
-stage-2 refit on each side of each free element while reusing the base
-fit's coefficients, so the cost is \verb{2 x (number of free elements)} stage-2
-refits; with \code{engine = "analytic"} it is instead evaluated refit-free via
-a closed form (see the \code{engine} argument below).
+default \code{engine = "analytic"}, \code{J} is evaluated refit-free via a closed form
+(see the \code{engine} argument below); with \code{engine = "fd"} it is instead
+estimated by central differences, one full stage-2 refit on each side of each
+free element while reusing the base fit's coefficients, so the cost is
+\verb{2 x (number of free elements)} stage-2 refits.
 
 The correction is \strong{partial by design}. It propagates only the \emph{sampling}
 uncertainty of the stage-1 estimates of \code{fsL} (loadings/cross-loadings)
@@ -102,15 +107,17 @@ an already-corrected fit is rejected by \code{vcov_corrected()} (the
 correction is never applied twice).
 
 The \code{engine} argument selects how the Jacobian is evaluated. The default
-\code{"fd"} uses central finite differences (one stage-2 refit on each side of
-each free element). \code{"analytic"} instead uses a refit-free, deterministic
-closed form for the saturated single-group path model (PLAN 16, section
-2.4) — free structural regressions and latent variances only — and
-transparently falls back to \code{"fd"} otherwise (multigroup, a model that is
-not exactly saturated (df > 0), or a saturated model with other free
-parameters such as free latent covariances or means); the two agree to the
-finite-difference noise floor whenever \code{"analytic"} applies, and the
-analytic result is bit-reproducible.
+\code{"analytic"} is refit-free and deterministic: an influence-function closed
+form (PLAN 16, sections 2.4 and 4.3), \verb{J = -H^\{-1\} C}, with \code{H} (the
+log-likelihood Hessian over the free params) and \code{C} (the cross-derivative
+w.r.t. the fixed \code{fsL}/\code{fsT} entries) obtained by central-differencing the
+analytic log-likelihood score. It covers single- and multi-group models,
+saturated and restricted (df > 0) structural models, and mean-structure
+models, and is a pure function of the base fit + \code{vfsLT} (bit-reproducible,
+no refits). \code{"fd"} (central finite differences, one stage-2 refit per side
+of each free element) is retained as the A/B reference; the analytic path
+falls back to it only for a shape it cannot handle. The two agree to the
+finite-difference noise floor whenever \code{"analytic"} applies.
 }
 \examples{
 library(lavaan)

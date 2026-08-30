@@ -2,15 +2,20 @@
 
 ## New Features
 - `vcov_corrected()` and `tspa(corrected_se = TRUE)` gain an `engine`
-  argument. `"fd"` (the default) is the original central finite-difference
-  Jacobian; `"analytic"` evaluates the same Jacobian refit-free and
-  deterministically via a closed form for the saturated single-group path
-  model (PLAN 16; free structural regressions and latent variances only),
-  transparently falling back to `"fd"` otherwise — multigroup, a model that
-  is not exactly saturated (df > 0), or a saturated model with other free
-  parameters (e.g. free latent covariances or means). The two engines agree
-  to the finite-difference noise floor whenever `"analytic"` applies, and
-  the analytic result is bit-reproducible (no refits, no optimizer jitter).
+  argument, and its default is now `"analytic"`: a refit-free,
+  deterministic influence-function closed form (PLAN 16, sections 2.4 and
+  4.3), `J = -H^{-1} C` with `H` (the log-likelihood Hessian over the free
+  params) and `C` (the cross-derivative w.r.t. the fixed `fsL`/`fsT`
+  entries) obtained by central-differencing the analytic log-likelihood
+  score. It covers single- and multi-group models, saturated and restricted
+  (df > 0) structural models, and mean-structure models, and is a pure
+  function of the base fit + `vfsLT` (bit-reproducible, no refits, no
+  optimizer jitter). `"fd"` (the original central finite-difference
+  Jacobian) is retained as the A/B reference and the transparent fallback
+  for a shape the analytic form cannot handle; the two engines agree to the
+  finite-difference noise floor whenever `"analytic"` applies. The
+  corrected-SE golden tolerances are tightened from the FD's cross-platform
+  drift floor (1e-2) to the analytic bit-stability floor (1e-8).
 - `tspa_mx_model()` now auto-derives its measurement inputs from
   `get_fs.merMod()` results as well: with `se_fs`/`fsL`/`fsT`/`fsb` all
   omitted, the per-cluster 3-D `fsL`/`fsT` array attributes become

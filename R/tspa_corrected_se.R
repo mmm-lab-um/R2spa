@@ -5,11 +5,11 @@
 #' approximation: the stage-2 covariance `vcov(tspa_fit)` is augmented by
 #' `J %*% vfsLT %*% t(J)`, where `J` is the Jacobian of the stage-2
 #' estimates with respect to the selected `fsL`/`fsT` free elements. With the
-#' default `engine = "fd"`, `J` is estimated by central differences, one full
-#' stage-2 refit on each side of each free element while reusing the base
-#' fit's coefficients, so the cost is `2 x (number of free elements)` stage-2
-#' refits; with `engine = "analytic"` it is instead evaluated refit-free via
-#' a closed form (see the `engine` argument below).
+#' default `engine = "analytic"`, `J` is evaluated refit-free via a closed form
+#' (see the `engine` argument below); with `engine = "fd"` it is instead
+#' estimated by central differences, one full stage-2 refit on each side of each
+#' free element while reusing the base fit's coefficients, so the cost is
+#' `2 x (number of free elements)` stage-2 refits.
 #'
 #' The correction is **partial by design**. It propagates only the *sampling*
 #' uncertainty of the stage-1 estimates of `fsL` (loadings/cross-loadings)
@@ -29,15 +29,17 @@
 #' correction is never applied twice).
 #'
 #' The `engine` argument selects how the Jacobian is evaluated. The default
-#' `"fd"` uses central finite differences (one stage-2 refit on each side of
-#' each free element). `"analytic"` instead uses a refit-free, deterministic
-#' closed form for the saturated single-group path model (PLAN 16, section
-#' 2.4) — free structural regressions and latent variances only — and
-#' transparently falls back to `"fd"` otherwise (multigroup, a model that is
-#' not exactly saturated (df > 0), or a saturated model with other free
-#' parameters such as free latent covariances or means); the two agree to the
-#' finite-difference noise floor whenever `"analytic"` applies, and the
-#' analytic result is bit-reproducible.
+#' `"analytic"` is refit-free and deterministic: an influence-function closed
+#' form (PLAN 16, sections 2.4 and 4.3), `J = -H^{-1} C`, with `H` (the
+#' log-likelihood Hessian over the free params) and `C` (the cross-derivative
+#' w.r.t. the fixed `fsL`/`fsT` entries) obtained by central-differencing the
+#' analytic log-likelihood score. It covers single- and multi-group models,
+#' saturated and restricted (df > 0) structural models, and mean-structure
+#' models, and is a pure function of the base fit + `vfsLT` (bit-reproducible,
+#' no refits). `"fd"` (central finite differences, one stage-2 refit per side
+#' of each free element) is retained as the A/B reference; the analytic path
+#' falls back to it only for a shape it cannot handle. The two agree to the
+#' finite-difference noise floor whenever `"analytic"` applies.
 #'
 #' @param tspa_fit A fit from [tspa()] with `fsT` and `fsL` supplied
 #'              (multi-factor measurement model, single- or multi-group),
@@ -76,17 +78,22 @@
 #'                   `k` requires `vfsLT` to be the matching `k x k`
 #'                   principal submatrix (see `vfsLT`).
 #' @param engine The engine used to evaluate the Jacobian `J =
-#'              d(thetahat)/d(eta)`. `"fd"` (the default) uses central
-#'              finite differences (one stage-2 refit on each side of each
-#'              free element). `"analytic"` uses a refit-free, deterministic
-#'              closed form for the saturated single-group path model (PLAN
-#'              16, section 2.4) — free structural regressions and latent
-#'              variances only — and transparently falls back to `"fd"`
-#'              otherwise (multigroup, a model that is not exactly saturated
-#'              (df > 0), or a saturated model with other free parameters
-#'              such as free latent covariances or means). The two engines
-#'              agree to the finite-difference noise floor whenever
-#'              `"analytic"` applies.
+#'              d(thetahat)/d(eta)`. `"analytic"` (the default) uses a
+#'              refit-free, deterministic influence-function closed form
+#'              (PLAN 16, sections 2.4 and 4.3): `J = -H^{-1} C`, with `H`
+#'              (the log-likelihood Hessian over the free params) and `C`
+#'              (the cross-derivative w.r.t. the fixed `fsL`/`fsT` entries)
+#'              obtained by central-differencing the analytic log-likelihood
+#'              score. It covers single- and multi-group models, saturated
+#'              and restricted (df > 0) structural models, and mean-structure
+#'              models, and is a pure function of the base fit + `vfsLT`
+#'              (bit-reproducible, no refits). `"fd"` uses central finite
+#'              differences (one stage-2 refit on each side of each free
+#'              element) and is retained as the A/B reference; the analytic
+#'              path transparently falls back to it only for a shape it cannot
+#'              handle (an unrecognised free parameter or unequal per-group
+#'              free-param counts). The two agree to the finite-difference
+#'              noise floor whenever `"analytic"` applies.
 #' @param ... Currently not used.
 #' @return A corrected covariance matrix in the same dimension as
 #'     `vcov(tspa_fit)` (symmetric).
@@ -111,7 +118,7 @@
 #' sqrt(diag(vc))   # corrected standard errors
 #' @export
 vcov_corrected <- function(tspa_fit, vfsLT, which_free = NULL,
-                           engine = c("fd", "analytic"), ...) {
+                           engine = c("analytic", "fd"), ...) {
     engine <- match.arg(engine)
     if (is.null(attr(tspa_fit, "fsT"))) {
         stop("corrected vcov requires a tspa() fit with ",
@@ -273,11 +280,12 @@ vcov_corrected <- function(tspa_fit, vfsLT, which_free = NULL,
         }
         c_i
     }
-    # Jacobian J = d(thetahat)/d(eta). engine = "analytic" evaluates it
-    # refit-free via the saturated closed form (PLAN 16, section 2.4) and
-    # silently falls back to the finite-difference engine when the analytic
-    # form is not applicable (multigroup, or a structural model that is not
-    # exactly saturated, df > 0). engine = "fd" (the default) is
+    # Jacobian J = d(thetahat)/d(eta). engine = "analytic" (the default)
+    # evaluates it refit-free via the influence-function closed form (PLAN 16,
+    # sections 2.4 and 4.3; covers saturated, restricted, multigroup, and
+    # mean-structure models) and silently falls back to the finite-difference
+    # engine when the analytic form is not applicable (an unrecognised free
+    # parameter or unequal per-group free-param counts). engine = "fd" is
     # byte-identical to the original central-difference implementation below.
     J <- if (engine == "analytic")
         vcov_jacobian_analytic(tspa_fit, names0, which_free) else NULL
@@ -319,116 +327,212 @@ check_refit_convergence <- function(fit, k) {
 }
 
 # Analytic influence-function Jacobian J = d(thetahat)/d(eta) for the
-# saturated single-group stage-2 model (PLAN 16, section 2.4). Returns a
-# p x nfree matrix (rows = free structural params in coef order, columns =
-# the which_free positions) or NULL when the analytic form is not applicable
-# (multigroup, a structural model that is not exactly saturated (df > 0), or
-# any geometry the closed form does not cover), in which case the caller
-# falls back to the finite-difference Jacobian.
+# stage-2 model, single- and multi-group (PLAN 16, sections 2.4 and 4.3).
+# Returns a (p x nfree) matrix (rows = free structural params in coef order,
+# columns = the which_free positions) or NULL when the analytic form is not
+# applicable (an unrecognised free parameter, unequal per-group free-param
+# counts, or any geometry that fails a guard), in which case the caller falls
+# back to the finite-difference Jacobian.
 #
-# The saturated cross-Hessian is Hessian-free (no log-likelihood Hessian, no
-# finite differences, no refits):
-#   H_theta_eta[k, j] = -(n/2) * tr( Sinv (dSigma/deta_j) Sinv (dSigma/dtheta_k) )
-#   J = vcov(fit) %*% H_theta_eta
-# where Sigma = L F L' + T, F = (I-beta)^{-1} psi (I-beta)^{-1}', Sinv is
-# the inverse of Sigma, and the dSigma/dtheta_k, dSigma/deta_j are the
-# analytic derivatives below. It is exact only for a saturated structural
-# model (the free params span the q(q+1)/2 score covariances, df = 0, at the
-# MLE); that saturation is checked before the closed form is used, otherwise
-# the caller falls back to the FD.
+# J is the influence function of the stage-2 MLE: by the implicit-function
+# theorem, at the MLE  J = -H^{-1} C  where H = d^2 l / dtheta^2 (the
+# log-likelihood Hessian over the free params) and C = d^2 l / dtheta deta
+# (the cross-derivative w.r.t. the fixed fsL/fsT entries). The multiplier is
+# the analytic Hessian, NOT vcov(fit): at an exact MLE the two coincide, but
+# vcov(fit) differs from -H^{-1} by O(base-fit residual) and the
+# non-saturated C is large, so vcov(fit) C is wrong for restricted models
+# (Phase-0 gate: 0.19 vs 0.013 corrected-vcov).
+#
+# Both H and C are obtained refit-free by central-differencing the analytic
+# log-likelihood score s(theta, eta) = d l / d theta (a pure matrix function
+# of the implied-covariance geometry; no stage-2 refits, no RNG), so the
+# result is deterministic to machine precision. The score covers the
+# covariance params (the section 2.4/4.3 form, plus the mean-coupling term
+# (n/2)(xbar-mu)' Sinv (dSigma/dtheta) Sinv (xbar-mu) when a mean structure is
+# present) and the mean params (n . (Sinv (xbar-mu))_m), so the method handles
+# regressions, latent (co)variances, and score means, per group.
 vcov_jacobian_analytic <- function(tspa_fit, names0, which_free) {
-    if (tsp_ngroups(tspa_fit) != 1L) return(NULL)
+    ngrp <- tsp_ngroups(tspa_fit)
+    if (!isTRUE(tsp_converged(tspa_fit))) return(NULL)
     est <- try(lavaan::lavInspect(tspa_fit, "est"), silent = TRUE)
     if (inherits(est, "try-error")) return(NULL)
-    L <- est$lambda; psi <- est$psi; beta <- est$beta; T0 <- est$theta
-    q <- nrow(psi)
-    if (nrow(L) != q || ncol(L) != q) return(NULL)
-    lat <- rownames(psi)
-    if (is.null(lat) || any(is.na(lat))) return(NULL)
-    # Formal saturation gate. The closed form is exact only when the free
-    # structural parameters exactly span the q(q+1)/2 score covariances
-    # (df = 0): then the MLE reproduces the sample score covariance and the
-    # log-likelihood score vanishes, dropping the second-order cross-Hessian
-    # term. A restricted model (df > 0) keeps that term, so fall back to the
-    # FD. (A near-saturation test against the sample covariance is NOT a
-    # reliable proxy for the closed form's accuracy — a df > 0 model can have
-    # a tiny implied-vs-sample discrepancy yet a large second-order term —
-    # so gate on lavaan's fitted df (fitMeasures(fit, "df") == 0), with the
-    # p == q(q+1)/2 count as an equivalent structural guard.) The fit must
-    # also be at its MLE (converged).
-    p <- length(names0)
-    if (p != q * (q + 1L) / 2L) return(NULL)
-    # Authoritative saturation check: lavaan's fitted df must be exactly 0.
-    # (p == q(q+1)/2 is the equivalent structural guard for the stage-2
-    # model's fixed measurement part; the fitted df is the authoritative
-    # value, so require both.)
-    df_fit <- try(lavaan::fitMeasures(tspa_fit, "df"), silent = TRUE)
-    if (inherits(df_fit, "try-error") || length(df_fit) != 1L ||
-        !is.finite(df_fit) || df_fit != 0) return(NULL)
-    if (!isTRUE(tsp_converged(tspa_fit))) return(NULL)
-    # Observation count (the closed form scales by n): lavaan's own effective
-    # nobs (consistent with weights / case deletion), not the raw row count.
-    n_obs <- try(tsp_nobs(tspa_fit), silent = TRUE)
-    if (inherits(n_obs, "try-error") || length(n_obs) != 1L ||
-        !is.finite(n_obs)) return(NULL)
-    n <- as.numeric(n_obs)
-    # Geometry: F = (I-beta)^{-1} psi (I-beta)^{-1}' (full latent cov, not
-    # est$psi, which is exogenous-only), Sigma = L F L' + T.
-    M <- try(solve(diag(q) - beta), silent = TRUE)
-    if (inherits(M, "try-error")) return(NULL)
-    F <- M %*% psi %*% t(M)
-    Sigma <- L %*% F %*% t(L) + T0
-    Sinv <- try(solve(Sigma), silent = TRUE)
-    if (inherits(Sinv, "try-error")) return(NULL)
-    # Delta_theta: one q x q matrix per free structural param (coef order).
-    dFb <- function(i, j) M[, i] %o% F[j, ] + F[, j] %o% M[, i]
-    dFp <- function(k) M[, k] %o% M[, k]
-    dSigTheta <- vector("list", p)
-    for (kk in seq_len(p)) {
-        nm <- names0[kk]
-        if (grepl("~~", nm)) {
-            # latent (co)variance: "var~~var". Only the diagonal (a free
-            # residual/exogenous variance) is covered; an off-diagonal free
-            # psi covariance is out of scope for the closed form.
-            parts <- trimws(strsplit(nm, "~~")[[1]])
-            if (length(parts) != 2L || parts[1] != parts[2]) return(NULL)
-            k2 <- match(parts[1], lat)
-            if (is.na(k2)) return(NULL)
-            dSigTheta[[kk]] <- L %*% dFp(k2) %*% t(L)
-        } else if (grepl("~", nm)) {
-            # structural regression "lhs~rhs"
-            parts <- trimws(strsplit(nm, "~")[[1]])
-            if (length(parts) != 2L) return(NULL)
-            i2 <- match(parts[1], lat); j2 <- match(parts[2], lat)
-            if (is.na(i2) || is.na(j2)) return(NULL)
-            dSigTheta[[kk]] <- L %*% dFb(i2, j2) %*% t(L)
-        } else {
-            return(NULL)  # an unrecognised free parameter: use the FD
+    args0 <- attr(tspa_fit, "tspa_args")
+    data <- args0$data
+    # The analytic score is the unweighted normal-ML score (both the xbar/S_ml
+    # site and the score_grp site assume it). estimator.orig is the user's
+    # requested estimator (estimator alone is the base likelihood -- "ML" even
+    # for MLR, which pairs the ML likelihood with robust SEs). Any non-ML
+    # request (MLR, WLS, ULS, ...) or case weights changes the objective the
+    # FD/refit engine respects via refits, so return NULL -> the FD fallback
+    # rather than scoring the wrong likelihood.
+    opts <- try(lavaan::lavInspect(tspa_fit, "options"), silent = TRUE)
+    if (inherits(opts, "try-error")) return(NULL)
+    est_orig <- opts[["estimator.orig"]]
+    if (is.null(est_orig) || any(est_orig != "ML")) return(NULL)
+    if (!is.null(args0$weights)) return(NULL)
+    gc <- if (ngrp == 1L) NULL else args0$group
+    # Per-group effective sample size, matching lavaan's nobs (the FD engine
+    # respects it implicitly via refits). If the analytic path can't align its
+    # score scaling with it, return NULL -> the FD fallback.
+    nobs_vec <- try(tsp_nobs(tspa_fit), silent = TRUE)
+    if (inherits(nobs_vec, "try-error") || length(nobs_vec) != ngrp ||
+        any(!is.finite(nobs_vec))) return(NULL)
+    # Group labels for the data split, from lavInspect("group.label") (falling
+    # back to the est list names). The per-group partable is indexed
+    # positionally (est[[g]]), so this is robust to an unnamed per-group est
+    # list; if the labels can't be determined cleanly, return NULL -> FD.
+    glab <- if (ngrp == 1L) character(0) else {
+        gl <- unlist(lavaan::lavInspect(tspa_fit, "group.label"))
+        if (is.null(gl) || length(gl) != ngrp) names(est) else gl
+    }
+    if (ngrp > 1L && (is.null(glab) || length(glab) != ngrp ||
+        any(is.na(glab)))) return(NULL)
+    p_total <- length(names0)
+    if (p_total %% ngrp != 0L) return(NULL)
+    pg <- p_total %/% ngrp
+    coef_all <- as.numeric(coef(tspa_fit))
+    fsL <- attr(tspa_fit, "fsL"); fsT <- attr(tspa_fit, "fsT")
+    if (ngrp == 1L) {
+        if (!is.list(fsL)) fsL <- list(fsL)
+        if (!is.list(fsT)) fsT <- list(fsT)
+    } else if (!is.list(fsL) || !is.list(fsT) ||
+        length(fsL) != ngrp || length(fsT) != ngrp) {
+        return(NULL)
+    }
+    q0 <- nrow(fsL[[1L]]); q2 <- q0 * q0; nt <- (q0 * (q0 + 1L)) %/% 2L
+    nfull_total <- ngrp * (q2 + nt)
+    if (max(which_free) > nfull_total) return(NULL)
+    J_full <- matrix(0, p_total, nfull_total)
+    for (g in seq_len(ngrp)) {
+        e <- if (ngrp == 1L) est else est[[g]]
+        L0 <- e$lambda; psi0 <- e$psi
+        q <- nrow(psi0)
+        if (q != q0 || nrow(L0) != q || ncol(L0) != q) return(NULL)
+        lat <- colnames(L0); score_cols <- rownames(L0)
+        if (is.null(lat) || any(is.na(lat))) return(NULL)
+        tri <- which(lower.tri(diag(q), diag = TRUE), arr.ind = TRUE)
+        nfull <- q * q + nrow(tri)
+        sub <- if (ngrp == 1L) data else data[data[[gc]] == glab[g], ]
+        x <- try(as.matrix(sub[, score_cols]), silent = TRUE)
+        if (inherits(x, "try-error") || any(!is.finite(x))) return(NULL)
+        # Align the score scaling with lavaan's effective per-group nobs; a
+        # row-count mismatch (e.g. listwise case deletion) returns NULL -> FD.
+        if (nrow(x) != nobs_vec[g]) return(NULL)
+        n <- nobs_vec[g]; xbar <- colMeans(x)
+        S_ml <- crossprod(x - xbar) / n
+        idx_g <- (g - 1L) * pg + seq_len(pg)
+        th_type <- character(pg); th_i <- integer(pg); th_j <- integer(pg)
+        th_score <- integer(pg)
+        for (kk in seq_len(pg)) {
+            nm <- sub("\\.g[0-9]+$", "", names0[idx_g[kk]])
+            if (grepl("~~", nm)) {
+                pt <- trimws(strsplit(nm, "~~")[[1]])
+                if (length(pt) != 2L) return(NULL)
+                th_type[kk] <- "cov"
+                th_i[kk] <- match(pt[1], lat); th_j[kk] <- match(pt[2], lat)
+            } else if (grepl("~1$", nm)) {
+                th_type[kk] <- "mean"
+                th_score[kk] <- match(sub("~1$", "", nm), score_cols)
+            } else if (grepl("~", nm)) {
+                pt <- trimws(strsplit(nm, "~")[[1]])
+                if (length(pt) != 2L) return(NULL)
+                th_type[kk] <- "reg"
+                th_i[kk] <- match(pt[1], lat); th_j[kk] <- match(pt[2], lat)
+            } else {
+                return(NULL)
+            }
+            if (th_type[kk] == "mean") {
+                if (is.na(th_score[kk])) return(NULL)
+            } else if (is.na(th_i[kk]) || is.na(th_j[kk])) {
+                return(NULL)
+            }
         }
+        theta0 <- coef_all[idx_g]
+        eta0 <- c(as.vector(fsL[[g]]),
+                  as.vector(fsT[[g]][lower.tri(fsT[[g]], diag = TRUE)]))
+        # Base implied score means from the partable's observed-variable
+        # intercepts (est$nu): FIXED for a single-group model with a mean
+        # structure (e.g. fsb supplied), or the free-mean estimates for a
+        # multigroup model. Strip the free-mean base values so the central
+        # difference re-adds them via tv; without this, a fixed nonzero mean
+        # leaks a spurious mean-coupling term into the cov-param score.
+        nu0 <- if (!is.null(e$nu) && nrow(e$nu) > 0L)
+            as.vector(e$nu[score_cols, 1]) else rep(0, q)
+        if (length(nu0) != q) nu0 <- rep(0, q)
+        mu_fixed <- nu0
+        for (k in which(th_type == "mean"))
+            mu_fixed[th_score[k]] <- mu_fixed[th_score[k]] - theta0[k]
+        # Analytic score s(theta, eta) for the group (cov + mean params).
+        score_grp <- function(tv, ev) {
+            beta_of <- function(tv) { b <- matrix(0, q, q)
+                for (k in which(th_type == "reg")) b[th_i[k], th_j[k]] <- tv[k]
+                b }
+            psi_of <- function(tv) { s <- matrix(0, q, q)
+                for (k in which(th_type == "cov")) {
+                    s[th_i[k], th_j[k]] <- tv[k]; s[th_j[k], th_i[k]] <- tv[k] }
+                s }
+            Lm <- matrix(ev[seq_len(q * q)], q, q)
+            Tm <- matrix(0, q, q)
+            for (i in seq_len(nrow(tri)))
+                Tm[tri[i, 1], tri[i, 2]] <- ev[q * q + i]
+            Tm <- Tm + t(Tm) - diag(diag(Tm))
+            mu <- mu_fixed
+            for (k in which(th_type == "mean")) mu[th_score[k]] <- tv[k]
+            M <- solve(diag(q) - beta_of(tv))
+            F <- M %*% psi_of(tv) %*% t(M)
+            S <- Lm %*% F %*% t(Lm) + Tm
+            Sinv <- solve(S); gS <- Sinv %*% S_ml %*% Sinv - Sinv
+            d <- xbar - mu; out <- numeric(length(tv))
+            for (k in seq_along(tv)) {
+                if (th_type[k] == "mean") {
+                    out[k] <- n * (Sinv %*% d)[th_score[k], ]
+                } else {
+                    if (th_type[k] == "reg")
+                        dFk <- M[, th_i[k]] %o% F[th_j[k], ] +
+                            F[, th_j[k]] %o% M[, th_i[k]]
+                    else
+                        dFk <- if (th_i[k] == th_j[k]) M[, th_i[k]] %o% M[, th_i[k]]
+                               else M[, th_i[k]] %o% M[, th_j[k]] + M[, th_j[k]] %o% M[, th_i[k]]
+                    dSigk <- Lm %*% dFk %*% t(Lm)
+                    out[k] <- 0.5 * n * sum(diag(gS %*% dSigk)) +
+                        0.5 * n * as.numeric(t(d) %*% Sinv %*% dSigk %*% Sinv %*% d)
+                }
+            }
+            out
+        }
+        # H = d^2 l / dtheta^2, C = d^2 l / dtheta deta: central differences
+        # of the analytic score (refit-free and deterministic). Wrapped in
+        # try(): a singular solve() inside score_grp (singular I - beta or
+        # implied covariance at a perturbed point) returns NULL -> the FD
+        # fallback, rather than aborting the correction.
+        h <- 1e-6
+        HC <- try({
+            H <- matrix(0, pg, pg)
+            for (m in seq_len(pg)) {
+                ev <- numeric(pg); ev[m] <- 1
+                st <- h * max(1, abs(theta0[m]))
+                H[, m] <- (score_grp(theta0 + st * ev, eta0) -
+                           score_grp(theta0 - st * ev, eta0)) / (2 * st)
+            }
+            C <- matrix(0, pg, nfull)
+            for (j in seq_len(nfull)) {
+                ev <- numeric(nfull); ev[j] <- 1
+                st <- h * max(1, abs(eta0[j]))
+                C[, j] <- (score_grp(theta0, eta0 + st * ev) -
+                           score_grp(theta0, eta0 - st * ev)) / (2 * st)
+            }
+            list(H = H, C = C)
+        }, silent = TRUE)
+        if (inherits(HC, "try-error")) return(NULL)
+        Jg <- try(-solve(HC$H, HC$C), silent = TRUE)
+        if (inherits(Jg, "try-error")) return(NULL)
+        rows <- (g - 1L) * pg + seq_len(pg)
+        lcols <- (g - 1L) * q2 + seq_len(q2)
+        tcols <- ngrp * q2 + (g - 1L) * nt + seq_len(nt)
+        J_full[rows, lcols] <- Jg[, seq_len(q2)]
+        J_full[rows, tcols] <- Jg[, (q2 + 1L):nfull]
     }
-    # Delta_eta: q^2 loading + lower-tri error entries, in the fsL-then-fsT
-    # (column-major) order of the vfsLT / which_free layout.
-    FL <- F %*% t(L); LF <- L %*% F
-    dSig_L <- function(r, c2) { ei <- matrix(0, q, 1); ei[r, 1] <- 1
-        ei %*% FL[c2, ] + LF[, c2] %*% t(ei) }
-    dSig_T <- function(r, c2) { E <- matrix(0, q, q); E[r, c2] <- 1; E[c2, r] <- 1; E }
-    tri <- which(lower.tri(diag(q), diag = TRUE), arr.ind = TRUE)
-    nfull <- q * q + nrow(tri)
-    if (max(which_free) > nfull) return(NULL)
-    dSigEta <- vector("list", nfull)
-    idx <- 0L
-    for (c2 in seq_len(q)) for (r in seq_len(q)) {
-        idx <- idx + 1L; dSigEta[[idx]] <- dSig_L(r, c2)
-    }
-    for (t in seq_len(nrow(tri))) {
-        idx <- idx + 1L; dSigEta[[idx]] <- dSig_T(tri[t, 1], tri[t, 2])
-    }
-    # Cross-Hessian, then J = V %*% H_theta_eta (subset to which_free).
-    Hte <- matrix(0, nrow = p, ncol = nfull)
-    for (kk in seq_len(p)) for (jj in seq_len(nfull))
-        Hte[kk, jj] <- -0.5 * n * sum(diag(Sinv %*% dSigEta[[jj]] %*% Sinv %*%
-                                        dSigTheta[[kk]]))
-    J <- vcov(tspa_fit) %*% Hte[, which_free, drop = FALSE]
+    J <- J_full[, which_free, drop = FALSE]
     rownames(J) <- names0
     colnames(J) <- as.character(which_free)
     J

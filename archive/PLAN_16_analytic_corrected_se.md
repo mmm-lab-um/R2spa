@@ -2,11 +2,13 @@
 
 **Date:** 2026-08-28 (updated after the Phase-2 gate)
 **Owner roles:** `r-architect` (code), `r-tester` (tests), `r-doc` (roxygen/NEWS)
-**Status:** **implemented** (saturated / df = 0 case). The Hessian-free closed form (§2.4) is
-wired into `vcov_corrected()` behind `engine = "analytic"`, gated on formal saturation
-(df = 0, converged) with transparent fallback to the FD otherwise; it reproduces the FD
-corrected vcov to `max|diff| = 0.0049` (the FD's own precision) on the T3 fixture, fully
-analytically. Remaining: the general (non-saturated) analytic path and the multigroup path (§4.3).
+**Status:** **implemented** (saturated, restricted, multigroup, and mean-structure cases). The
+unified influence-function closed form `J = -H^{-1} C` (§§2.4 and 4.3) is wired into
+`vcov_corrected()` behind `engine = "analytic"`, now the **default**, with transparent fallback
+to the FD for a shape it cannot handle; it reproduces the FD corrected vcov to the FD's own
+precision on every corrected-SE fixture (saturated 0.0049 abs, restricted 0.0128 abs,
+multigroup + means 2.8e-5 rel) and is bit-deterministic. The T3 goldens are tightened to 1e-8
+(D6). See the §9 closure log (2026-08-29) for the A/B table and the fixed-mean (`est$nu`) fix.
 **Blocked by / relates to:** none. Extends the first-order corrected-SE path (re-integrated
 2026-08-23, `R/tspa_corrected_se.R`); does not change the public contract of
 `vcov_corrected()` or `tspa(corrected_se = )` — only the way the Jacobian `J` is computed.
@@ -295,5 +297,22 @@ A/B pattern: analytic `vcov_corrected(engine = "analytic")` ≡ FD
 - **Foundation checks:** `∂²ℓ/∂θ²` (central diff of the §2 `ℓ(θ)`) = `−V⁻¹` to ~1% (ratios
   0.995–1.006 vs lavaan); `Δ_θ`/`Δ_η` central-diff exact (max|Δ| = 0); composition
   `ℓ(θ) = ℓ̃(Σ(θ))` holds to ~1e-6.
-- **Remaining to log at closure:** the `‖g_Σ‖` saturation threshold used; one saturated + one
-  non-saturated fixture A/B; the bit-stability evidence; the new T3 golden tolerance.
+- **Closure (2026-08-29):** the general (non-saturated) path is implemented as the
+  unified influence-function form `J = -H^{-1} C` with `H` and `C` obtained by
+  central-differencing the analytic log-likelihood score — no separate saturation
+  threshold; the `g_Σ` term of §4.3 is included via the score's mean-coupling term and
+  vanishes when the model saturates. The default `engine` is now `"analytic"`.
+  - **A/B vs FD (max abs diff / max rel, floored at 1e-3) on every corrected-SE
+    fixture:** saturated 3-factor 0.0049 / 0.88 (the 0.88 is a near-zero off-diagonal,
+    abs 0.005); restricted (df = 1) 0.0128 / 0.001; 2-factor saturated 0.0 / 1.4e-6;
+    fixed-mean (prior) 0.0088 / 0.0095; multigroup + free score means (n = 301) 0.0 /
+    2.8e-5. All within the D2 gate.
+  - **Fixed-mean fix:** a model with FIXED score means (e.g. `fsb` supplied) leaks a
+    spurious mean-coupling term when the engine assumes `mu = 0`; the base implied score
+    means are now read from the partable's observed-variable intercepts (`est$nu`), with
+    the free-mean base values stripped so the central difference re-adds them (prior
+    fixture: 4.2% -> 0.95%).
+  - **Bit-stability:** `expect_identical` across repeated calls on the saturated,
+    restricted, and multigroup shapes (T11, T18) — no refits, no RNG.
+  - **New T3 golden tolerance:** `1e-2` -> `1e-8` at the deterministic analytic values
+    (17.3504614099 / 1.19612678113 / 1.42392555412) (D6).
