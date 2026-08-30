@@ -7,9 +7,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Two-Stage Path Analysis (2S-PA) Model Examples • R2spa</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.4.2/css/all.min.css" rel="stylesheet">
-<link href="../deps/font-awesome-6.4.2/css/v4-shims.min.css" rel="stylesheet">
+<link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Two-Stage Path Analysis (2S-PA) Model Examples">
 </head>
 <body>
@@ -34,18 +34,17 @@
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/categorical-interaction.html">Using Two-Stage Path Analysis with Definition Variables for Latent Interactions with Categorical Indicators</a></li>
-    <li><a class="dropdown-item" href="../articles/corrected-se.html">Corrected Standard Errors</a></li>
+<li><a class="dropdown-item" href="../articles/corrected-se.html">Corrected Standard Errors</a></li>
     <li><a class="dropdown-item" href="../articles/correction-error.html">Correction to Measurement Error</a></li>
     <li><a class="dropdown-item" href="../articles/efa-score.html">EFA Scores</a></li>
-    <li><a class="dropdown-item" href="../articles/get_fs_int-vignette.html">get_fs_int-example</a></li>
     <li><a class="dropdown-item" href="../articles/gr-std-coef.html">Grand Standardized Coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/missing-data.html">2S-PA with Missing Data</a></li>
+    <li><a class="dropdown-item" href="../articles/multilevel.html">2S-PA with Random Effects</a></li>
     <li><a class="dropdown-item" href="../articles/multiple-factors.html">Multi-Factor Measurement Model</a></li>
-    <li><a class="dropdown-item" href="../articles/reliability.html">Reliability of Factor Scores</a></li>
+    <li><a class="dropdown-item" href="../articles/product-factor-scores.html">Product factor-score indicators (latent interactions)</a></li>
+    <li><a class="dropdown-item" href="../articles/scoring-matrices.html">Scoring Matrices: lavaan CFA and lme4</a></li>
     <li><a class="dropdown-item" href="../articles/tspa-growth-vignette.html">Linear Growth Modeling with Two-Stage Path Analysis</a></li>
-    <li><a class="dropdown-item" href="../articles/tspa-plot-vignette.html">Diagnostic plots for `tspa` models</a></li>
-    <li><a class="dropdown-item" href="../articles/tspa-vignette-mx.html">Multi-Factor Measurement Model (OpenMx)</a></li>
+    <li><a class="dropdown-item" href="../articles/tspa-vignette-mx.html">2S-PA with OpenMx and IRT (mirt)</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -70,7 +69,7 @@
       <h1>Two-Stage Path Analysis (2S-PA) Model Examples</h1>
                         <h4 data-toc-skip class="author">Yixiao Li</h4>
             
-            <h4 data-toc-skip class="date">2024-09-06</h4>
+            <h4 data-toc-skip class="date">2026-08-30</h4>
       
 
       <div class="d-none name"><code>R2spa.Rmd</code></div>
@@ -82,18 +81,265 @@
 <p>Load packages</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://lavaan.ugent.be" class="external-link">lavaan</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://gengrui-zhang.github.io/R2spa/">R2spa</a></span><span class="op">)</span></span></code></pre></div>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://gengrui-zhang.github.io/R2spa/" class="external-link">R2spa</a></span><span class="op">)</span></span></code></pre></div>
 <div class="section level2">
-<h2 id="single-group-single-predictor">Single group, single predictor<a class="footnote-ref" tabindex="0" data-bs-toggle="popover" data-bs-content="&lt;p&gt;In the model, &lt;code&gt;a&lt;/code&gt;, &lt;code&gt;b&lt;/code&gt;, and
-&lt;code&gt;c&lt;/code&gt; are coefficients where variables &lt;code&gt;y1&lt;/code&gt;,
-&lt;code&gt;y2&lt;/code&gt;, &lt;code&gt;y3&lt;/code&gt;, and &lt;code&gt;y4&lt;/code&gt; are indicators of
-the latent variable &lt;code&gt;dem60&lt;/code&gt;.&lt;/p&gt;"><sup>1</sup></a><a class="anchor" aria-label="anchor" href="#single-group-single-predictor"></a>
+<h2 id="why-two-stage-path-analysis">Why two-stage path analysis<a class="anchor" aria-label="anchor" href="#why-two-stage-path-analysis"></a>
 </h2>
+<p>When the constructs in a path model are measured with error, plugging
+composite or factor scores into a regression as if they were error-free
+biases the path coefficients (Cole &amp; Preacher, 2014). A single joint
+structural equation model, estimating the measurement and structural
+models together, is the gold standard, but it can be hard to specify, is
+prone to convergence and admissibility problems in small samples, and
+forces a whole-model refit whenever the measurement <em>or</em> the
+structural part changes (Rosseel, 2012).</p>
+<p>Two-stage path analysis (2S-PA; Lai &amp; Hsiao, 2022) is a practical
+alternative that splits the problem:</p>
+<ul>
+<li>
+<strong>Stage 1 — score each construct</strong> with an appropriate
+psychometric model (a <code>lavaan</code> CFA, an <code>lme4</code>
+mixed model, a <code>mirt</code> IRT model, or even an EFA) and record
+each score’s measurement error / reliability.</li>
+<li>
+<strong>Stage 2 — path-analyze the scores</strong>, correcting for
+measurement error by fixing the loading(s) and error variance (and
+covariances) to values implied in Stage 1. Observation-specific values
+can be used via <em>definition variables</em> (currently available in
+<em>OpenMx</em>).</li>
+</ul>
+<p>Because the stages are separate, you can tune and diagnose each on
+its own, mix estimators across constructs (one construct from a CFA,
+another from an IRT model), and avoid the small-sample convergence
+problems of one large joint model. Simulations find 2S-PA tracks the
+joint model in large samples but converges more often, with less
+standard-error bias and better Type-I error / CI coverage in small
+samples and with categorical items (Lai &amp; Hsiao, 2022; Lai et al.,
+2023); the same two-stage idea also covers empirical-Bayes random slopes
+from mixed models (Lai &amp; Liu, 2026).</p>
+<p><code>R2spa</code> implements both stages: <code><a href="../reference/get_fs.html">get_fs()</a></code> is
+stage 1 (scores plus their loadings, error covariances and intercepts)
+and <code><a href="../reference/tspa.html">tspa()</a></code> / <code><a href="../reference/tspa_mx_model.html">tspa_mx_model()</a></code> are stage 2.</p>
+</div>
+<div class="section level2">
+<h2 id="how-the-measurement-error-is-supplied">How the measurement error is supplied<a class="anchor" aria-label="anchor" href="#how-the-measurement-error-is-supplied"></a>
+</h2>
+<p><code><a href="../reference/tspa.html">tspa()</a></code> needs each score’s measurement error, in one of
+two forms:</p>
+<ul>
+<li>
+<strong><code>se_fs</code></strong> — one standard error per score
+(a scalar, or a list / data frame of per-group scalars for multigroup).
+This treats the error <em>variance</em> as constant across observations
+and assumes each score is an indicator of a single latent (no
+cross-loadings, no correlated score errors). It is the simple path:
+suitable for a unidimensional construct scored from continuous, roughly
+equally reliable items.</li>
+<li>
+<strong><code>fsT</code></strong> (with
+<strong><code>fsL</code></strong> and <strong><code>fsb</code></strong>)
+— the general form <code><a href="../reference/get_fs.html">get_fs()</a></code> returns as attributes
+(<code>attr(fs, "fsT")</code>, <code>attr(fs, "fsL")</code>,
+<code>attr(fs, "fsb")</code>). <code>fsT</code> is the score error
+<em>variance-covariance</em> (so it also carries correlated errors and
+cross-loadings) and <code>fsL</code> the implied loading of each latent
+on the score. Use this when scores are composite (several indicators per
+latent, or a score loading on several latents), and note it is the only
+form that carries per-observation measurement properties, which the
+<code>mirt</code> (IRT) and <code>merMod</code> (mixed model) paths need
+because loadings and error variances vary by person / cluster (see the
+<code>multiple-factors</code>, <code>tspa-vignette-mx</code> and
+<code>multilevel</code> vignettes).</li>
+</ul>
+<p>Each construct below is a single-factor score from continuous items,
+so <code>se_fs</code> is the natural form: the single-factor example
+passes it explicitly, while the multi-factor and multigroup examples
+omit it, since <code><a href="../reference/tspa.html">tspa()</a></code> reads those standard errors from the
+<code><a href="../reference/get_fs.html">get_fs()</a></code> result automatically. The
+<code>multiple-factors</code> vignette shows the
+<code>fsT</code>/<code>fsL</code> form. The <code>OpenMx</code> backend
+<code><a href="../reference/tspa_mx_model.html">tspa_mx_model()</a></code> likewise omits the measurement inputs on a
+<code><a href="../reference/get_fs.html">get_fs()</a></code> result, deriving them from the result’s attributes
+(per-row quantities as definition variables — the exact, non-pooled
+route; see the <code>tspa-vignette-mx</code> vignette).</p>
+</div>
+<div class="section level2">
+<h2 id="reading-the-get_fs-output">Reading the <code>get_fs()</code> output<a class="anchor" aria-label="anchor" href="#reading-the-get_fs-output"></a>
+</h2>
+<p><code><a href="../reference/get_fs.html">get_fs()</a></code> returns one row per observation. For a
+construct called <code>&lt;name&gt;</code> it contributes these columns,
+with the matching matrix-form quantities attached as attributes on the
+returned data frame:</p>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th>Column(s) / attribute</th>
+<th>Meaning</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><code>fs_&lt;name&gt;</code></td>
+<td>the factor score</td>
+</tr>
+<tr class="even">
+<td><code>fs_&lt;name&gt;_se</code></td>
+<td>that score’s standard error — the measurement-error term
+<code><a href="../reference/tspa.html">tspa()</a></code> corrects for</td>
+</tr>
+<tr class="odd">
+<td><code>ev_fs_&lt;name&gt;</code></td>
+<td>the score’s error variance</td>
+</tr>
+<tr class="even">
+<td><code>ecov_fs_&lt;a&gt;_fs_&lt;b&gt;</code></td>
+<td>error covariance between scores <code>a</code> and <code>b</code>
+(only from a shared multi-factor model)</td>
+</tr>
+<tr class="odd">
+<td><code>&lt;indicator&gt;_by_fs_&lt;name&gt;</code></td>
+<td>model-implied loading — the mean of the indicator on the score</td>
+</tr>
+<tr class="even">
+<td><code>attr(fs, "fsT")</code></td>
+<td>the score error variance-covariance (carries correlated errors and
+cross-loadings)</td>
+</tr>
+<tr class="odd">
+<td><code>attr(fs, "fsL")</code></td>
+<td>the implied loading of each latent on the score</td>
+</tr>
+<tr class="even">
+<td><code>attr(fs, "fsb")</code></td>
+<td>the scoring-equation intercept, one per score (named by the score,
+e.g. <code>fs_ind60</code>; <code>0</code> for a complete-data
+single-factor CFA, varying per row when the measurement quantities
+do)</td>
+</tr>
+</tbody>
+</table>
+<p>The attributes are what <code><a href="../reference/tspa_mx_model.html">tspa_mx_model()</a></code> consumes, and
+<code>tspa(fsb = ...)</code> uses <code>fsb</code> to fix the stage-2
+intercept constraints. <code>fs_indiv(include_intercept = TRUE)</code>
+materializes the <code>fsb</code> values as
+<code>int_fs_&lt;f&gt;</code> columns, which is how the
+<code><a href="../reference/tspa_mx_model.html">tspa_mx_model()</a></code> examples wire up the score-intercept
+definition variables
+(<code>fsb = c(fs_ind60 = "int_fs_ind60", ...)</code>).</p>
+</div>
+<div class="section level2">
+<h2 id="mean-sum-scores">Mean (sum) scores<a class="anchor" aria-label="anchor" href="#mean-sum-scores"></a>
+</h2>
+<p><code><a href="../reference/get_fs.html">get_fs()</a></code> can also score a construct as its <strong>mean
+score</strong> — the plain mean of the items that load on it, with no
+latent distribution — a simpler alternative to the default regression
+(EB) scores. Request it with <code>method = "mean"</code> (the
+item-to-factor split is auto-derived from the estimated loadings, or
+supplied via <code>sum_items</code>):</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fs_mean</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">PoliticalDemocracy</span>,</span>
+<span>                  model <span class="op">=</span> <span class="st">"ind60 =~ x1 + x2 + x3</span></span>
+<span><span class="st">                           dem60 =~ y1 + y2 + y3 + y4"</span>,</span>
+<span>                  method <span class="op">=</span> <span class="st">"mean"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">fs_mean</span><span class="op">)</span>   <span class="co"># fs_ind60 == rowMeans(x1, x2, x3); constant fs_&lt;name&gt;_se per factor</span></span></code></pre></div>
+<pre><code><span><span class="co">##   fs_ind60 fs_dem60 fs_ind60_se fs_dem60_se ind60_by_fs_ind60 ind60_by_fs_dem60</span></span>
+<span><span class="co">## 1 3.545951 1.458333   0.2725027    1.014152          1.666078                 0</span></span>
+<span><span class="co">## 2 4.671723 1.145833   0.2725027    1.014152          1.666078                 0</span></span>
+<span><span class="co">## 3 5.813729 8.874997   0.2725027    1.014152          1.666078                 0</span></span>
+<span><span class="co">## 4 6.707119 9.224997   0.2725027    1.014152          1.666078                 0</span></span>
+<span><span class="co">## 5 5.752078 7.499999   0.2725027    1.014152          1.666078                 0</span></span>
+<span><span class="co">## 6 4.853819 6.041666   0.2725027    1.014152          1.666078                 0</span></span>
+<span><span class="co">##   dem60_by_fs_ind60 dem60_by_fs_dem60 ev_fs_ind60 ecov_fs_dem60_fs_ind60</span></span>
+<span><span class="co">## 1                 0          1.235413  0.07425774                      0</span></span>
+<span><span class="co">## 2                 0          1.235413  0.07425774                      0</span></span>
+<span><span class="co">## 3                 0          1.235413  0.07425774                      0</span></span>
+<span><span class="co">## 4                 0          1.235413  0.07425774                      0</span></span>
+<span><span class="co">## 5                 0          1.235413  0.07425774                      0</span></span>
+<span><span class="co">## 6                 0          1.235413  0.07425774                      0</span></span>
+<span><span class="co">##   ev_fs_dem60</span></span>
+<span><span class="co">## 1    1.028505</span></span>
+<span><span class="co">## 2    1.028505</span></span>
+<span><span class="co">## 3    1.028505</span></span>
+<span><span class="co">## 4    1.028505</span></span>
+<span><span class="co">## 5    1.028505</span></span>
+<span><span class="co">## 6    1.028505</span></span></code></pre>
+<p>A mean score is a composite of items, so its measurement error is
+carried by the <code>fsT</code>/<code>fsL</code>/<code>fsb</code> form
+(the cross terms are exactly zero for a plain CFA). <code><a href="../reference/tspa.html">tspa()</a></code>
+reads those from the result’s attributes:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tspa_mean_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60"</span>,</span>
+<span>                      data <span class="op">=</span> <span class="va">fs_mean</span>,</span>
+<span>                      fsT <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_mean</span>, <span class="st">"fsT"</span><span class="op">)</span>,</span>
+<span>                      fsL <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_mean</span>, <span class="st">"fsL"</span><span class="op">)</span>,</span>
+<span>                      fsb <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_mean</span>, <span class="st">"fsb"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">tspa_mean_fit</span>, standardized <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+<pre><code><span><span class="co">## lavaan 0.7-2 ended normally after 22 iterations</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">##   Estimator                                         ML</span></span>
+<span><span class="co">##   Optimization method                           NLMINB</span></span>
+<span><span class="co">##   Number of model parameters                         3</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">##   Number of observations                            75</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## Model Test User Model:</span></span>
+<span><span class="co">##                                                       </span></span>
+<span><span class="co">##   Test statistic                                 0.000</span></span>
+<span><span class="co">##   Degrees of freedom                                 2</span></span>
+<span><span class="co">##   P-value (Chi-square)                           1.000</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## Parameter Estimates:</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">##   Standard errors                             Standard</span></span>
+<span><span class="co">##   Information                                 Expected</span></span>
+<span><span class="co">##   Information saturated (h1) model          Structured</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## Latent Variables:</span></span>
+<span><span class="co">##                    Estimate  Std.Err  z-value  P(&gt;|z|)   Std.lv  Std.all</span></span>
+<span><span class="co">##   ind60 =~                                                              </span></span>
+<span><span class="co">##     fs_ind60          1.666                               1.116    0.971</span></span>
+<span><span class="co">##     fs_dem60          0.000                               0.000    0.000</span></span>
+<span><span class="co">##   dem60 =~                                                              </span></span>
+<span><span class="co">##     fs_ind60          0.000                               0.000    0.000</span></span>
+<span><span class="co">##     fs_dem60          1.235                               2.583    0.931</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## Regressions:</span></span>
+<span><span class="co">##                    Estimate  Std.Err  z-value  P(&gt;|z|)   Std.lv  Std.all</span></span>
+<span><span class="co">##   dem60 ~                                                               </span></span>
+<span><span class="co">##     ind60             1.319    0.369    3.577    0.000    0.422    0.422</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## Covariances:</span></span>
+<span><span class="co">##                    Estimate  Std.Err  z-value  P(&gt;|z|)   Std.lv  Std.all</span></span>
+<span><span class="co">##  .fs_ind60 ~~                                                           </span></span>
+<span><span class="co">##    .fs_dem60          0.000                               0.000    0.000</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## Intercepts:</span></span>
+<span><span class="co">##                    Estimate  Std.Err  z-value  P(&gt;|z|)   Std.lv  Std.all</span></span>
+<span><span class="co">##    .fs_ind60          4.468                               4.468    3.890</span></span>
+<span><span class="co">##    .fs_dem60          5.184                               5.184    1.868</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## Variances:</span></span>
+<span><span class="co">##                    Estimate  Std.Err  z-value  P(&gt;|z|)   Std.lv  Std.all</span></span>
+<span><span class="co">##    .fs_ind60          0.074                               0.074    0.056</span></span>
+<span><span class="co">##    .fs_dem60          1.029                               1.029    0.134</span></span>
+<span><span class="co">##     ind60             0.449    0.078    5.779    0.000    1.000    1.000</span></span>
+<span><span class="co">##    .dem60             3.591    0.704    5.101    0.000    0.822    0.822</span></span></code></pre>
+<p><code>method = "mean"</code> is for complete-data fits: it errors
+when stage 1 retains missing data (e.g. <code>missing = "fiml"</code>)
+and is not supported together with <code>corrected_fsT</code>,
+<code>vfsLT</code>, <code>reliability</code>, <code>prior_mean</code>,
+or <code>prior_cov</code>.</p>
+</div>
+<div class="section level2">
+<h2 id="single-group-single-factor">Single group, single factor<a class="anchor" aria-label="anchor" href="#single-group-single-factor"></a>
+</h2>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">model</span> <span class="op">&lt;-</span> <span class="st">' </span></span>
 <span><span class="st">  # latent variable definitions</span></span>
 <span><span class="st">     ind60 =~ x1 + x2 + x3</span></span>
-<span><span class="st">     dem60 =~ y1 + a*y2 + b*y3 + c*y4</span></span>
+<span><span class="st">     dem60 =~ y1 + y2 + y3 + y4</span></span>
 <span><span class="st"></span></span>
 <span><span class="st">  # regressions</span></span>
 <span><span class="st">    dem60 ~ ind60</span></span>
@@ -101,49 +347,109 @@ the latent variable &lt;code&gt;dem60&lt;/code&gt;.&lt;/p&gt;"><sup>1</sup></a><
 <p>To call <code><a href="../reference/tspa.html">tspa()</a></code>, a data frame of factor scores is needed
 for all latent variables. To get this data frame, apply
 <code><a href="../reference/get_fs.html">get_fs()</a></code> to all latent variables and specify model
-parameter as their respective definitions. Combine factor scores for all
-latent variable using <code><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind()</a></code> so that it can be used in
-<code><a href="../reference/tspa.html">tspa()</a></code> for model building.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">fs_dat_ind60</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">PoliticalDemocracy</span>, </span>
+parameters as their respective definitions. Combine factor scores for
+all latent variables using <code><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind()</a></code> so that it can be used
+in <code><a href="../reference/tspa.html">tspa()</a></code> for model building.</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fs_dat_ind60</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">PoliticalDemocracy</span>, </span>
 <span>                       model <span class="op">=</span> <span class="st">"ind60 =~ x1 + x2 + x3"</span><span class="op">)</span></span>
-<span><span class="va">fs_dat_dem60</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">PoliticalDemocracy</span>, </span>
+<span><span class="va">fs_dat_dem60</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">PoliticalDemocracy</span>, </span>
 <span>                       model <span class="op">=</span> <span class="st">"dem60 =~ y1 + y2 + y3 + y4"</span><span class="op">)</span></span>
-<span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">fs_dat_ind60</span>, <span class="va">fs_dat_dem60</span><span class="op">)</span></span></code></pre></div>
+<span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">fs_dat_ind60</span>, <span class="va">fs_dat_dem60</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">fs_dat</span><span class="op">)</span></span></code></pre></div>
+<pre><code><span><span class="co">##     fs_ind60 fs_ind60_se ind60_by_fs_ind60 ev_fs_ind60   fs_dem60 fs_dem60_se</span></span>
+<span><span class="co">## 1 -0.5261683   0.1213615         0.9657673  0.01472862 -2.7487224   0.6756472</span></span>
+<span><span class="co">## 2  0.1436527   0.1213615         0.9657673  0.01472862 -3.0360803   0.6756472</span></span>
+<span><span class="co">## 3  0.7143559   0.1213615         0.9657673  0.01472862  2.6718589   0.6756472</span></span>
+<span><span class="co">## 4  1.2399257   0.1213615         0.9657673  0.01472862  2.9936997   0.6756472</span></span>
+<span><span class="co">## 5  0.8319080   0.1213615         0.9657673  0.01472862  1.9242932   0.6756472</span></span>
+<span><span class="co">## 6  0.2123845   0.1213615         0.9657673  0.01472862  0.9922798   0.6756472</span></span>
+<span><span class="co">##   dem60_by_fs_dem60 ev_fs_dem60</span></span>
+<span><span class="co">## 1         0.8868049   0.4564991</span></span>
+<span><span class="co">## 2         0.8868049   0.4564991</span></span>
+<span><span class="co">## 3         0.8868049   0.4564991</span></span>
+<span><span class="co">## 4         0.8868049   0.4564991</span></span>
+<span><span class="co">## 5         0.8868049   0.4564991</span></span>
+<span><span class="co">## 6         0.8868049   0.4564991</span></span></code></pre>
 <p>To build a Two-Stage Path Analysis model, simply call the
-<code><a href="../reference/tspa.html">tspa()</a></code> function with model = regressions, data = The
+<code><a href="../reference/tspa.html">tspa()</a></code> function with model = regressions, data = the
 combined factor score data frame using <code><a href="../reference/get_fs.html">get_fs()</a></code>, and
 specify standard error as either a list or a data frame. Values for
 standard error can be found at column named
 <code>fs_[variable name]_se</code>. For example, the standard error of
 latent variable ind60 can be found at column <code>fs_ind60_se</code> in
 the <code>fs_dat</code> data frame.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tspa_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60"</span>, </span>
 <span>                 data <span class="op">=</span> <span class="va">fs_dat</span>, </span>
 <span>                 se_fs <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>ind60 <span class="op">=</span> <span class="fl">0.1213615</span>, dem60 <span class="op">=</span> <span class="fl">0.6756472</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p>We recently added support for <code><a href="../reference/tspa.html">tspa()</a></code> to directly grep
+the <code>fs_[variable name]_se</code> columns from the
+<code><a href="../reference/get_fs.html">get_fs()</a></code> output, so the <code>se_fs</code> argument can be
+omitted:</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tspa_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60"</span>, </span>
+<span>                 data <span class="op">=</span> <span class="va">fs_dat</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">tspa_fit</span>, standardized <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+<pre><code><span><span class="co">## lavaan 0.7-2 ended normally after 17 iterations</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">##   Estimator                                         ML</span></span>
+<span><span class="co">##   Optimization method                           NLMINB</span></span>
+<span><span class="co">##   Number of model parameters                         3</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">##   Number of observations                            75</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## Model Test User Model:</span></span>
+<span><span class="co">##                                                       </span></span>
+<span><span class="co">##   Test statistic                                 0.000</span></span>
+<span><span class="co">##   Degrees of freedom                                 0</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## Parameter Estimates:</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">##   Standard errors                             Standard</span></span>
+<span><span class="co">##   Information                                 Expected</span></span>
+<span><span class="co">##   Information saturated (h1) model          Structured</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## Latent Variables:</span></span>
+<span><span class="co">##                    Estimate  Std.Err  z-value  P(&gt;|z|)   Std.lv  Std.all</span></span>
+<span><span class="co">##   ind60 =~                                                              </span></span>
+<span><span class="co">##     fs_ind60          1.000                               0.645    0.983</span></span>
+<span><span class="co">##   dem60 =~                                                              </span></span>
+<span><span class="co">##     fs_dem60          1.000                               1.891    0.942</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## Regressions:</span></span>
+<span><span class="co">##                    Estimate  Std.Err  z-value  P(&gt;|z|)   Std.lv  Std.all</span></span>
+<span><span class="co">##   dem60 ~                                                               </span></span>
+<span><span class="co">##     ind60             1.329    0.332    4.000    0.000    0.453    0.453</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## Variances:</span></span>
+<span><span class="co">##                    Estimate  Std.Err  z-value  P(&gt;|z|)   Std.lv  Std.all</span></span>
+<span><span class="co">##    .fs_ind60          0.015                               0.015    0.034</span></span>
+<span><span class="co">##    .fs_dem60          0.456                               0.456    0.113</span></span>
+<span><span class="co">##     ind60             0.416    0.070    5.914    0.000    1.000    1.000</span></span>
+<span><span class="co">##    .dem60             2.842    0.543    5.235    0.000    0.795    0.795</span></span></code></pre>
 <p>To view the Two-Stage Path Analysis model, use
 <code>attributes([model name])$tspaModel</code>. Function
 <code><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat()</a></code> can help tidy up the model output. In the output, the
 values of error constraints are computed by squaring standard errors
 from the previous section.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attributes.html" class="external-link">attributes</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span><span class="op">$</span><span class="va">tspaModel</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## # latent variables (indicated by factor scores)</span></span>
-<span><span class="co">## ind60=~ c(1) * fs_ind60</span></span>
-<span><span class="co">## dem60=~ c(1) * fs_dem60</span></span>
+<span><span class="co">## ind60 =~ 1 * fs_ind60</span></span>
+<span><span class="co">## dem60 =~ 1 * fs_dem60</span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## # constrain the errors</span></span>
-<span><span class="co">## fs_ind60~~ c(0.01472861368225) * fs_ind60</span></span>
-<span><span class="co">## fs_dem60~~ c(0.45649913886784) * fs_dem60</span></span>
+<span><span class="co">## fs_ind60 ~~ 0.0147286194470875 * fs_ind60</span></span>
+<span><span class="co">## fs_dem60 ~~ 0.456499146148539 * fs_dem60</span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## # structural model</span></span>
 <span><span class="co">## dem60 ~ ind60</span></span></code></pre>
 </div>
 <div class="section level2">
-<h2 id="single-group-multiple-predictors">Single group, multiple predictors<a class="anchor" aria-label="anchor" href="#single-group-multiple-predictors"></a>
+<h2 id="single-group-multiple-factors">Single group, multiple factors<a class="anchor" aria-label="anchor" href="#single-group-multiple-factors"></a>
 </h2>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">model</span> <span class="op">&lt;-</span> <span class="st">' </span></span>
 <span><span class="st">  # latent variable definitions</span></span>
 <span><span class="st">     ind60 =~ x1 + x2 + x3</span></span>
@@ -167,50 +473,112 @@ for all latent variables. To get this data frame, apply
 parameters as their respective definitions. Combine factor scores for
 all latent variables using <code><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind()</a></code> to call
 <code><a href="../reference/tspa.html">tspa()</a></code> for model building.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">fs_dat_ind60</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">PoliticalDemocracy</span>, </span>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fs_dat_ind60</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">PoliticalDemocracy</span>, </span>
 <span>                       model <span class="op">=</span> <span class="st">"ind60 =~ x1 + x2 + x3"</span><span class="op">)</span></span>
-<span><span class="va">fs_dat_dem60</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">PoliticalDemocracy</span>, </span>
+<span><span class="va">fs_dat_dem60</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">PoliticalDemocracy</span>, </span>
 <span>                       model <span class="op">=</span> <span class="st">"dem60 =~ y1 + y2 + y3 + y4"</span><span class="op">)</span></span>
-<span><span class="va">fs_dat_dem65</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">PoliticalDemocracy</span>, </span>
+<span><span class="va">fs_dat_dem65</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">PoliticalDemocracy</span>, </span>
 <span>                       model <span class="op">=</span> <span class="st">"dem65 =~ y5 + y6 + y7 + y8"</span><span class="op">)</span></span>
 <span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">fs_dat_ind60</span>, <span class="va">fs_dat_dem60</span>, <span class="va">fs_dat_dem65</span><span class="op">)</span></span></code></pre></div>
+<p>We recently made <code><a href="../reference/get_fs.html">get_fs()</a></code> to support a multi-factor
+model input, but computing the factor scores separately for each latent
+variable via the argument <code>local = TRUE</code>.</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># This is equivalent to the previous chunk:</span></span>
+<span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">PoliticalDemocracy</span>, </span>
+<span>                 model <span class="op">=</span> <span class="st">"ind60 =~ x1 + x2 + x3</span></span>
+<span><span class="st">                          dem60 =~ y1 + y2 + y3 + y4</span></span>
+<span><span class="st">                          dem65 =~ y5 + y6 + y7 + y8"</span>,</span>
+<span>                 local <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">fs_dat</span><span class="op">)</span>  <span class="co"># check that the error covariances and cross-loadings are zero.</span></span></code></pre></div>
+<pre><code><span><span class="co">##     fs_ind60   fs_dem60  fs_dem65 fs_ind60_se fs_dem60_se fs_dem65_se</span></span>
+<span><span class="co">## 1 -0.5261683 -2.7487224 -1.371719   0.1213615   0.6756472   0.5724405</span></span>
+<span><span class="co">## 2  0.1436527 -3.0360803 -0.950851   0.1213615   0.6756472   0.5724405</span></span>
+<span><span class="co">## 3  0.7143559  2.6718589  2.738012   0.1213615   0.6756472   0.5724405</span></span>
+<span><span class="co">## 4  1.2399257  2.9936997  1.785091   0.1213615   0.6756472   0.5724405</span></span>
+<span><span class="co">## 5  0.8319080  1.9242932  1.544704   0.1213615   0.6756472   0.5724405</span></span>
+<span><span class="co">## 6  0.2123845  0.9922798 -1.050841   0.1213615   0.6756472   0.5724405</span></span>
+<span><span class="co">##   ind60_by_fs_ind60 ind60_by_fs_dem60 ind60_by_fs_dem65 dem60_by_fs_ind60</span></span>
+<span><span class="co">## 1         0.9657673                 0                 0                 0</span></span>
+<span><span class="co">## 2         0.9657673                 0                 0                 0</span></span>
+<span><span class="co">## 3         0.9657673                 0                 0                 0</span></span>
+<span><span class="co">## 4         0.9657673                 0                 0                 0</span></span>
+<span><span class="co">## 5         0.9657673                 0                 0                 0</span></span>
+<span><span class="co">## 6         0.9657673                 0                 0                 0</span></span>
+<span><span class="co">##   dem60_by_fs_dem60 dem60_by_fs_dem65 dem65_by_fs_ind60 dem65_by_fs_dem60</span></span>
+<span><span class="co">## 1         0.8868049                 0                 0                 0</span></span>
+<span><span class="co">## 2         0.8868049                 0                 0                 0</span></span>
+<span><span class="co">## 3         0.8868049                 0                 0                 0</span></span>
+<span><span class="co">## 4         0.8868049                 0                 0                 0</span></span>
+<span><span class="co">## 5         0.8868049                 0                 0                 0</span></span>
+<span><span class="co">## 6         0.8868049                 0                 0                 0</span></span>
+<span><span class="co">##   dem65_by_fs_dem65 ev_fs_ind60 ecov_fs_dem60_fs_ind60 ev_fs_dem60</span></span>
+<span><span class="co">## 1         0.8998252  0.01472862                      0   0.4564991</span></span>
+<span><span class="co">## 2         0.8998252  0.01472862                      0   0.4564991</span></span>
+<span><span class="co">## 3         0.8998252  0.01472862                      0   0.4564991</span></span>
+<span><span class="co">## 4         0.8998252  0.01472862                      0   0.4564991</span></span>
+<span><span class="co">## 5         0.8998252  0.01472862                      0   0.4564991</span></span>
+<span><span class="co">## 6         0.8998252  0.01472862                      0   0.4564991</span></span>
+<span><span class="co">##   ecov_fs_dem65_fs_ind60 ecov_fs_dem65_fs_dem60 ev_fs_dem65</span></span>
+<span><span class="co">## 1                      0                      0   0.3276882</span></span>
+<span><span class="co">## 2                      0                      0   0.3276882</span></span>
+<span><span class="co">## 3                      0                      0   0.3276882</span></span>
+<span><span class="co">## 4                      0                      0   0.3276882</span></span>
+<span><span class="co">## 5                      0                      0   0.3276882</span></span>
+<span><span class="co">## 6                      0                      0   0.3276882</span></span></code></pre>
 <p>To build a Two-Stage Path Analysis model, simply call the
 <code><a href="../reference/tspa.html">tspa()</a></code> function with model = regressions (for all
-predictors), data = the factor score data frame created by combining
-results from <code><a href="../reference/get_fs.html">get_fs()</a></code>, and specify standard errors as
-either a list or a data frame. Values for standard errors can be found
-at column named <code>fs_[variable name]_se</code>.<a class="footnote-ref" tabindex="0" data-bs-toggle="popover" data-bs-content="&lt;p&gt;The text inside &lt;code&gt;[]&lt;/code&gt; should be replaced with
-actual variable and model name.&lt;/p&gt;"><sup>2</sup></a> For example, the
-standard error of latent variable ind60 can be found at column
-<code>fs_ind60_se</code> in the <code>fs_dat</code> data frame. In the
+predictors) and data = the factor score data frame created by combining
+results from <code><a href="../reference/get_fs.html">get_fs()</a></code>. Each score’s standard error is
+available in the column named <code>fs_[variable name]_se</code>.<a class="footnote-ref" tabindex="0" data-bs-toggle="popover" data-bs-content="&lt;p&gt;The text inside &lt;code&gt;[]&lt;/code&gt; should be replaced with
+the actual variable name.&lt;/p&gt;"><sup>1</sup></a> For
+example, the standard error of latent variable ind60 is in column
+<code>fs_ind60_se</code> of the <code>fs_dat</code> data frame. Because
+the combined frame carries each score’s
+<code>fs_[variable name]_se</code> column from <code><a href="../reference/get_fs.html">get_fs()</a></code>,
+<code><a href="../reference/tspa.html">tspa()</a></code> reads those standard errors from the columns
+automatically, so the <code>se_fs</code> argument can be omitted
+(passing it explicitly as a list or a data frame still works). In the
 output model, the values of error constraints are computed by squaring
-standard errors.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+the standard errors.</p>
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tspa_3var_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60</span></span>
-<span><span class="st">                          dem65 ~ ind60 + dem60"</span>, </span>
-<span>                      data <span class="op">=</span> <span class="va">fs_dat</span>, </span>
-<span>                      se_fs <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>ind60 <span class="op">=</span> <span class="fl">0.1213615</span>, dem60 <span class="op">=</span> <span class="fl">0.6756472</span>, </span>
-<span>                                   dem65 <span class="op">=</span> <span class="fl">0.5724405</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="st">                               dem65 ~ ind60 + dem60"</span>, </span>
+<span>                      data <span class="op">=</span> <span class="va">fs_dat</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attributes.html" class="external-link">attributes</a></span><span class="op">(</span><span class="va">tspa_3var_fit</span><span class="op">)</span><span class="op">$</span><span class="va">tspaModel</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## # latent variables (indicated by factor scores)</span></span>
-<span><span class="co">## ind60=~ c(1) * fs_ind60</span></span>
-<span><span class="co">## dem60=~ c(1) * fs_dem60</span></span>
-<span><span class="co">## dem65=~ c(1) * fs_dem65</span></span>
-<span><span class="co">## </span></span>
+<span><span class="co">## ind60 =~ 0.965767270434244 * fs_ind60 + 0 * fs_dem60 + 0 * fs_dem65</span></span>
+<span><span class="co">## # latent variables (indicated by factor scores)</span></span>
+<span><span class="co">## dem60 =~ 0 * fs_ind60 + 0.886804906625876 * fs_dem60 + 0 * fs_dem65</span></span>
+<span><span class="co">## # latent variables (indicated by factor scores)</span></span>
+<span><span class="co">## dem65 =~ 0 * fs_ind60 + 0 * fs_dem60 + 0.899825222245714 * fs_dem65</span></span>
 <span><span class="co">## # constrain the errors</span></span>
-<span><span class="co">## fs_ind60~~ c(0.01472861368225) * fs_ind60</span></span>
-<span><span class="co">## fs_dem60~~ c(0.45649913886784) * fs_dem60</span></span>
-<span><span class="co">## fs_dem65~~ c(0.32768812604025) * fs_dem65</span></span>
-<span><span class="co">## </span></span>
+<span><span class="co">## fs_ind60 ~~ 0.0147286194470875 * fs_ind60</span></span>
+<span><span class="co">## # constrain the errors</span></span>
+<span><span class="co">## fs_dem60 ~~ 0 * fs_ind60</span></span>
+<span><span class="co">## # constrain the errors</span></span>
+<span><span class="co">## fs_dem65 ~~ 0 * fs_ind60</span></span>
+<span><span class="co">## # constrain the errors</span></span>
+<span><span class="co">## fs_dem60 ~~ 0.456499146148539 * fs_dem60</span></span>
+<span><span class="co">## # constrain the errors</span></span>
+<span><span class="co">## fs_dem65 ~~ 0 * fs_dem60</span></span>
+<span><span class="co">## # constrain the errors</span></span>
+<span><span class="co">## fs_dem65 ~~ 0.327688166837143 * fs_dem65</span></span>
+<span><span class="co">## # constrain the intercepts</span></span>
+<span><span class="co">## fs_ind60 ~ 0 * 1</span></span>
+<span><span class="co">## # constrain the intercepts</span></span>
+<span><span class="co">## fs_dem60 ~ 0 * 1</span></span>
+<span><span class="co">## # constrain the intercepts</span></span>
+<span><span class="co">## fs_dem65 ~ 0 * 1</span></span>
 <span><span class="co">## # structural model</span></span>
 <span><span class="co">## dem60 ~ ind60</span></span>
-<span><span class="co">##                           dem65 ~ ind60 + dem60</span></span></code></pre>
+<span><span class="co">##                                dem65 ~ ind60 + dem60</span></span></code></pre>
 </div>
 <div class="section level2">
-<h2 id="multigroup-single-predictor">Multigroup, single predictor<a class="anchor" aria-label="anchor" href="#multigroup-single-predictor"></a>
+<h2 id="multigroup-multiple-factors">Multigroup, multiple factors<a class="anchor" aria-label="anchor" href="#multigroup-multiple-factors"></a>
 </h2>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">model</span> <span class="op">&lt;-</span> <span class="st">' </span></span>
 <span><span class="st">  # latent variable definitions</span></span>
 <span><span class="st">    visual =~ x1 + x2 + x3</span></span>
@@ -220,70 +588,159 @@ standard errors.</p>
 <span><span class="st">    visual ~ speed</span></span>
 <span><span class="st">'</span></span></code></pre></div>
 <p>To call <code><a href="../reference/tspa.html">tspa()</a></code>, a data frame of factor scores is needed
-for all multigroup variables. To get this data frame, apply
-<code><a href="../reference/get_fs.html">get_fs()</a></code> to all multigroup variables and specify model
-parameter as their respective definitions. Combine factor scores for all
-multigroup variables using <code><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind()</a></code> so that it can be fed in
-<code><a href="../reference/tspa.html">tspa()</a></code> for model building.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+for all latent variables for each group. To get this data frame, you can
+use the above strategy to compute factor scores separately for each
+latent variable with the <code>local = TRUE</code> argument.
+Alternatively, you can use the default (<code>local = FALSE</code>),
+which computes factor scores for all latent variables simultaneously,
+but resulting in correlated measurement errors and cross-loadings with
+the regression method for factor scores (see more discussion in the <a href="scoring-matrices.html"><code>Scoring Matrices: lavaan CFA and lme4</code></a>
+vignette).</p>
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">hs_mod</span> <span class="op">&lt;-</span> <span class="st">'</span></span>
 <span><span class="st">visual =~ x1 + x2 + x3</span></span>
 <span><span class="st">speed =~ x7 + x8 + x9</span></span>
 <span><span class="st">'</span></span>
 <span></span>
-<span><span class="co"># get factor scores</span></span>
-<span><span class="va">fs_dat_visual</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">HolzingerSwineford1939</span>, </span>
-<span>                        model <span class="op">=</span> <span class="st">"visual =~ x1 + x2 + x3"</span>, </span>
-<span>                        group <span class="op">=</span> <span class="st">"school"</span><span class="op">)</span></span>
-<span><span class="va">fs_dat_speed</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">HolzingerSwineford1939</span>, </span>
-<span>                       model <span class="op">=</span> <span class="st">"speed =~ x7 + x8 + x9"</span>, </span>
-<span>                       group <span class="op">=</span> <span class="st">"school"</span><span class="op">)</span></span>
-<span><span class="va">fs_hs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="va">fs_dat_visual</span><span class="op">)</span>,</span>
-<span>               <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="va">fs_dat_speed</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<span><span class="co"># get factor scores (joint model)</span></span>
+<span><span class="va">fs_hs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">HolzingerSwineford1939</span>, model <span class="op">=</span> <span class="va">hs_mod</span>, group <span class="op">=</span> <span class="st">"school"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">fs_hs</span><span class="op">)</span>  <span class="co"># with cross-loadings and correlated measurement errors</span></span></code></pre></div>
+<pre><code><span><span class="co">##      fs_visual      fs_speed fs_visual_se fs_speed_se visual_by_fs_visual</span></span>
+<span><span class="co">## 1 -0.818816609  0.0004278866    0.3483615   0.2590721           0.6513207</span></span>
+<span><span class="co">## 2 -0.021268888  0.5125828715    0.3483615   0.2590721           0.6513207</span></span>
+<span><span class="co">## 3 -0.494499099 -0.7827848448    0.3483615   0.2590721           0.6513207</span></span>
+<span><span class="co">## 4  0.385267108 -0.2971447381    0.3483615   0.2590721           0.6513207</span></span>
+<span><span class="co">## 5 -0.637443617  0.1213326700    0.3483615   0.2590721           0.6513207</span></span>
+<span><span class="co">## 6  0.008040415  0.6167608726    0.3483615   0.2590721           0.6513207</span></span>
+<span><span class="co">##   visual_by_fs_speed speed_by_fs_visual speed_by_fs_speed ev_fs_visual</span></span>
+<span><span class="co">## 1         0.06263767          0.1017434         0.6168097    0.1213557</span></span>
+<span><span class="co">## 2         0.06263767          0.1017434         0.6168097    0.1213557</span></span>
+<span><span class="co">## 3         0.06263767          0.1017434         0.6168097    0.1213557</span></span>
+<span><span class="co">## 4         0.06263767          0.1017434         0.6168097    0.1213557</span></span>
+<span><span class="co">## 5         0.06263767          0.1017434         0.6168097    0.1213557</span></span>
+<span><span class="co">## 6         0.06263767          0.1017434         0.6168097    0.1213557</span></span>
+<span><span class="co">##   ecov_fs_speed_fs_visual ev_fs_speed  school</span></span>
+<span><span class="co">## 1              0.02238692  0.06711836 Pasteur</span></span>
+<span><span class="co">## 2              0.02238692  0.06711836 Pasteur</span></span>
+<span><span class="co">## 3              0.02238692  0.06711836 Pasteur</span></span>
+<span><span class="co">## 4              0.02238692  0.06711836 Pasteur</span></span>
+<span><span class="co">## 5              0.02238692  0.06711836 Pasteur</span></span>
+<span><span class="co">## 6              0.02238692  0.06711836 Pasteur</span></span></code></pre>
 <p>To build a Two-Stage Path Analysis model, simply call the
-<code><a href="../reference/tspa.html">tspa()</a></code> function with model = regression relation. Specify
-standard error as either a list or a data frame. Values for standard
-error can be found at column named <code>fs_[variable name]_se</code>.
-For example, the standard error of the multigroup variable visual can be
-found at column <code>fs_visual_se</code> in the <code>fs_hs</code> data
-frame. To get the standard errors for each group faster,
-<code><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique()</a></code> can be called upon the standard error column. For
-example, in this case, <code>unique(fs_hs$fs_visual_se)</code> can be
-called to get the standard errors for multigroup variable visual.</p>
+<code><a href="../reference/tspa.html">tspa()</a></code> function with model = the regression relation, data
+= the combined factor score data frame, and <code>group</code> = the
+grouping column (here <code>"school"</code>). Each score’s standard
+error is available in the column named
+<code>fs_[variable name]_se</code>. For example, the standard error of
+the multigroup variable visual is in column <code>fs_visual_se</code> of
+the <code>fs_hs</code> data frame. Because <code>fs_hs</code> comes from
+<code><a href="../reference/get_fs.html">get_fs()</a></code>, <code><a href="../reference/tspa.html">tspa()</a></code> reads the per-group standard
+errors from those columns automatically, so the <code>se_fs</code>
+argument can be omitted (passing it explicitly as a data frame still
+works). The <code><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique()</a></code> function is handy for inspecting the
+per-group standard errors: for example,
+<code>unique(fs_hs$fs_visual_se)</code> shows the standard error of
+visual in each group.</p>
 <p>Function <code><a href="https://rdrr.io/pkg/lavaan/man/standardizedSolution.html" class="external-link">standardizedsolution()</a></code> enables user to view a
-table of standard error, z score, p-value, and lower bound of confidence
-interval for each multigroup regression relation.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+table of the standardized estimate, standard error, z score, p-value,
+and confidence interval bounds for each multigroup regression
+relation.</p>
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># tspa model</span></span>
 <span><span class="va">tspa_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"visual ~ speed"</span>,</span>
 <span>                 data <span class="op">=</span> <span class="va">fs_hs</span>,</span>
-<span>                 se_fs <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>visual <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.3391326</span>, <span class="fl">0.311828</span><span class="op">)</span>,</span>
-<span>                                    speed <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.2786875</span>, <span class="fl">0.2740507</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>                 group <span class="op">=</span> <span class="st">"school"</span></span>
 <span>                 <span class="co"># group.equal = "regressions"</span></span>
 <span>                 <span class="op">)</span></span>
 <span><span class="va">stdsol</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/standardizedSolution.html" class="external-link">standardizedsolution</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="va">stdsol</span>, subset <span class="op">=</span> <span class="va">op</span> <span class="op">==</span> <span class="st">"~"</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">##       lhs op   rhs group est.std    se     z pvalue ci.lower ci.upper</span></span>
-<span><span class="co">## 5  visual  ~ speed     1   0.277 0.114 2.423  0.015    0.053    0.501</span></span>
-<span><span class="co">## 16 visual  ~ speed     2   0.439 0.095 4.627  0.000    0.253    0.625</span></span></code></pre>
+<span><span class="co">## 10 visual  ~ speed     1   0.335 0.115 2.920  0.003    0.110    0.560</span></span>
+<span><span class="co">## 24 visual  ~ speed     2   0.500 0.094 5.332  0.000    0.316    0.684</span></span></code></pre>
 <p>To view the Two-Stage Path Analysis model for multigroup, use
 <code>attributes([model name])$tspaModel</code>. Function
 <code><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat()</a></code> can help tidy up the model output. In the output, the
 values of error constraints are computed by squaring standard errors
 from the previous section.</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attributes.html" class="external-link">attributes</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span><span class="op">$</span><span class="va">tspaModel</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## # latent variables (indicated by factor scores)</span></span>
-<span><span class="co">## visual=~ c(1, 1) * fs_visual</span></span>
-<span><span class="co">## speed=~ c(1, 1) * fs_speed</span></span>
-<span><span class="co">## </span></span>
+<span><span class="co">## visual =~ c(0.651320651151504, 0.630164103758516) * fs_visual + c(0.062637668106974, 0.0735865303140717) * fs_speed</span></span>
+<span><span class="co">## # latent variables (indicated by factor scores)</span></span>
+<span><span class="co">## speed =~ c(0.101743373278373, 0.163519554160675) * fs_visual + c(0.616809744932919, 0.757903096858229) * fs_speed</span></span>
 <span><span class="co">## # constrain the errors</span></span>
-<span><span class="co">## fs_visual~~ c(0.11501092038276, 0.097236701584) * fs_visual</span></span>
-<span><span class="co">## fs_speed~~ c(0.07766672265625, 0.07510378617049) * fs_speed</span></span>
-<span><span class="co">## </span></span>
+<span><span class="co">## fs_visual ~~ c(0.121355749245672, 0.110660002585844) * fs_visual</span></span>
+<span><span class="co">## # constrain the errors</span></span>
+<span><span class="co">## fs_speed ~~ c(0.0223869195387284, 0.0276266319224011) * fs_visual</span></span>
+<span><span class="co">## # constrain the errors</span></span>
+<span><span class="co">## fs_speed ~~ c(0.0671183590966231, 0.0713803547181482) * fs_speed</span></span>
+<span><span class="co">## # constrain the intercepts</span></span>
+<span><span class="co">## fs_visual ~ c(0, 0) * 1</span></span>
+<span><span class="co">## # constrain the intercepts</span></span>
+<span><span class="co">## fs_speed ~ c(0, 0) * 1</span></span>
 <span><span class="co">## # structural model</span></span>
 <span><span class="co">## visual ~ speed</span></span></code></pre>
+</div>
+<div class="section level2">
+<h2 id="related-vignettes">Related vignettes<a class="anchor" aria-label="anchor" href="#related-vignettes"></a>
+</h2>
+<ul>
+<li>
+<a href="multiple-factors.html"><code>Multiple factors</code></a> —
+a score that is a composite of several indicators: the
+<code>fsT</code>/<code>fsL</code> path and <code><a href="../reference/tspa.html">tspa()</a></code>
+cross-loadings.</li>
+<li>
+<a href="multilevel.html"><code>2S-PA with Random Effects</code></a>
+— stage 1 from an <code>lme4</code> mixed model, feeding empirical-Bayes
+random effects into 2S-PA.</li>
+<li>
+<a href="scoring-matrices.html"><code>Scoring Matrices: lavaan CFA and lme4</code></a>
+— the per-observation scoring matrices <code><a href="../reference/get_fs.html">get_fs()</a></code> attaches,
+and the empirical-Bayes identity behind them.</li>
+<li>
+<a href="correction-error.html"><code>Correction to Measurement Error</code></a>
+— the measurement-error correction factor and its effect on standard
+errors.</li>
+<li>
+<a href="efa-score.html"><code>EFA Scores</code></a> — stage 1 from
+an exploratory factor analysis (EFA) rather than a CFA.</li>
+<li>
+<a href="tspa-growth-vignette.html"><code>Linear Growth Modeling with 2S-PA</code></a>
+— 2S-PA for longitudinal / growth-curve measurement models.</li>
+<li>
+<a href="tspa-vignette-mx.html"><code>2S-PA with OpenMx and IRT (mirt)</code></a>
+— stage 2 via <code><a href="../reference/tspa_mx_model.html">tspa_mx_model()</a></code> (OpenMx), including the
+<code>mirt</code> (IRT) path.</li>
+</ul>
+</div>
+<div class="section level2">
+<h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
+</h2>
+<ul>
+<li>Cole, D. A., &amp; Preacher, K. J. (2014). Manifest variable path
+analysis: Potentially serious and misleading consequences due to
+uncorrected measurement error. <em>Psychological Methods, 19</em>(2),
+300–315. <a href="https://doi.org/10.1037/a0033805" class="external-link">https://doi.org/10.1037/a0033805</a>
+</li>
+<li>Lai, M. H. C., &amp; Hsiao, Y.-Y. (2022). Two-stage path analysis
+with definition variables: An alternative framework to account for
+measurement error. <em>Psychological Methods, 27</em>(4), 568–588. <a href="https://doi.org/10.1037/met0000410" class="external-link">https://doi.org/10.1037/met0000410</a>
+</li>
+<li>Lai, M. H. C., Tse, W. W.-Y., Zhang, G., Li, Y., &amp; Hsiao, Y.-Y.
+(2023). Correcting for unreliability and partial invariance: A two-stage
+path analysis approach. <em>Structural Equation Modeling: A
+Multidisciplinary Journal, 30</em>(2), 258–271. <a href="https://doi.org/10.1080/10705511.2022.2125397" class="external-link">https://doi.org/10.1080/10705511.2022.2125397</a>
+</li>
+<li>Lai, M. H. C., &amp; Liu, S. (2026). A two-stage approach to account
+for measurement error when using empirical Bayes estimates of random
+slopes. <em>Psychological Methods.</em> Advance online publication. <a href="https://doi.org/10.1037/met0000838" class="external-link">https://doi.org/10.1037/met0000838</a>
+</li>
+<li>Rosseel, Y. (2012). <em>lavaan</em>: An R package for structural
+equation modeling. <em>Journal of Statistical Software, 48</em>(2),
+1–36. <a href="https://doi.org/10.18637/jss.v048.i02" class="external-link">https://doi.org/10.18637/jss.v048.i02</a>
+</li>
+</ul>
 </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
@@ -297,7 +754,7 @@ from the previous section.</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

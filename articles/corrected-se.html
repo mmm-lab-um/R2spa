@@ -7,9 +7,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Corrected Standard Errors • R2spa</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.4.2/css/all.min.css" rel="stylesheet">
-<link href="../deps/font-awesome-6.4.2/css/v4-shims.min.css" rel="stylesheet">
+<link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Corrected Standard Errors">
 </head>
 <body>
@@ -34,18 +34,17 @@
 <li class="active nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/categorical-interaction.html">Using Two-Stage Path Analysis with Definition Variables for Latent Interactions with Categorical Indicators</a></li>
-    <li><a class="dropdown-item" href="../articles/corrected-se.html">Corrected Standard Errors</a></li>
+<li><a class="dropdown-item" href="../articles/corrected-se.html">Corrected Standard Errors</a></li>
     <li><a class="dropdown-item" href="../articles/correction-error.html">Correction to Measurement Error</a></li>
     <li><a class="dropdown-item" href="../articles/efa-score.html">EFA Scores</a></li>
-    <li><a class="dropdown-item" href="../articles/get_fs_int-vignette.html">get_fs_int-example</a></li>
     <li><a class="dropdown-item" href="../articles/gr-std-coef.html">Grand Standardized Coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/missing-data.html">2S-PA with Missing Data</a></li>
+    <li><a class="dropdown-item" href="../articles/multilevel.html">2S-PA with Random Effects</a></li>
     <li><a class="dropdown-item" href="../articles/multiple-factors.html">Multi-Factor Measurement Model</a></li>
-    <li><a class="dropdown-item" href="../articles/reliability.html">Reliability of Factor Scores</a></li>
+    <li><a class="dropdown-item" href="../articles/product-factor-scores.html">Product factor-score indicators (latent interactions)</a></li>
+    <li><a class="dropdown-item" href="../articles/scoring-matrices.html">Scoring Matrices: lavaan CFA and lme4</a></li>
     <li><a class="dropdown-item" href="../articles/tspa-growth-vignette.html">Linear Growth Modeling with Two-Stage Path Analysis</a></li>
-    <li><a class="dropdown-item" href="../articles/tspa-plot-vignette.html">Diagnostic plots for `tspa` models</a></li>
-    <li><a class="dropdown-item" href="../articles/tspa-vignette-mx.html">Multi-Factor Measurement Model (OpenMx)</a></li>
+    <li><a class="dropdown-item" href="../articles/tspa-vignette-mx.html">2S-PA with OpenMx and IRT (mirt)</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -81,16 +80,16 @@ errors in 2S-PA, accounting for the uncertainty in the weights for
 obtaining the factor scores. It is described in <a href="https://doi.org/10.1007/s00181-020-01942-z" class="external-link">this paper</a>.</p>
 <p>The second-stage estimation treats as known the loading matrix and
 the error covariance matrix of the factor scores as indicators of the
-true latent latent variables. However, those are estimates based on the
+true latent variables. However, those are estimates based on the
 first-stage measurement model. When the sample size is large and/or the
-reliability of the factor scores are high, the uncertainty in the
+reliability of the factor scores is high, the uncertainty in the
 estimated loading and error covariance matrix is generally negligible.
 Otherwise, a first-order correction on the standard errors of the
 second-stage estimation is possible, as illustrated below.</p>
 <div class="section level2">
 <h2 id="first-order-correction-for-se">First-order correction for SE<a class="anchor" aria-label="anchor" href="#first-order-correction-for-se"></a>
 </h2>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mover><mi>V</mi><mo accent="true">̂</mo></mover><mrow><mi>γ</mi><mo>,</mo><mi>c</mi></mrow></msub><mo>=</mo><msub><mover><mi>V</mi><mo accent="true">̂</mo></mover><mi>γ</mi></msub><mo>+</mo><msub><mi>𝐉</mi><mi>𝛄</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><mover><mi>𝛉</mi><mo accent="true">̂</mo></mover><mo stretchy="true" form="postfix">)</mo></mrow><msub><mover><mi>V</mi><mo accent="true">̂</mo></mover><mi>θ</mi></msub><msub><mi>𝐉</mi><mi>𝛄</mi></msub><msup><mrow><mo stretchy="true" form="prefix">(</mo><mover><mi>𝛉</mi><mo accent="true">̂</mo></mover><mo stretchy="true" form="postfix">)</mo></mrow><mi>⊤</mi></msup><mo>,</mo></mrow><annotation encoding="application/x-tex">\hat V_{\gamma, c} = \hat V_{\gamma} + \boldsymbol{J}_\boldsymbol{\gamma}(\hat{\boldsymbol{\theta}}) \hat V_{\theta} \boldsymbol{J}_\boldsymbol{\gamma}(\hat{\boldsymbol{\theta}})^\top,</annotation></semantics></math></p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mover><mi>V</mi><mo accent="true">̂</mo></mover><mrow><mi>γ</mi><mo>,</mo><mi>c</mi></mrow></msub><mo>=</mo><msub><mover><mi>V</mi><mo accent="true">̂</mo></mover><mi>γ</mi></msub><mo>+</mo><msub><mi>𝐉</mi><mi>𝛄</mi></msub><mo stretchy="false" form="prefix">(</mo><mover><mi>𝛉</mi><mo accent="true">̂</mo></mover><mo stretchy="false" form="postfix">)</mo><msub><mover><mi>V</mi><mo accent="true">̂</mo></mover><mi>θ</mi></msub><msub><mi>𝐉</mi><mi>𝛄</mi></msub><mo stretchy="false" form="prefix">(</mo><mover><mi>𝛉</mi><mo accent="true">̂</mo></mover><msup><mo stretchy="false" form="postfix">)</mo><mi>⊤</mi></msup><mo>,</mo></mrow><annotation encoding="application/x-tex">\hat V_{\gamma, c} = \hat V_{\gamma} + \boldsymbol{J}_\boldsymbol{\gamma}(\hat{\boldsymbol{\theta}}) \hat V_{\theta} \boldsymbol{J}_\boldsymbol{\gamma}(\hat{\boldsymbol{\theta}})^\top,</annotation></semantics></math></p>
 <p>where
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>𝐉</mi><mi>𝛄</mi></msub><annotation encoding="application/x-tex">\boldsymbol{J}_\boldsymbol{\gamma}</annotation></semantics></math>
 is the Jacobian matrix of
@@ -98,17 +97,17 @@ is the Jacobian matrix of
 with respect to
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>𝛉</mi><annotation encoding="application/x-tex">\boldsymbol{\theta}</annotation></semantics></math>,
 or</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mover><mi>V</mi><mo accent="true">̂</mo></mover><mrow><mi>γ</mi><mo>,</mo><mi>c</mi></mrow></msub><mo>=</mo><msub><mover><mi>V</mi><mo accent="true">̂</mo></mover><mi>γ</mi></msub><mo>+</mo><msup><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>𝐇</mi><mi>γ</mi></msub><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mo>−</mo><mn>1</mn></mrow></msup><mrow><mo stretchy="true" form="prefix">(</mo><mfrac><mrow><msup><mi>∂</mi><mn>2</mn></msup><mo>ℓ</mo></mrow><mrow><mi>∂</mi><mi>θ</mi><mi>∂</mi><msup><mi>γ</mi><mi>⊤</mi></msup></mrow></mfrac><mo stretchy="true" form="postfix">)</mo></mrow><msub><mover><mi>V</mi><mo accent="true">̂</mo></mover><mi>θ</mi></msub><msup><mrow><mo stretchy="true" form="prefix">(</mo><mfrac><mrow><msup><mi>∂</mi><mn>2</mn></msup><mo>ℓ</mo></mrow><mrow><mi>∂</mi><mi>θ</mi><mi>∂</mi><msup><mi>γ</mi><mi>⊤</mi></msup></mrow></mfrac><mo stretchy="true" form="postfix">)</mo></mrow><mi>⊤</mi></msup><msup><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>𝐇</mi><mi>γ</mi></msub><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mo>−</mo><mn>1</mn></mrow></msup><mo>,</mo></mrow><annotation encoding="application/x-tex">\hat V_{\gamma, c} = \hat V_{\gamma} + (\boldsymbol{H}_\gamma)^{-1} \left(\frac{\partial^2 \ell}{\partial \theta \partial \gamma^\top}\right) \hat V_{\theta} \left(\frac{\partial^2 \ell}{\partial \theta \partial \gamma^\top}\right)^\top (\boldsymbol{H}_\gamma)^{-1},</annotation></semantics></math></p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mover><mi>V</mi><mo accent="true">̂</mo></mover><mrow><mi>γ</mi><mo>,</mo><mi>c</mi></mrow></msub><mo>=</mo><msub><mover><mi>V</mi><mo accent="true">̂</mo></mover><mi>γ</mi></msub><mo>+</mo><mo stretchy="false" form="prefix">(</mo><msub><mi>𝐇</mi><mi>γ</mi></msub><msup><mo stretchy="false" form="postfix">)</mo><mrow><mi>−</mi><mn>1</mn></mrow></msup><mrow><mo stretchy="true" form="prefix">(</mo><mfrac><mrow><msup><mi>∂</mi><mn>2</mn></msup><mi>ℓ</mi></mrow><mrow><mi>∂</mi><mi>θ</mi><mi>∂</mi><msup><mi>γ</mi><mi>⊤</mi></msup></mrow></mfrac><mo stretchy="true" form="postfix">)</mo></mrow><msub><mover><mi>V</mi><mo accent="true">̂</mo></mover><mi>θ</mi></msub><msup><mrow><mo stretchy="true" form="prefix">(</mo><mfrac><mrow><msup><mi>∂</mi><mn>2</mn></msup><mi>ℓ</mi></mrow><mrow><mi>∂</mi><mi>θ</mi><mi>∂</mi><msup><mi>γ</mi><mi>⊤</mi></msup></mrow></mfrac><mo stretchy="true" form="postfix">)</mo></mrow><mi>⊤</mi></msup><mo stretchy="false" form="prefix">(</mo><msub><mi>𝐇</mi><mi>γ</mi></msub><msup><mo stretchy="false" form="postfix">)</mo><mrow><mi>−</mi><mn>1</mn></mrow></msup><mo>,</mo></mrow><annotation encoding="application/x-tex">\hat V_{\gamma, c} = \hat V_{\gamma} + (\boldsymbol{H}_\gamma)^{-1} \left(\frac{\partial^2 \ell}{\partial \theta \partial \gamma^\top}\right) \hat V_{\theta} \left(\frac{\partial^2 \ell}{\partial \theta \partial \gamma^\top}\right)^\top (\boldsymbol{H}_\gamma)^{-1},</annotation></semantics></math></p>
 <p>where
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>V</mi><mi>γ</mi></msub><annotation encoding="application/x-tex">V_{\gamma}</annotation></semantics></math>
 is the naive covariance matrix of the structural parameter estimates
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mover><mi>𝛄</mi><mo accent="true">̂</mo></mover><annotation encoding="application/x-tex">\hat{\boldsymbol{\gamma}}</annotation></semantics></math>
-assuming the measurement error variance parameter,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>𝛉</mi><annotation encoding="application/x-tex">\boldsymbol{\theta}</annotation></semantics></math>,
-is known,
+assuming the measurement model parameters
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>𝛉</mi><annotation encoding="application/x-tex">\boldsymbol{\theta}</annotation></semantics></math>
+(the score loadings and error variances) are known,
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>𝐇</mi><mi>γ</mi></msub><annotation encoding="application/x-tex">\boldsymbol{H}_\gamma</annotation></semantics></math>
 is the Hessian matrix of the log-likelihood
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>ℓ</mo><annotation encoding="application/x-tex">\ell</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>ℓ</mi><annotation encoding="application/x-tex">\ell</annotation></semantics></math>
 with respect to
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mover><mi>𝛄</mi><mo accent="true">̂</mo></mover><annotation encoding="application/x-tex">\hat{\boldsymbol{\gamma}}</annotation></semantics></math>,
 and
@@ -116,11 +115,12 @@ and
 can be obtained in the first-stage measurement model analysis.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://lavaan.ugent.be" class="external-link">lavaan</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://gengrui-zhang.github.io/R2spa/">R2spa</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://gengrui-zhang.github.io/R2spa/" class="external-link">R2spa</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="http://optimizer.r-forge.r-project.org/" class="external-link">numDeriv</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">boot</span><span class="op">)</span></span></code></pre></div>
-<p>This example is based on the Political Democracy data used in <a href="https://lavaan.ugent.be/tutorial/sem.html" class="external-link uri">https://lavaan.ugent.be/tutorial/sem.html</a> and as an
-example in Bollen (1989)’s book.</p>
+<p>This example is based on the <code>PoliticalDemocracy</code> dataset,
+from the lavaan tutorial (<a href="https://lavaan.ugent.be/tutorial/sem.html" class="external-link uri">https://lavaan.ugent.be/tutorial/sem.html</a>), also used as
+an example in Bollen (1989).</p>
 </div>
 <div class="section level2">
 <h2 id="separate-measurement-models">Separate Measurement Models<a class="anchor" aria-label="anchor" href="#separate-measurement-models"></a>
@@ -137,14 +137,14 @@ example in Bollen (1989)’s book.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cfa_ind60</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/cfa.html" class="external-link">cfa</a></span><span class="op">(</span><span class="st">"ind60 =~ x1 + x2 + x3"</span>, data <span class="op">=</span> <span class="va">PoliticalDemocracy</span><span class="op">)</span></span>
 <span><span class="co"># Regression factor scores</span></span>
-<span><span class="va">fs1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs_lavaan.html">get_fs_lavaan</a></span><span class="op">(</span><span class="va">cfa_ind60</span>, vfsLT <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co"># Delta method variance of (loading, intercept)</span></span>
+<span><span class="va">fs1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">cfa_ind60</span>, vfsLT <span class="op">=</span> <span class="cn">TRUE</span>, format <span class="op">=</span> <span class="st">"list"</span><span class="op">)</span></span>
+<span><span class="co"># Delta method variance of (loading, error variance)</span></span>
 <span><span class="va">vldev1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs1</span>, which <span class="op">=</span> <span class="st">"vfsLT"</span><span class="op">)</span></span>
 <span><span class="va">cfa_dem60</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/cfa.html" class="external-link">cfa</a></span><span class="op">(</span><span class="st">"dem60 =~ y1 + y2 + y3 + y4"</span>,</span>
 <span>                 data <span class="op">=</span> <span class="va">PoliticalDemocracy</span><span class="op">)</span></span>
 <span><span class="co"># Regression factor scores</span></span>
-<span><span class="va">fs2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs_lavaan.html">get_fs_lavaan</a></span><span class="op">(</span><span class="va">cfa_dem60</span>, vfsLT <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co"># Delta method variance of (loading, intercept)</span></span>
+<span><span class="va">fs2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">cfa_dem60</span>, vfsLT <span class="op">=</span> <span class="cn">TRUE</span>, format <span class="op">=</span> <span class="st">"list"</span><span class="op">)</span></span>
+<span><span class="co"># Delta method variance of (loading, error variance)</span></span>
 <span><span class="va">vldev2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs2</span>, which <span class="op">=</span> <span class="st">"vfsLT"</span><span class="op">)</span></span>
 <span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>  fs_ind60 <span class="op">=</span> <span class="va">fs1</span><span class="op">$</span><span class="va">fs_ind60</span>,</span>
@@ -179,10 +179,35 @@ example in Bollen (1989)’s book.</p>
 <span><span class="co"># Corrected standard errors</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/diag.html" class="external-link">diag</a></span><span class="op">(</span><span class="va">vc_cor</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;  dem60~ind60 ind60~~ind60 dem60~~dem60 </span></span>
-<span><span class="co">#&gt;   0.36415174   0.07585532   0.71996886</span></span></code></pre></div>
+<span><span class="co">#&gt;   0.36415174   0.07585532   0.71996885</span></span></code></pre></div>
+<p>The <code>engine</code> argument of <code><a href="../reference/vcov_corrected.html">vcov_corrected()</a></code>
+(and of <code>tspa(corrected_se = TRUE)</code>) selects how the Jacobian
+is evaluated. The default <code>"analytic"</code> evaluates it
+refit-free and deterministically as an influence-function closed form
+(PLAN 16, sections 2.4 and 4.3),
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>J</mi><mo>=</mo><mi>−</mi><msup><mi>H</mi><mrow><mi>−</mi><mn>1</mn></mrow></msup><mi>C</mi></mrow><annotation encoding="application/x-tex">J = -H^{-1} C</annotation></semantics></math>
+with
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>H</mi><annotation encoding="application/x-tex">H</annotation></semantics></math>
+and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>C</mi><annotation encoding="application/x-tex">C</annotation></semantics></math>
+obtained by central-differencing the analytic log-likelihood score; it
+covers single- and multi-group models, saturated and restricted (df &gt;
+0) structural models, and mean-structure models, and is a pure function
+of the base fit + <code>vfsLT</code> (bit-reproducible, no refits).
+<code>"fd"</code> (central finite differences, one stage-2 refit on each
+side of each free element) is retained as the A/B reference and the
+transparent fallback for a shape the analytic form cannot handle. The
+two agree to the finite-difference noise floor whenever
+<code>"analytic"</code> applies.</p>
 <p>Standardized solution</p>
+<p>The corrected standard error of the <code>dem60 ~ ind60</code>
+coefficient, derived by hand as the standard error of the standardized
+coefficient plus a first-order delta-method term:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">tspa_est_std</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">ld_ev</span><span class="op">)</span> <span class="op">{</span></span>
+<code class="sourceCode R"><span><span class="va">keep_dem_ind</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">std</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">std</span><span class="op">[</span><span class="va">std</span><span class="op">$</span><span class="va">lhs</span> <span class="op">==</span> <span class="st">"dem60"</span> <span class="op">&amp;</span> <span class="va">std</span><span class="op">$</span><span class="va">rhs</span> <span class="op">==</span> <span class="st">"ind60"</span> <span class="op">&amp;</span> <span class="va">std</span><span class="op">$</span><span class="va">op</span> <span class="op">==</span> <span class="st">"~"</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
+<span><span class="op">}</span></span>
+<span><span class="va">tspa_est_std</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">ld_ev</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">ld1</span> <span class="op">&lt;-</span> <span class="va">ld</span></span>
 <span>  <span class="va">ev1</span> <span class="op">&lt;-</span> <span class="va">ev</span></span>
 <span>  <span class="va">ld1</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">4</span><span class="op">)</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">ld_ev</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span></span>
@@ -191,22 +216,40 @@ example in Bollen (1989)’s book.</p>
 <span>               data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
 <span>               fsL <span class="op">=</span> <span class="va">ld1</span>,</span>
 <span>               fsT <span class="op">=</span> <span class="va">ev1</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/standardizedSolution.html" class="external-link">standardizedSolution</a></span><span class="op">(</span><span class="va">tfit</span><span class="op">)</span><span class="op">$</span><span class="va">est.std</span><span class="op">[</span><span class="fl">8</span><span class="op">]</span></span>
+<span>  <span class="fu">keep_dem_ind</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/standardizedSolution.html" class="external-link">standardizedSolution</a></span><span class="op">(</span><span class="va">tfit</span><span class="op">)</span><span class="op">)</span><span class="op">$</span><span class="va">est.std</span></span>
 <span><span class="op">}</span></span>
 <span><span class="fu">tspa_est_std</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">ld</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">4</span><span class="op">)</span><span class="op">]</span>, <span class="va">ev</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">4</span><span class="op">)</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0.4531693</span></span>
-<span><span class="co"># Jacobian</span></span>
+<span><span class="co"># Jacobian of the standardized coefficient w.r.t. (loadings, error variances)</span></span>
 <span><span class="va">jac_std</span> <span class="op">&lt;-</span> <span class="fu">numDeriv</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/numDeriv/man/jacobian.html" class="external-link">jacobian</a></span><span class="op">(</span><span class="va">tspa_est_std</span>,</span>
 <span>                              x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">ld</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">4</span><span class="op">)</span><span class="op">]</span>, <span class="va">ev</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">4</span><span class="op">)</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co"># Corrected standard error</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/standardizedSolution.html" class="external-link">standardizedSolution</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span><span class="op">[</span><span class="fl">8</span>, <span class="st">"se"</span><span class="op">]</span><span class="op">^</span><span class="fl">2</span> <span class="op">+</span></span>
-<span>    <span class="va">jac_std</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">vldev</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="va">jac_std</span><span class="op">)</span></span>
-<span><span class="op">)</span></span>
+<span><span class="va">ss0</span> <span class="op">&lt;-</span> <span class="fu">keep_dem_ind</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/standardizedSolution.html" class="external-link">standardizedSolution</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="va">ss0</span><span class="op">$</span><span class="va">se</span><span class="op">^</span><span class="fl">2</span> <span class="op">+</span> <span class="va">jac_std</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">vldev</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="va">jac_std</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;           [,1]</span></span>
 <span><span class="co">#&gt; [1,] 0.1013887</span></span></code></pre></div>
-<p>Compare to joint structural and measurement model</p>
+<p>The same value comes from the one-call option. Because the two
+factors were fitted in separate models, only the two loadings and the
+two error variances are free (positions 1, 4, 5, 7), so we pass the
+matching 4 x 4 submatrix of <code>vldev</code> together with
+<code>which_free</code>:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tspa_fit_corr</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60"</span>,</span>
+<span>                      data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
+<span>                      fsL <span class="op">=</span> <span class="va">ld</span>,</span>
+<span>                      fsT <span class="op">=</span> <span class="va">ev</span>,</span>
+<span>                      vfsLT <span class="op">=</span> <span class="va">vldev</span>,</span>
+<span>                      which_free <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">4</span>, <span class="fl">5</span>, <span class="fl">7</span><span class="op">)</span>,</span>
+<span>                      corrected_se <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">sc</span> <span class="op">&lt;-</span> <span class="fu">keep_dem_ind</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/standardizedSolution.html" class="external-link">standardizedSolution</a></span><span class="op">(</span><span class="va">tspa_fit_corr</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">sc</span><span class="op">$</span><span class="va">est.std</span>              <span class="co"># unchanged point estimate</span></span>
+<span><span class="co">#&gt; [1] 0.4531693</span></span>
+<span><span class="va">sc</span><span class="op">$</span><span class="va">se</span>                   <span class="co"># corrected standard SE (matches the hand-derived value)</span></span>
+<span><span class="co">#&gt; [1] 0.1013887</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">tspa_fit_corr</span>, <span class="st">"tspa_corrected"</span><span class="op">)</span>   <span class="co"># TRUE</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
+<p>Compare to joint structural and measurement model (unstandardized
+solution):</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sem_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/sem.html" class="external-link">sem</a></span><span class="op">(</span><span class="va">model</span>, data <span class="op">=</span> <span class="va">PoliticalDemocracy</span><span class="op">)</span></span>
 <span><span class="co"># Larger standard error</span></span>
 <span><span class="op">(</span><span class="va">vc_j</span> <span class="op">&lt;-</span> </span>
@@ -220,27 +263,22 @@ example in Bollen (1989)’s book.</p>
 <span><span class="co">#&gt;  dem60~ind60 ind60~~ind60 dem60~~dem60 </span></span>
 <span><span class="co">#&gt;   0.37862348   0.08675722   0.87496855</span></span></code></pre></div>
 <p>Bootstrap Standard Errors</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">run_tspa</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">df</span>, <span class="va">inds</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">fs_ind60</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">df</span><span class="op">[</span><span class="va">inds</span>, <span class="op">]</span>, model <span class="op">=</span> <span class="st">"ind60 =~ x1 + x2 + x3"</span>,</span>
-<span>                     se <span class="op">=</span> <span class="st">"none"</span>, test <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span>
-<span>  <span class="va">fs_dem60</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">df</span><span class="op">[</span><span class="va">inds</span>, <span class="op">]</span>, model <span class="op">=</span> <span class="st">"dem60 =~ y1 + y2 + y3 + y4"</span>,</span>
-<span>                     se <span class="op">=</span> <span class="st">"none"</span>, test <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span>
-<span>  <span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">fs_ind60</span>, <span class="va">fs_dem60</span><span class="op">)</span></span>
-<span>  <span class="co"># Assemble loadings</span></span>
-<span>  <span class="va">ld</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/block_diag.html">block_diag</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_ind60</span>, which <span class="op">=</span> <span class="st">"fsL"</span><span class="op">)</span>,</span>
-<span>                   <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dem60</span>, which <span class="op">=</span> <span class="st">"fsL"</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="va">ev</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/block_diag.html">block_diag</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_ind60</span>, which <span class="op">=</span> <span class="st">"fsT"</span><span class="op">)</span>,</span>
-<span>                   <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dem60</span>, which <span class="op">=</span> <span class="st">"fsT"</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="co"># local = TRUE: score each latent from its own (separate) measurement model</span></span>
+<span>  <span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span>object <span class="op">=</span> <span class="va">df</span><span class="op">[</span><span class="va">inds</span>, <span class="op">]</span>,</span>
+<span>                   model <span class="op">=</span> <span class="st">"ind60 =~ x1 + x2 + x3</span></span>
+<span><span class="st">                            dem60 =~ y1 + y2 + y3 + y4"</span>,</span>
+<span>                   local <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>                   se <span class="op">=</span> <span class="st">"none"</span>, test <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span>
+<span>  <span class="co"># tspa() reads fsL/fsT/fsb and the per-score SEs from the get_fs() result</span></span>
 <span>  <span class="va">tspa_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60"</span>,</span>
 <span>                   data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
-<span>                   fsL <span class="op">=</span> <span class="va">ld</span>,</span>
-<span>                   fsT <span class="op">=</span> <span class="va">ev</span>,</span>
 <span>                   test <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
 <span><span class="va">boo</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/boot/man/boot.html" class="external-link">boot</a></span><span class="op">(</span><span class="va">PoliticalDemocracy</span>, statistic <span class="op">=</span> <span class="va">run_tspa</span>, R <span class="op">=</span> <span class="fl">1999</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Use MAD to downweigh outlying replications</span></span>
 <span><span class="va">boo</span><span class="op">$</span><span class="va">t</span> <span class="op">|&gt;</span></span>
 <span>    <span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span>MARGIN <span class="op">=</span> <span class="fl">2</span>, FUN <span class="op">=</span> <span class="va">mad</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -253,7 +291,7 @@ SE(<code>ind60~~ind60</code>) with the joint model is particularly
 higher than the other two. SE(<code>dem60~~dem60</code>) is the lowest
 with the corrected 2S-PA. It should be pointed out that the joint model
 and 2S-PA are different estimators.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">run_sem</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">df</span>, <span class="va">inds</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">sem_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/sem.html" class="external-link">sem</a></span><span class="op">(</span><span class="va">model</span>, data <span class="op">=</span> <span class="va">df</span><span class="op">[</span><span class="va">inds</span>, <span class="op">]</span>, se <span class="op">=</span> <span class="st">"none"</span>, test <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">sem_fit</span><span class="op">)</span></span>
@@ -263,7 +301,7 @@ and 2S-PA are different estimators.</p>
 <div class="section level2">
 <h2 id="joint-measurement-model">Joint Measurement Model<a class="anchor" aria-label="anchor" href="#joint-measurement-model"></a>
 </h2>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cfa_joint</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/cfa.html" class="external-link">cfa</a></span><span class="op">(</span><span class="st">"ind60 =~ x1 + x2 + x3</span></span>
 <span><span class="st">                  dem60 =~ y1 + y2 + y3 + y4"</span>,</span>
 <span>                 data <span class="op">=</span> <span class="va">PoliticalDemocracy</span><span class="op">)</span></span>
@@ -271,7 +309,7 @@ and 2S-PA are different estimators.</p>
 <span><span class="va">fs_joint</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs_lavaan.html">get_fs_lavaan</a></span><span class="op">(</span><span class="va">cfa_joint</span>, vfsLT <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="co"># Delta method variance</span></span>
 <span><span class="va">vldev_joint</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_joint</span>, which <span class="op">=</span> <span class="st">"vfsLT"</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tspa_fit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60"</span>,</span>
 <span>                  data <span class="op">=</span> <span class="va">fs_joint</span>,</span>
 <span>                  fsT <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_joint</span>, <span class="st">"fsT"</span><span class="op">)</span>,</span>
@@ -291,18 +329,17 @@ and 2S-PA are different estimators.</p>
 <span><span class="co"># Corrected standard errors</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/diag.html" class="external-link">diag</a></span><span class="op">(</span><span class="va">vc2_cor</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;  dem60~ind60 ind60~~ind60 dem60~~dem60 </span></span>
-<span><span class="co">#&gt;   0.36049260   0.07654824   0.70229676</span></span></code></pre></div>
+<span><span class="co">#&gt;   0.36049259   0.07654825   0.70229676</span></span></code></pre></div>
 <p>Bootstrap Standard Errors</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">run_tspa2</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">df</span>, <span class="va">inds</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">fs_joint</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">df</span><span class="op">[</span><span class="va">inds</span>, <span class="op">]</span>,</span>
 <span>                     model <span class="op">=</span> <span class="st">"ind60 =~ x1 + x2 + x3</span></span>
 <span><span class="st">                              dem60 =~ y1 + y2 + y3 + y4"</span>,</span>
 <span>                     se <span class="op">=</span> <span class="st">"none"</span>, test <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span>
+<span>  <span class="co"># tspa() reads fsL/fsT/fsb and the per-score SEs from the get_fs() result</span></span>
 <span>  <span class="va">tspa_fit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60"</span>,</span>
 <span>                    data <span class="op">=</span> <span class="va">fs_joint</span>,</span>
-<span>                    fsT <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_joint</span>, <span class="st">"fsT"</span><span class="op">)</span>,</span>
-<span>                    fsL <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_joint</span>, <span class="st">"fsL"</span><span class="op">)</span>,</span>
 <span>                    test <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">tspa_fit2</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
@@ -310,7 +347,7 @@ and 2S-PA are different estimators.</p>
 <span><span class="co"># run_tspa2b &lt;- function(df, inds) {</span></span>
 <span><span class="co">#   fsb_joint &lt;- get_fs(df[inds, ],</span></span>
 <span><span class="co">#                       model = "ind60 =~ x1 + x2 + x3</span></span>
-<span><span class="co">#                               dem60 =~ y1 + y2 + y3 + y4",</span></span>
+<span><span class="co">#                                dem60 =~ y1 + y2 + y3 + y4",</span></span>
 <span><span class="co">#                       se = "none", test = "none", method = "Bartlett")</span></span>
 <span><span class="co">#   tspa_fit2b &lt;- tspa(model = "dem60 ~ ind60",</span></span>
 <span><span class="co">#                      data = fsb_joint,</span></span>
@@ -325,7 +362,7 @@ and 2S-PA are different estimators.</p>
 <span><span class="co">#   coef(sem_fit)[c(6, 14, 15)]</span></span>
 <span><span class="co"># }</span></span>
 <span><span class="co"># boo2j &lt;- boot(PoliticalDemocracy, statistic = run_sem2, R = 4999)</span></span></code></pre></div>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Use MAD to downweigh outlying replications</span></span>
 <span><span class="va">boo2</span><span class="op">$</span><span class="va">t</span> <span class="op">|&gt;</span></span>
 <span>    <span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span>MARGIN <span class="op">=</span> <span class="fl">2</span>, FUN <span class="op">=</span> <span class="va">mad</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -335,7 +372,7 @@ and 2S-PA are different estimators.</p>
 <div class="section level3">
 <h3 id="with-bartletts-method">With Bartlett’s Method<a class="anchor" aria-label="anchor" href="#with-bartletts-method"></a>
 </h3>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Factor score</span></span>
 <span><span class="va">fsb_joint</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">PoliticalDemocracy</span>,</span>
 <span>                    model <span class="op">=</span> <span class="st">"ind60 =~ x1 + x2 + x3</span></span>
@@ -343,7 +380,7 @@ and 2S-PA are different estimators.</p>
 <span>                    method <span class="op">=</span> <span class="st">"Bartlett"</span>,</span>
 <span>                    vfsLT <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="va">vldevb_joint</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fsb_joint</span>, which <span class="op">=</span> <span class="st">"vfsLT"</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tspa_fit2b</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60"</span>,</span>
 <span>                   data <span class="op">=</span> <span class="va">fsb_joint</span>,</span>
 <span>                   fsT <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fsb_joint</span>, <span class="st">"fsT"</span><span class="op">)</span>,</span>
@@ -359,9 +396,9 @@ and 2S-PA are different estimators.</p>
 <span><span class="co"># Adjusted covariance matrix</span></span>
 <span><span class="op">(</span><span class="va">vc2b_cor</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/vcov_corrected.html">vcov_corrected</a></span><span class="op">(</span></span>
 <span>    <span class="va">tspa_fit2b</span>,</span>
-<span>    <span class="co"># Exclude fixed loadings and error variance</span></span>
+<span>    <span class="co"># With Bartlett scoring the loadings are fixed, so propagate the error</span></span>
+<span>    <span class="co"># variances only (positions 5 and 7)</span></span>
 <span>    vfsLT <span class="op">=</span> <span class="va">vldevb_joint</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">5</span>, <span class="fl">7</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">5</span>, <span class="fl">7</span><span class="op">)</span><span class="op">]</span>,</span>
-<span>    <span class="co"># Specify which elements are free (error variances only)</span></span>
 <span>    which_free <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">5</span>, <span class="fl">7</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;              d60~60 i60~~6 d60~~6</span></span>
 <span><span class="co">#&gt; dem60~ind60   0.124              </span></span>
@@ -370,13 +407,13 @@ and 2S-PA are different estimators.</p>
 <span><span class="co"># Corrected standard errors</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/diag.html" class="external-link">diag</a></span><span class="op">(</span><span class="va">vc2b_cor</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;  dem60~ind60 ind60~~ind60 dem60~~dem60 </span></span>
-<span><span class="co">#&gt;   0.35271752   0.07634634   0.66959806</span></span></code></pre></div>
+<span><span class="co">#&gt;   0.35271754   0.07634634   0.66959805</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
 <h2 id="multiple-groups">Multiple Groups<a class="anchor" aria-label="anchor" href="#multiple-groups"></a>
 </h2>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Multigroup, three-factor example</span></span>
 <span><span class="va">mod</span> <span class="op">&lt;-</span> <span class="st">"</span></span>
 <span><span class="st">  # latent variables</span></span>
@@ -385,27 +422,26 @@ and 2S-PA are different estimators.</p>
 <span><span class="st">    speed =~ x7 + x8 + x9</span></span>
 <span><span class="st">"</span></span>
 <span><span class="co"># Factor scores based on partial invariance</span></span>
-<span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">HolzingerSwineford1939</span>, model <span class="op">=</span> <span class="va">mod</span>, std.lv <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>                 group <span class="op">=</span> <span class="st">"school"</span>,</span>
-<span>                 group.equal <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"loadings"</span>, <span class="st">"intercepts"</span><span class="op">)</span>,</span>
-<span>                 group.partial <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"visual=~x2"</span>, <span class="st">"x7~1"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/cfa.html" class="external-link">cfa</a></span><span class="op">(</span><span class="va">mod</span>,</span>
 <span>           data <span class="op">=</span> <span class="va">HolzingerSwineford1939</span>,</span>
 <span>           std.lv <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>           group <span class="op">=</span> <span class="st">"school"</span>,</span>
 <span>           group.equal <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"loadings"</span>, <span class="st">"intercepts"</span><span class="op">)</span>,</span>
 <span>           group.partial <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"visual=~x2"</span>, <span class="st">"x7~1"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs_lavaan.html">get_fs_lavaan</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
-<span><span class="va">vldev</span> <span class="op">&lt;-</span> <span class="fu">R2spa</span><span class="fu">:::</span><span class="fu">vcov_ld_evfs</span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs_lavaan.html">get_fs_lavaan</a></span><span class="op">(</span><span class="va">fit</span>, vfsLT <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">vldev</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, which <span class="op">=</span> <span class="st">"vfsLT"</span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tspa_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"visual ~~ textual + speed</span></span>
 <span><span class="st">                          textual ~~ speed"</span>,</span>
 <span>                 data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
 <span>                 group <span class="op">=</span> <span class="st">"school"</span>,</span>
 <span>                 fsL <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, which <span class="op">=</span> <span class="st">"fsL"</span><span class="op">)</span>,</span>
 <span>                 fsT <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, which <span class="op">=</span> <span class="st">"fsT"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co"># Unadjusted covariance</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">6</span>, <span class="fl">10</span><span class="op">:</span><span class="fl">15</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">6</span>, <span class="fl">10</span><span class="op">:</span><span class="fl">15</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co"># Unadjusted covariance of the structural parameters (the 12 factor</span></span>
+<span><span class="co"># variances/covariances, 6 per group); the 6 factor-score intercepts (fs_*~1)</span></span>
+<span><span class="co"># are omitted.</span></span>
+<span><span class="va">keep</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grepl</a></span><span class="op">(</span><span class="st">"~~"</span>, <span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">rownames</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span><span class="op">[</span><span class="va">keep</span>, <span class="va">keep</span><span class="op">]</span></span>
 <span><span class="co">#&gt;                     visual~~textual visual~~speed textual~~speed visual~~visual</span></span>
 <span><span class="co">#&gt; visual~~textual         0.012032756   0.004143016    0.003562702    0.009059744</span></span>
 <span><span class="co">#&gt; visual~~speed           0.004143016   0.015289623    0.005749677    0.006286186</span></span>
@@ -459,59 +495,165 @@ and 2S-PA are different estimators.</p>
 <span><span class="co">#&gt; textual~~textual.g2         0.017541486     0.002565923</span></span>
 <span><span class="co">#&gt; speed~~speed.g2             0.002565923     0.055832832</span></span>
 <span><span class="co"># Adjusted covariance</span></span>
-<span><span class="fu"><a href="../reference/vcov_corrected.html">vcov_corrected</a></span><span class="op">(</span><span class="va">tspa_fit</span>, vfsLT <span class="op">=</span> <span class="va">vldev</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">6</span>, <span class="fl">10</span><span class="op">:</span><span class="fl">15</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">6</span>, <span class="fl">10</span><span class="op">:</span><span class="fl">15</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="fu"><a href="../reference/vcov_corrected.html">vcov_corrected</a></span><span class="op">(</span><span class="va">tspa_fit</span>, vfsLT <span class="op">=</span> <span class="va">vldev</span><span class="op">)</span><span class="op">[</span><span class="va">keep</span>, <span class="va">keep</span><span class="op">]</span></span>
 <span><span class="co">#&gt;                     visual~~textual visual~~speed textual~~speed visual~~visual</span></span>
-<span><span class="co">#&gt; visual~~textual        1.766770e-02  3.948995e-03   1.680095e-03   0.0032658891</span></span>
-<span><span class="co">#&gt; visual~~speed          3.948995e-03  2.625930e-02   6.180231e-03  -0.0002941259</span></span>
-<span><span class="co">#&gt; textual~~speed         1.680095e-03  6.180231e-03   2.088330e-02   0.0034032016</span></span>
-<span><span class="co">#&gt; visual~~visual         3.265889e-03 -2.941259e-04   3.403202e-03   0.0552337485</span></span>
-<span><span class="co">#&gt; textual~~textual       6.343722e-03  3.471197e-03   4.310592e-03   0.0022325897</span></span>
-<span><span class="co">#&gt; speed~~speed           2.319057e-03 -2.462920e-04   2.977648e-03   0.0039800365</span></span>
-<span><span class="co">#&gt; visual~~textual.g2     2.894521e-04 -1.727969e-05  -1.158344e-04  -0.0036750998</span></span>
-<span><span class="co">#&gt; visual~~speed.g2      -7.758231e-05  4.463544e-04  -3.159286e-04  -0.0017771299</span></span>
-<span><span class="co">#&gt; textual~~speed.g2     -1.395251e-04 -2.939691e-05   1.074132e-04   0.0021179697</span></span>
-<span><span class="co">#&gt; visual~~visual.g2      6.773687e-04  9.416669e-05  -5.286419e-04  -0.0139631267</span></span>
-<span><span class="co">#&gt; textual~~textual.g2   -8.773851e-05  1.870183e-04  -5.236929e-05   0.0001038840</span></span>
-<span><span class="co">#&gt; speed~~speed.g2       -3.614222e-04  2.154682e-04   1.739917e-04   0.0030238026</span></span>
+<span><span class="co">#&gt; visual~~textual        1.653582e-02  4.136616e-03   2.336324e-03   0.0046883897</span></span>
+<span><span class="co">#&gt; visual~~speed          4.136616e-03  3.426164e-02   6.309753e-03   0.0008815580</span></span>
+<span><span class="co">#&gt; textual~~speed         2.336324e-03  6.309753e-03   1.950154e-02   0.0026658224</span></span>
+<span><span class="co">#&gt; visual~~visual         4.688390e-03  8.815580e-04   2.665822e-03   0.0503725941</span></span>
+<span><span class="co">#&gt; textual~~textual       6.491077e-03  1.913223e-03   4.460499e-03   0.0041860447</span></span>
+<span><span class="co">#&gt; speed~~speed           1.728255e-03  1.053080e-03   3.422944e-03   0.0036590340</span></span>
+<span><span class="co">#&gt; visual~~textual.g2     1.170824e-04  5.276775e-05  -2.019370e-05  -0.0019412372</span></span>
+<span><span class="co">#&gt; visual~~speed.g2       5.360119e-05  3.321316e-05   3.940979e-06  -0.0004494630</span></span>
+<span><span class="co">#&gt; textual~~speed.g2     -7.386367e-06 -1.044665e-05   2.627310e-05   0.0005816077</span></span>
+<span><span class="co">#&gt; visual~~visual.g2     -1.897690e-05 -1.372446e-04  -4.954036e-04  -0.0095441033</span></span>
+<span><span class="co">#&gt; textual~~textual.g2   -1.709957e-04 -1.074418e-04  -1.663762e-04  -0.0007817335</span></span>
+<span><span class="co">#&gt; speed~~speed.g2       -2.699262e-04 -3.577680e-04  -1.063824e-04   0.0028169442</span></span>
 <span><span class="co">#&gt;                     textual~~textual  speed~~speed visual~~textual.g2</span></span>
-<span><span class="co">#&gt; visual~~textual         6.343722e-03  2.319057e-03       2.894521e-04</span></span>
-<span><span class="co">#&gt; visual~~speed           3.471197e-03 -2.462920e-04      -1.727969e-05</span></span>
-<span><span class="co">#&gt; textual~~speed          4.310592e-03  2.977648e-03      -1.158344e-04</span></span>
-<span><span class="co">#&gt; visual~~visual          2.232590e-03  3.980036e-03      -3.675100e-03</span></span>
-<span><span class="co">#&gt; textual~~textual        1.943788e-02 -2.260608e-05       3.559274e-04</span></span>
-<span><span class="co">#&gt; speed~~speed           -2.260608e-05  5.904050e-02       1.853678e-03</span></span>
-<span><span class="co">#&gt; visual~~textual.g2      3.559274e-04  1.853678e-03       2.079770e-02</span></span>
-<span><span class="co">#&gt; visual~~speed.g2       -8.758319e-04  3.799116e-03       7.128677e-03</span></span>
-<span><span class="co">#&gt; textual~~speed.g2      -2.295514e-05 -2.136909e-03       2.631124e-03</span></span>
-<span><span class="co">#&gt; visual~~visual.g2       1.246137e-03  2.827516e-03       1.425193e-02</span></span>
-<span><span class="co">#&gt; textual~~textual.g2    -2.028541e-04 -1.070262e-03       5.734502e-03</span></span>
-<span><span class="co">#&gt; speed~~speed.g2         7.282334e-04 -1.578688e-02       3.266464e-04</span></span>
+<span><span class="co">#&gt; visual~~textual         6.491077e-03  0.0017282555       1.170824e-04</span></span>
+<span><span class="co">#&gt; visual~~speed           1.913223e-03  0.0010530796       5.276775e-05</span></span>
+<span><span class="co">#&gt; textual~~speed          4.460499e-03  0.0034229443      -2.019370e-05</span></span>
+<span><span class="co">#&gt; visual~~visual          4.186045e-03  0.0036590340      -1.941237e-03</span></span>
+<span><span class="co">#&gt; textual~~textual        1.738704e-02  0.0018292298       1.174471e-04</span></span>
+<span><span class="co">#&gt; speed~~speed            1.829230e-03  0.0545698797       6.050726e-04</span></span>
+<span><span class="co">#&gt; visual~~textual.g2      1.174471e-04  0.0006050726       1.486744e-02</span></span>
+<span><span class="co">#&gt; visual~~speed.g2        4.329687e-05 -0.0003043030       5.921234e-03</span></span>
+<span><span class="co">#&gt; textual~~speed.g2       2.061742e-05 -0.0008122445       5.326339e-03</span></span>
+<span><span class="co">#&gt; visual~~visual.g2      -3.171240e-05  0.0013761982       1.179427e-02</span></span>
+<span><span class="co">#&gt; textual~~textual.g2    -2.256062e-04  0.0003306567       8.528362e-03</span></span>
+<span><span class="co">#&gt; speed~~speed.g2         4.328671e-05 -0.0136523556       2.263978e-03</span></span>
 <span><span class="co">#&gt;                     visual~~speed.g2 textual~~speed.g2 visual~~visual.g2</span></span>
-<span><span class="co">#&gt; visual~~textual        -7.758231e-05     -1.395251e-04      6.773687e-04</span></span>
-<span><span class="co">#&gt; visual~~speed           4.463544e-04     -2.939691e-05      9.416669e-05</span></span>
-<span><span class="co">#&gt; textual~~speed         -3.159286e-04      1.074132e-04     -5.286419e-04</span></span>
-<span><span class="co">#&gt; visual~~visual         -1.777130e-03      2.117970e-03     -1.396313e-02</span></span>
-<span><span class="co">#&gt; textual~~textual       -8.758319e-04     -2.295514e-05      1.246137e-03</span></span>
-<span><span class="co">#&gt; speed~~speed            3.799116e-03     -2.136909e-03      2.827516e-03</span></span>
-<span><span class="co">#&gt; visual~~textual.g2      7.128677e-03      2.631124e-03      1.425193e-02</span></span>
-<span><span class="co">#&gt; visual~~speed.g2        3.246016e-02      6.793932e-03      8.478633e-03</span></span>
-<span><span class="co">#&gt; textual~~speed.g2       6.793932e-03      2.230005e-02     -7.599378e-04</span></span>
-<span><span class="co">#&gt; visual~~visual.g2       8.478633e-03     -7.599378e-04      1.079909e-01</span></span>
-<span><span class="co">#&gt; textual~~textual.g2     4.641147e-03      6.987265e-03      4.758042e-04</span></span>
-<span><span class="co">#&gt; speed~~speed.g2         6.636008e-03      1.596428e-02     -3.656654e-03</span></span>
+<span><span class="co">#&gt; visual~~textual         5.360119e-05     -7.386367e-06     -0.0000189769</span></span>
+<span><span class="co">#&gt; visual~~speed           3.321316e-05     -1.044665e-05     -0.0001372446</span></span>
+<span><span class="co">#&gt; textual~~speed          3.940979e-06      2.627310e-05     -0.0004954036</span></span>
+<span><span class="co">#&gt; visual~~visual         -4.494630e-04      5.816077e-04     -0.0095441033</span></span>
+<span><span class="co">#&gt; textual~~textual        4.329687e-05      2.061742e-05     -0.0000317124</span></span>
+<span><span class="co">#&gt; speed~~speed           -3.043030e-04     -8.122445e-04      0.0013761982</span></span>
+<span><span class="co">#&gt; visual~~textual.g2      5.921234e-03      5.326339e-03      0.0117942702</span></span>
+<span><span class="co">#&gt; visual~~speed.g2        2.731199e-02      1.020675e-02      0.0080868149</span></span>
+<span><span class="co">#&gt; textual~~speed.g2       1.020675e-02      1.979243e-02      0.0036942385</span></span>
+<span><span class="co">#&gt; visual~~visual.g2       8.086815e-03      3.694239e-03      0.0517510845</span></span>
+<span><span class="co">#&gt; textual~~textual.g2     3.019288e-03      6.413910e-03      0.0057608769</span></span>
+<span><span class="co">#&gt; speed~~speed.g2         1.568174e-02      1.374092e-02      0.0004145391</span></span>
 <span><span class="co">#&gt;                     textual~~textual.g2 speed~~speed.g2</span></span>
-<span><span class="co">#&gt; visual~~textual           -8.773851e-05   -0.0003614222</span></span>
-<span><span class="co">#&gt; visual~~speed              1.870183e-04    0.0002154682</span></span>
-<span><span class="co">#&gt; textual~~speed            -5.236929e-05    0.0001739917</span></span>
-<span><span class="co">#&gt; visual~~visual             1.038840e-04    0.0030238026</span></span>
-<span><span class="co">#&gt; textual~~textual          -2.028541e-04    0.0007282334</span></span>
-<span><span class="co">#&gt; speed~~speed              -1.070262e-03   -0.0157868803</span></span>
-<span><span class="co">#&gt; visual~~textual.g2         5.734502e-03    0.0003266464</span></span>
-<span><span class="co">#&gt; visual~~speed.g2           4.641147e-03    0.0066360081</span></span>
-<span><span class="co">#&gt; textual~~speed.g2          6.987265e-03    0.0159642788</span></span>
-<span><span class="co">#&gt; visual~~visual.g2          4.758042e-04   -0.0036566537</span></span>
-<span><span class="co">#&gt; textual~~textual.g2        2.062776e-02    0.0018416930</span></span>
-<span><span class="co">#&gt; speed~~speed.g2            1.841693e-03    0.1076812729</span></span></code></pre></div>
+<span><span class="co">#&gt; visual~~textual           -0.0001709957   -2.699262e-04</span></span>
+<span><span class="co">#&gt; visual~~speed             -0.0001074418   -3.577680e-04</span></span>
+<span><span class="co">#&gt; textual~~speed            -0.0001663762   -1.063824e-04</span></span>
+<span><span class="co">#&gt; visual~~visual            -0.0007817335    2.816944e-03</span></span>
+<span><span class="co">#&gt; textual~~textual          -0.0002256062    4.328671e-05</span></span>
+<span><span class="co">#&gt; speed~~speed               0.0003306567   -1.365236e-02</span></span>
+<span><span class="co">#&gt; visual~~textual.g2         0.0085283624    2.263978e-03</span></span>
+<span><span class="co">#&gt; visual~~speed.g2           0.0030192875    1.568174e-02</span></span>
+<span><span class="co">#&gt; textual~~speed.g2          0.0064139098    1.374092e-02</span></span>
+<span><span class="co">#&gt; visual~~visual.g2          0.0057608769    4.145391e-04</span></span>
+<span><span class="co">#&gt; textual~~textual.g2        0.0187518537    1.971515e-03</span></span>
+<span><span class="co">#&gt; speed~~speed.g2            0.0019715145    9.585557e-02</span></span></code></pre></div>
+<p>The correction can be requested in place on <code><a href="../reference/tspa.html">tspa()</a></code>, so
+<code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> (and hence the SEs derived from it) and
+<code><a href="https://rdrr.io/pkg/lavaan/man/standardizedSolution.html" class="external-link">standardizedSolution()</a></code> on the returned fit report the
+corrected standard errors (the point estimates are unchanged):</p>
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tspa_fit_corr</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"visual ~~ textual + speed</span></span>
+<span><span class="st">                               textual ~~ speed"</span>,</span>
+<span>                      data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
+<span>                      group <span class="op">=</span> <span class="st">"school"</span>,</span>
+<span>                      fsL <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, which <span class="op">=</span> <span class="st">"fsL"</span><span class="op">)</span>,</span>
+<span>                      fsT <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, which <span class="op">=</span> <span class="st">"fsT"</span><span class="op">)</span>,</span>
+<span>                      vfsLT <span class="op">=</span> <span class="va">vldev</span>,</span>
+<span>                      corrected_se <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">tspa_fit_corr</span>, <span class="st">"tspa_corrected"</span><span class="op">)</span>   <span class="co"># TRUE</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>unadjusted <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/diag.html" class="external-link">diag</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>            corrected    <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/diag.html" class="external-link">diag</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov</a></span><span class="op">(</span><span class="va">tspa_fit_corr</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>, <span class="fl">4</span><span class="op">)</span></span>
+<span><span class="co">#&gt;                     unadjusted corrected</span></span>
+<span><span class="co">#&gt; visual~~textual         0.1097    0.1286</span></span>
+<span><span class="co">#&gt; visual~~speed           0.1237    0.1851</span></span>
+<span><span class="co">#&gt; textual~~speed          0.1109    0.1396</span></span>
+<span><span class="co">#&gt; visual~~visual          0.1620    0.2244</span></span>
+<span><span class="co">#&gt; textual~~textual        0.1292    0.1319</span></span>
+<span><span class="co">#&gt; speed~~speed            0.1794    0.2336</span></span>
+<span><span class="co">#&gt; fs_visual~1             0.0682    0.0682</span></span>
+<span><span class="co">#&gt; fs_textual~1            0.0751    0.0751</span></span>
+<span><span class="co">#&gt; fs_speed~1              0.0646    0.0646</span></span>
+<span><span class="co">#&gt; visual~~textual.g2      0.1069    0.1219</span></span>
+<span><span class="co">#&gt; visual~~speed.g2        0.1415    0.1653</span></span>
+<span><span class="co">#&gt; textual~~speed.g2       0.1301    0.1407</span></span>
+<span><span class="co">#&gt; visual~~visual.g2       0.1471    0.2275</span></span>
+<span><span class="co">#&gt; textual~~textual.g2     0.1324    0.1369</span></span>
+<span><span class="co">#&gt; speed~~speed.g2         0.2363    0.3096</span></span>
+<span><span class="co">#&gt; fs_visual~1.g2          0.0648    0.0648</span></span>
+<span><span class="co">#&gt; fs_textual~1.g2         0.0776    0.0776</span></span>
+<span><span class="co">#&gt; fs_speed~1.g2           0.0920    0.0920</span></span></code></pre></div>
+<div class="section level3">
+<h3 id="corrected-grand-standardized-solution-multigroup">Corrected grand-standardized solution (multigroup)<a class="anchor" aria-label="anchor" href="#corrected-grand-standardized-solution-multigroup"></a>
+</h3>
+<p><code><a href="../reference/grand_standardized_solution.html">grandStandardizedSolution()</a></code> pools across groups (grand
+mean / grand SD) rather than standardizing each group separately as
+<code><a href="https://rdrr.io/pkg/lavaan/man/standardizedSolution.html" class="external-link">lavaan::standardizedSolution()</a></code> does. Feeding it the
+corrected fit’s covariance yields the corrected grand-standardized SEs;
+we use a structural path model so there is a regression to
+standardize:</p>
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">path_mg</span> <span class="op">&lt;-</span> <span class="st">"textual ~ visual + speed</span></span>
+<span><span class="st">            visual  ~ speed"</span></span>
+<span><span class="va">tspa_path</span>  <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span><span class="va">path_mg</span>, data <span class="op">=</span> <span class="va">fs_dat</span>, group <span class="op">=</span> <span class="st">"school"</span>,</span>
+<span>                   fsL <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsL"</span><span class="op">)</span>, fsT <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsT"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">tspa_path_corr</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span><span class="va">path_mg</span>, data <span class="op">=</span> <span class="va">fs_dat</span>, group <span class="op">=</span> <span class="st">"school"</span>,</span>
+<span>                       fsL <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsL"</span><span class="op">)</span>, fsT <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsT"</span><span class="op">)</span>,</span>
+<span>                       vfsLT <span class="op">=</span> <span class="va">vldev</span>, corrected_se <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">gr0</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grand_standardized_solution.html">grandStandardizedSolution</a></span><span class="op">(</span><span class="va">tspa_path</span><span class="op">)</span>       <span class="co"># uncorrected</span></span>
+<span><span class="va">gr1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grand_standardized_solution.html">grandStandardizedSolution</a></span><span class="op">(</span><span class="va">tspa_path_corr</span><span class="op">)</span>  <span class="co"># corrected (SE only)</span></span>
+<span><span class="va">keep</span> <span class="op">&lt;-</span> <span class="va">gr1</span><span class="op">$</span><span class="va">op</span> <span class="op">==</span> <span class="st">"~"</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>grand_std <span class="op">=</span> <span class="va">gr1</span><span class="op">$</span><span class="va">est.std</span><span class="op">[</span><span class="va">keep</span><span class="op">]</span>,</span>
+<span>            se_plain  <span class="op">=</span> <span class="va">gr0</span><span class="op">$</span><span class="va">se</span><span class="op">[</span><span class="va">keep</span><span class="op">]</span>,</span>
+<span>            se_corr   <span class="op">=</span> <span class="va">gr1</span><span class="op">$</span><span class="va">se</span><span class="op">[</span><span class="va">keep</span><span class="op">]</span><span class="op">)</span>, <span class="fl">4</span><span class="op">)</span></span>
+<span><span class="co">#&gt;      grand_std se_plain se_corr</span></span>
+<span><span class="co">#&gt; [1,]    0.4143   0.0970  1.8119</span></span>
+<span><span class="co">#&gt; [2,]    0.2100   0.1232  0.3635</span></span>
+<span><span class="co">#&gt; [3,]    0.4020   0.1355  1.2168</span></span>
+<span><span class="co">#&gt; [4,]    0.5244   0.1341 21.2261</span></span>
+<span><span class="co">#&gt; [5,]    0.0683   0.1116 16.7520</span></span>
+<span><span class="co">#&gt; [6,]    0.4658   0.0878  2.1946</span></span>
+<span><span class="co"># SE-only: identical point estimates, corrected SEs &gt;= uncorrected</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="va">gr1</span><span class="op">$</span><span class="va">est.std</span><span class="op">[</span><span class="va">keep</span><span class="op">]</span> <span class="op">==</span> <span class="va">gr0</span><span class="op">$</span><span class="va">est.std</span><span class="op">[</span><span class="va">keep</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="va">gr1</span><span class="op">$</span><span class="va">se</span><span class="op">[</span><span class="va">keep</span><span class="op">]</span> <span class="op">&gt;=</span> <span class="va">gr0</span><span class="op">$</span><span class="va">se</span><span class="op">[</span><span class="va">keep</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">keep_dem_ind</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">std</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">std</span><span class="op">[</span><span class="va">std</span><span class="op">$</span><span class="va">lhs</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"visual"</span>, <span class="st">"textual"</span>, <span class="st">"speed"</span><span class="op">)</span> <span class="op">&amp;</span></span>
+<span>    <span class="va">std</span><span class="op">$</span><span class="va">rhs</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"visual"</span>, <span class="st">"textual"</span>, <span class="st">"speed"</span><span class="op">)</span> <span class="op">&amp;</span> </span>
+<span>      <span class="va">std</span><span class="op">$</span><span class="va">lhs</span> <span class="op">!=</span> <span class="va">std</span><span class="op">$</span><span class="va">rhs</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
+<span><span class="op">}</span></span>
+<span><span class="va">tspa_est_std</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">ld_ev</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">fsL1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, which <span class="op">=</span> <span class="st">"fsL"</span><span class="op">)</span></span>
+<span>  <span class="va">fsT1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, which <span class="op">=</span> <span class="st">"fsT"</span><span class="op">)</span></span>
+<span>  <span class="va">fsL1</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">[</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">ld_ev</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">9</span><span class="op">]</span></span>
+<span>  <span class="va">fsL1</span><span class="op">[[</span><span class="fl">2</span><span class="op">]</span><span class="op">]</span><span class="op">[</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">ld_ev</span><span class="op">[</span><span class="fl">10</span><span class="op">:</span><span class="fl">18</span><span class="op">]</span></span>
+<span>  <span class="va">fsT1</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">[</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">ld_ev</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">19</span><span class="op">:</span><span class="fl">21</span>, <span class="fl">20</span>, <span class="fl">22</span><span class="op">:</span><span class="fl">23</span>, <span class="fl">21</span>, <span class="fl">23</span>, <span class="fl">24</span><span class="op">)</span><span class="op">]</span></span>
+<span>  <span class="va">fsT1</span><span class="op">[[</span><span class="fl">2</span><span class="op">]</span><span class="op">]</span><span class="op">[</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">ld_ev</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">25</span><span class="op">:</span><span class="fl">27</span>, <span class="fl">26</span>, <span class="fl">28</span><span class="op">:</span><span class="fl">29</span>, <span class="fl">27</span>, <span class="fl">29</span>, <span class="fl">30</span><span class="op">)</span><span class="op">]</span></span>
+<span>  <span class="va">tfit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"visual ~~ textual + speed</span></span>
+<span><span class="st">                        textual ~~ speed"</span>,</span>
+<span>               data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
+<span>               group <span class="op">=</span> <span class="st">"school"</span>,</span>
+<span>               fsL <span class="op">=</span> <span class="va">fsL1</span>,</span>
+<span>               fsT <span class="op">=</span> <span class="va">fsT1</span><span class="op">)</span> </span>
+<span>  <span class="fu">keep_dem_ind</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/standardizedSolution.html" class="external-link">standardizedSolution</a></span><span class="op">(</span><span class="va">tfit</span><span class="op">)</span><span class="op">)</span><span class="op">$</span><span class="va">est.std</span></span>
+<span><span class="op">}</span></span>
+<span><span class="va">ld_ev0</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, which <span class="op">=</span> <span class="st">"fsL"</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>,</span>
+<span>            <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, which <span class="op">=</span> <span class="st">"fsL"</span><span class="op">)</span><span class="op">[[</span><span class="fl">2</span><span class="op">]</span><span class="op">]</span>,</span>
+<span>            <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, which <span class="op">=</span> <span class="st">"fsT"</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">3</span>, <span class="fl">5</span><span class="op">:</span><span class="fl">6</span>, <span class="fl">9</span><span class="op">)</span><span class="op">]</span>,</span>
+<span>            <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, which <span class="op">=</span> <span class="st">"fsT"</span><span class="op">)</span><span class="op">[[</span><span class="fl">2</span><span class="op">]</span><span class="op">]</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">3</span>, <span class="fl">5</span><span class="op">:</span><span class="fl">6</span>, <span class="fl">9</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="fu">tspa_est_std</span><span class="op">(</span><span class="va">ld_ev0</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0.4939729 0.3427430 0.3334265 0.5425498 0.5412629 0.3472992</span></span>
+<span><span class="va">jac</span> <span class="op">&lt;-</span> <span class="fu">numDeriv</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/numDeriv/man/jacobian.html" class="external-link">jacobian</a></span><span class="op">(</span><span class="va">tspa_est_std</span>, x <span class="op">=</span> <span class="va">ld_ev0</span><span class="op">)</span></span>
+<span><span class="va">v0</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/lavInspect.html" class="external-link">lavInspect</a></span><span class="op">(</span><span class="va">tspa_fit</span>, <span class="st">"vcov.std.lv"</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">3</span>, <span class="fl">10</span><span class="op">:</span><span class="fl">12</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">3</span>, <span class="fl">10</span><span class="op">:</span><span class="fl">12</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/diag.html" class="external-link">diag</a></span><span class="op">(</span><span class="va">jac</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">vldev</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="va">jac</span><span class="op">)</span><span class="op">)</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/diag.html" class="external-link">diag</a></span><span class="op">(</span><span class="va">v0</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;    visual~~textual      visual~~speed     textual~~speed visual~~textual.g2 </span></span>
+<span><span class="co">#&gt;          1.1139120          1.3925355          0.9611655          1.4150576 </span></span>
+<span><span class="co">#&gt;   visual~~speed.g2  textual~~speed.g2 </span></span>
+<span><span class="co">#&gt;          1.6964048          0.6082279</span></span></code></pre></div>
+</div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>
@@ -524,7 +666,7 @@ and 2S-PA are different estimators.</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

@@ -7,9 +7,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Multi-Factor Measurement Model • R2spa</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.4.2/css/all.min.css" rel="stylesheet">
-<link href="../deps/font-awesome-6.4.2/css/v4-shims.min.css" rel="stylesheet">
+<link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Multi-Factor Measurement Model">
 </head>
 <body>
@@ -34,18 +34,17 @@
 <li class="active nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/categorical-interaction.html">Using Two-Stage Path Analysis with Definition Variables for Latent Interactions with Categorical Indicators</a></li>
-    <li><a class="dropdown-item" href="../articles/corrected-se.html">Corrected Standard Errors</a></li>
+<li><a class="dropdown-item" href="../articles/corrected-se.html">Corrected Standard Errors</a></li>
     <li><a class="dropdown-item" href="../articles/correction-error.html">Correction to Measurement Error</a></li>
     <li><a class="dropdown-item" href="../articles/efa-score.html">EFA Scores</a></li>
-    <li><a class="dropdown-item" href="../articles/get_fs_int-vignette.html">get_fs_int-example</a></li>
     <li><a class="dropdown-item" href="../articles/gr-std-coef.html">Grand Standardized Coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/missing-data.html">2S-PA with Missing Data</a></li>
+    <li><a class="dropdown-item" href="../articles/multilevel.html">2S-PA with Random Effects</a></li>
     <li><a class="dropdown-item" href="../articles/multiple-factors.html">Multi-Factor Measurement Model</a></li>
-    <li><a class="dropdown-item" href="../articles/reliability.html">Reliability of Factor Scores</a></li>
+    <li><a class="dropdown-item" href="../articles/product-factor-scores.html">Product factor-score indicators (latent interactions)</a></li>
+    <li><a class="dropdown-item" href="../articles/scoring-matrices.html">Scoring Matrices: lavaan CFA and lme4</a></li>
     <li><a class="dropdown-item" href="../articles/tspa-growth-vignette.html">Linear Growth Modeling with Two-Stage Path Analysis</a></li>
-    <li><a class="dropdown-item" href="../articles/tspa-plot-vignette.html">Diagnostic plots for `tspa` models</a></li>
-    <li><a class="dropdown-item" href="../articles/tspa-vignette-mx.html">Multi-Factor Measurement Model (OpenMx)</a></li>
+    <li><a class="dropdown-item" href="../articles/tspa-vignette-mx.html">2S-PA with OpenMx and IRT (mirt)</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -78,7 +77,7 @@
     
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://lavaan.ugent.be" class="external-link">lavaan</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://gengrui-zhang.github.io/R2spa/">R2spa</a></span><span class="op">)</span></span></code></pre></div>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://gengrui-zhang.github.io/R2spa/" class="external-link">R2spa</a></span><span class="op">)</span></span></code></pre></div>
 <p>The example is from <a href="https://lavaan.ugent.be/tutorial/sem.html" class="external-link uri">https://lavaan.ugent.be/tutorial/sem.html</a>.</p>
 <div class="section level2">
 <h2 id="factor-score">Factor score<a class="anchor" aria-label="anchor" href="#factor-score"></a>
@@ -87,11 +86,11 @@
 indicator only loads on one factor, the resulting factor scores
 generally are weighted composites of <strong>ALL</strong> indicators.
 Consider the regression score, which has the form</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover><mi>𝛈</mi><mo accent="true">̃</mo></mover><mo>=</mo><mi>𝐀</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>𝐲</mi><mo>−</mo><mover><mi>𝛍</mi><mo accent="true">̂</mo></mover><mo stretchy="true" form="postfix">)</mo></mrow><mo>+</mo><mi>𝛂</mi></mrow><annotation encoding="application/x-tex">\tilde{\boldsymbol \eta} = \mathbf{A}(\mathbf{y} - \hat{\boldsymbol \mu}) + \boldsymbol{\alpha}</annotation></semantics></math></p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover><mi>𝛈</mi><mo accent="true">̃</mo></mover><mo>=</mo><mi>𝐀</mi><mo stretchy="false" form="prefix">(</mo><mi>𝐲</mi><mo>−</mo><mover><mi>𝛍</mi><mo accent="true">̂</mo></mover><mo stretchy="false" form="postfix">)</mo><mo>+</mo><mi>𝛂</mi></mrow><annotation encoding="application/x-tex">\tilde{\boldsymbol \eta} = \mathbf{A}(\mathbf{y} - \hat{\boldsymbol \mu}) + \boldsymbol{\alpha}</annotation></semantics></math></p>
 <p>where
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>𝐀</mi><mo>=</mo><mi>𝚿</mi><msup><mi>𝚲</mi><mi>⊤</mi></msup><msup><mover><mi>𝚺</mi><mo accent="true">̂</mo></mover><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\mathbf{A} = \boldsymbol{\Psi}\boldsymbol{\Lambda}^\top \hat{\boldsymbol{\Sigma}}^{-1}</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>𝐀</mi><mo>=</mo><mi>𝚿</mi><msup><mi>𝚲</mi><mi>⊤</mi></msup><msup><mover><mi>𝚺</mi><mo accent="true">̂</mo></mover><mrow><mi>−</mi><mn>1</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\mathbf{A} = \boldsymbol{\Psi}\boldsymbol{\Lambda}^\top \hat{\boldsymbol{\Sigma}}^{-1}</annotation></semantics></math>
 is a
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>q</mi><annotation encoding="application/x-tex">q</annotation></semantics></math><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>×</mo><annotation encoding="application/x-tex">\times</annotation></semantics></math><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>q</mi><annotation encoding="application/x-tex">q</annotation></semantics></math><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>×</mi><annotation encoding="application/x-tex">\times</annotation></semantics></math><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>
 matrix,
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover><mi>𝛍</mi><mo accent="true">̂</mo></mover><mo>=</mo><mi>𝛎</mi><mo>+</mo><mi>𝚲</mi><mi>𝛂</mi></mrow><annotation encoding="application/x-tex">\hat{\boldsymbol \mu} = \boldsymbol{\nu} + \boldsymbol{\Lambda} \boldsymbol{\alpha}</annotation></semantics></math>
 and
@@ -105,7 +104,7 @@ and
 are the latent means and latent covariances.</p>
 <p>Therefore, assuming that the model is correctly specified such that
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>𝐲</mi><mo>=</mo><mi>𝛎</mi><mo>+</mo><mi>𝚲</mi><mi>𝛈</mi><mo>+</mo><mi>𝛆</mi></mrow><annotation encoding="application/x-tex">\mathbf{y} = \boldsymbol{\nu} + \boldsymbol{\Lambda} \boldsymbol{\eta} + \boldsymbol{\varepsilon}</annotation></semantics></math>,</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mtable><mtr><mtd columnalign="right" style="text-align: right"><mover><mi>𝛈</mi><mo accent="true">̃</mo></mover></mtd><mtd columnalign="left" style="text-align: left"><mo>=</mo><mi>𝐀</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>𝚲</mi><mi>𝛈</mi><mo>+</mo><mi>𝛆</mi><mo>−</mo><mi>𝚲</mi><mi>𝛂</mi><mo stretchy="true" form="postfix">)</mo></mrow><mo>+</mo><mi>𝛂</mi></mtd></mtr><mtr><mtd columnalign="right" style="text-align: right"></mtd><mtd columnalign="left" style="text-align: left"><mo>=</mo><mrow><mo stretchy="true" form="prefix">(</mo><mi>𝐈</mi><mo>−</mo><mi>𝐀</mi><mi>𝚲</mi><mo stretchy="true" form="postfix">)</mo></mrow><mi>𝛂</mi><mo>+</mo><mi>𝐀</mi><mi>𝚲</mi><mi>𝛈</mi><mo>+</mo><mi>𝐀</mi><mi>𝛆</mi><mi>.</mi></mtd></mtr></mtable><annotation encoding="application/x-tex">
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mtable><mtr><mtd columnalign="right" style="text-align: right; padding-right: 0"><mover><mi>𝛈</mi><mo accent="true">̃</mo></mover></mtd><mtd columnalign="left" style="text-align: left; padding-left: 0"><mo>=</mo><mi>𝐀</mi><mo stretchy="false" form="prefix">(</mo><mi>𝚲</mi><mi>𝛈</mi><mo>+</mo><mi>𝛆</mi><mo>−</mo><mi>𝚲</mi><mi>𝛂</mi><mo stretchy="false" form="postfix">)</mo><mo>+</mo><mi>𝛂</mi></mtd></mtr><mtr><mtd columnalign="right" style="text-align: right; padding-right: 0"></mtd><mtd columnalign="left" style="text-align: left; padding-left: 0"><mo>=</mo><mo stretchy="false" form="prefix">(</mo><mi>𝐈</mi><mo>−</mo><mi>𝐀</mi><mi>𝚲</mi><mo stretchy="false" form="postfix">)</mo><mi>𝛂</mi><mo>+</mo><mi>𝐀</mi><mi>𝚲</mi><mi>𝛈</mi><mo>+</mo><mi>𝐀</mi><mi>𝛆</mi><mi>.</mi></mtd></mtr></mtable><annotation encoding="application/x-tex">
   \begin{aligned}
   \tilde{\boldsymbol \eta} &amp; = \mathbf{A}(\boldsymbol{\Lambda} \boldsymbol{\eta} + \boldsymbol{\varepsilon} - \boldsymbol{\Lambda} \boldsymbol{\alpha}) + \boldsymbol{\alpha} \\
   &amp; = (\mathbf{I} - \mathbf{A}\boldsymbol{\Lambda}) \boldsymbol{\alpha} +
@@ -117,11 +116,11 @@ are the latent means and latent covariances.</p>
 as indicators of
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>𝛈</mi><annotation encoding="application/x-tex">\boldsymbol \eta</annotation></semantics></math>,
 we can see that
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝛎</mi><mover><mi>𝛈</mi><mo accent="true">̃</mo></mover></msub><mo>=</mo><mrow><mo stretchy="true" form="prefix">(</mo><mi>𝐈</mi><mo>−</mo><mi>𝐀</mi><mi>𝚲</mi><mo stretchy="true" form="postfix">)</mo></mrow><mi>𝛂</mi></mrow><annotation encoding="application/x-tex">\boldsymbol{\nu}_\tilde{\boldsymbol{\eta}} = (\mathbf{I} - \mathbf{A}\boldsymbol{\Lambda}) \boldsymbol{\alpha}</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝛎</mi><mover><mi>𝛈</mi><mo accent="true">̃</mo></mover></msub><mo>=</mo><mo stretchy="false" form="prefix">(</mo><mi>𝐈</mi><mo>−</mo><mi>𝐀</mi><mi>𝚲</mi><mo stretchy="false" form="postfix">)</mo><mi>𝛂</mi></mrow><annotation encoding="application/x-tex">\boldsymbol{\nu}_\tilde{\boldsymbol{\eta}} = (\mathbf{I} - \mathbf{A}\boldsymbol{\Lambda}) \boldsymbol{\alpha}</annotation></semantics></math>
 is the intercept,
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝚲</mi><mover><mi>𝛈</mi><mo accent="true">̃</mo></mover></msub><mo>=</mo><mi>𝐀</mi><mi>𝚲</mi></mrow><annotation encoding="application/x-tex">\boldsymbol{\Lambda}_\tilde{\boldsymbol{\eta}} = \mathbf{A}\boldsymbol{\Lambda}</annotation></semantics></math>
 is the
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>q</mi><annotation encoding="application/x-tex">q</annotation></semantics></math><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>×</mo><annotation encoding="application/x-tex">\times</annotation></semantics></math><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>q</mi><annotation encoding="application/x-tex">q</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>q</mi><annotation encoding="application/x-tex">q</annotation></semantics></math><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>×</mi><annotation encoding="application/x-tex">\times</annotation></semantics></math><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>q</mi><annotation encoding="application/x-tex">q</annotation></semantics></math>
 loading matrix, and
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝚯</mi><mover><mi>𝛈</mi><mo accent="true">̃</mo></mover></msub><mo>=</mo><mi>𝐀</mi><mi>𝛆</mi></mrow><annotation encoding="application/x-tex">\boldsymbol{\Theta}_\tilde{\boldsymbol{\eta}} = \mathbf{A}\boldsymbol{\varepsilon}</annotation></semantics></math>
 is the error covariance matrix.</p>
@@ -144,7 +143,7 @@ is generally not diagonal, as the following shows:</p>
 <span><span class="va">psi_mat</span> <span class="op">&lt;-</span> <span class="va">pars</span><span class="op">$</span><span class="va">psi</span></span>
 <span><span class="va">sigma_mat</span> <span class="op">&lt;-</span> <span class="va">cfa_fit</span><span class="op">@</span><span class="va">implied</span><span class="op">$</span><span class="va">cov</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
 <span><span class="va">ginvsigma</span> <span class="op">&lt;-</span> <span class="fu">MASS</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/MASS/man/ginv.html" class="external-link">ginv</a></span><span class="op">(</span><span class="va">sigma_mat</span><span class="op">)</span></span>
-<span><span class="va">alambda</span> <span class="op">&lt;-</span> <span class="va">psi_mat</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/crossprod.html" class="external-link">crossprod</a></span><span class="op">(</span><span class="va">lambda_mat</span>, <span class="va">ginvsigma</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">lambda_mat</span><span class="op">)</span></span>
+<span><span class="va">alambda</span> <span class="op">&lt;-</span> <span class="va">psi_mat</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/pkg/Matrix/man/matmult-methods.html" class="external-link">crossprod</a></span><span class="op">(</span><span class="va">lambda_mat</span>, <span class="va">ginvsigma</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">lambda_mat</span><span class="op">)</span></span>
 <span><span class="va">alambda</span></span>
 <span><span class="co">#&gt;            ind60      dem60</span></span>
 <span><span class="co">#&gt; ind60 0.95538579 0.01834111</span></span>
@@ -173,25 +172,32 @@ is generally not diagonal, as the following shows:</p>
 <span><span class="co">#&gt; 4            0.004017388  0.09077571</span></span>
 <span><span class="co">#&gt; 5            0.004017388  0.09077571</span></span>
 <span><span class="co">#&gt; 6            0.004017388  0.09077571</span></span></code></pre></div>
-<p>Therefore, we need to specify cross-loadings when using 2S-PA.</p>
+<p>Therefore, cross-loadings must be accounted for in stage 2. Because
+<code>fs_dat</code> comes from <code><a href="../reference/get_fs.html">get_fs()</a></code>,
+<code><a href="../reference/tspa.html">tspa()</a></code> reads the implied loading matrix <code>fsL</code>
+(which here carries the cross-loadings) and the score error covariance
+<code>fsT</code> from the result’s attributes, so the
+<code>fsT</code>/<code>fsL</code> arguments no longer need to be passed
+(they can still be passed explicitly if preferred).</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">tspa_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60"</span>, data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
-<span>                 fsT <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsT"</span><span class="op">)</span>, </span>
-<span>                 fsL <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsL"</span><span class="op">)</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">tspa_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60"</span>, data <span class="op">=</span> <span class="va">fs_dat</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">tspa_fit</span>, <span class="st">"tspaModel"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; # latent variables (indicated by factor scores)</span></span>
-<span><span class="co">#&gt;  ind60 =~ c(0.955385785456617) * fs_ind60 + c(0.0581699407736295) * fs_dem60</span></span>
-<span><span class="co">#&gt;  # latent variables (indicated by factor scores)</span></span>
-<span><span class="co">#&gt;  dem60 =~ c(0.0183411131911887) * fs_ind60 + c(0.868888868390616) * fs_dem60</span></span>
-<span><span class="co">#&gt;  # constrain the errors</span></span>
-<span><span class="co">#&gt; fs_ind60 ~~ c(0.0345955179271981) * fs_ind60</span></span>
-<span><span class="co">#&gt;  # constrain the errors</span></span>
-<span><span class="co">#&gt; fs_dem60 ~~ c(0.00401738814566851) * fs_ind60</span></span>
-<span><span class="co">#&gt;  # constrain the errors</span></span>
-<span><span class="co">#&gt; fs_dem60 ~~ c(0.0907757082269278) * fs_dem60</span></span>
-<span><span class="co">#&gt;  </span></span>
-<span><span class="co">#&gt;  # structural model</span></span>
-<span><span class="co">#&gt;  dem60 ~ ind60</span></span>
+<span><span class="co">#&gt; ind60 =~ 0.955385785456618 * fs_ind60 + 0.0581699407736301 * fs_dem60</span></span>
+<span><span class="co">#&gt; # latent variables (indicated by factor scores)</span></span>
+<span><span class="co">#&gt; dem60 =~ 0.018341113191188 * fs_ind60 + 0.868888868390615 * fs_dem60</span></span>
+<span><span class="co">#&gt; # constrain the errors</span></span>
+<span><span class="co">#&gt; fs_ind60 ~~ 0.0345955179271982 * fs_ind60</span></span>
+<span><span class="co">#&gt; # constrain the errors</span></span>
+<span><span class="co">#&gt; fs_dem60 ~~ 0.00401738814566846 * fs_ind60</span></span>
+<span><span class="co">#&gt; # constrain the errors</span></span>
+<span><span class="co">#&gt; fs_dem60 ~~ 0.0907757082269276 * fs_dem60</span></span>
+<span><span class="co">#&gt; # constrain the intercepts</span></span>
+<span><span class="co">#&gt; fs_ind60 ~ 0 * 1</span></span>
+<span><span class="co">#&gt; # constrain the intercepts</span></span>
+<span><span class="co">#&gt; fs_dem60 ~ 0 * 1</span></span>
+<span><span class="co">#&gt; # structural model</span></span>
+<span><span class="co">#&gt; dem60 ~ ind60</span></span>
 <span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/parameterEstimates.html" class="external-link">parameterestimates</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt;         lhs op      rhs   est    se     z pvalue ci.lower ci.upper</span></span>
 <span><span class="co">#&gt; 1     ind60 =~ fs_ind60 0.955 0.000    NA     NA    0.955    0.955</span></span>
@@ -201,10 +207,16 @@ is generally not diagonal, as the following shows:</p>
 <span><span class="co">#&gt; 5  fs_ind60 ~~ fs_ind60 0.035 0.000    NA     NA    0.035    0.035</span></span>
 <span><span class="co">#&gt; 6  fs_ind60 ~~ fs_dem60 0.004 0.000    NA     NA    0.004    0.004</span></span>
 <span><span class="co">#&gt; 7  fs_dem60 ~~ fs_dem60 0.091 0.000    NA     NA    0.091    0.091</span></span>
-<span><span class="co">#&gt; 8     dem60  ~    ind60 0.460 0.113 4.089      0    0.240    0.681</span></span>
-<span><span class="co">#&gt; 9     ind60 ~~    ind60 1.000 0.169 5.900      0    0.668    1.332</span></span>
-<span><span class="co">#&gt; 10    dem60 ~~    dem60 0.788 0.150 5.267      0    0.495    1.081</span></span></code></pre></div>
-<p>which is more consistent with the SEM results.</p>
+<span><span class="co">#&gt; 8  fs_ind60 ~1          0.000 0.000    NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 9  fs_dem60 ~1          0.000 0.000    NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 10    dem60  ~    ind60 0.460 0.113 4.089      0    0.240    0.681</span></span>
+<span><span class="co">#&gt; 11    ind60 ~~    ind60 1.000 0.169 5.900      0    0.668    1.332</span></span>
+<span><span class="co">#&gt; 12    dem60 ~~    dem60 0.788 0.150 5.267      0    0.495    1.081</span></span>
+<span><span class="co">#&gt; 13    ind60 ~1          0.000 0.000    NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 14    dem60 ~1          0.000 0.000    NA     NA    0.000    0.000</span></span></code></pre></div>
+<p>The non-diagonal <code>fsL</code> (cross-loadings) is what makes the
+score-based model recover the joint-model structure, because each score
+is a weighted composite of all the indicators.</p>
 </div>
 <div class="section level2">
 <h2 id="three-factor-model-example">Three-factor model example<a class="anchor" aria-label="anchor" href="#three-factor-model-example"></a>
@@ -226,7 +238,7 @@ is generally not diagonal, as the following shows:</p>
 <span><span class="va">psi_mat</span> <span class="op">&lt;-</span> <span class="va">pars</span><span class="op">$</span><span class="va">psi</span></span>
 <span><span class="va">sigma_mat</span> <span class="op">&lt;-</span> <span class="va">cfa_3fac_fit</span><span class="op">@</span><span class="va">implied</span><span class="op">$</span><span class="va">cov</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
 <span><span class="va">ginvsigma</span> <span class="op">&lt;-</span> <span class="fu">MASS</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/MASS/man/ginv.html" class="external-link">ginv</a></span><span class="op">(</span><span class="va">sigma_mat</span><span class="op">)</span></span>
-<span><span class="va">alambda</span> <span class="op">&lt;-</span> <span class="va">psi_mat</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/crossprod.html" class="external-link">crossprod</a></span><span class="op">(</span><span class="va">lambda_mat</span>, <span class="va">ginvsigma</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">lambda_mat</span><span class="op">)</span></span>
+<span><span class="va">alambda</span> <span class="op">&lt;-</span> <span class="va">psi_mat</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/pkg/Matrix/man/matmult-methods.html" class="external-link">crossprod</a></span><span class="op">(</span><span class="va">lambda_mat</span>, <span class="va">ginvsigma</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">lambda_mat</span><span class="op">)</span></span>
 <span><span class="va">alambda</span></span>
 <span><span class="co">#&gt;             ind60        dem60      dem65</span></span>
 <span><span class="co">#&gt; ind60  0.95064774 -0.005967124 0.02951139</span></span>
@@ -271,36 +283,41 @@ is generally not diagonal, as the following shows:</p>
 <span><span class="co">#&gt; 4            0.005026024             0.05337525   0.0515733</span></span>
 <span><span class="co">#&gt; 5            0.005026024             0.05337525   0.0515733</span></span>
 <span><span class="co">#&gt; 6            0.005026024             0.05337525   0.0515733</span></span></code></pre></div>
-<p>Therefore, we need to specify cross-loadings when using 2S-PA.</p>
+<p>As before, <code><a href="../reference/tspa.html">tspa()</a></code> reads the cross-loadings
+(<code>fsL</code>) and the score error covariance (<code>fsT</code>)
+from the <code><a href="../reference/get_fs.html">get_fs()</a></code> result.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tspa_fit_3fac</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60</span></span>
-<span><span class="st">              dem65 ~ ind60 + dem60"</span>,</span>
-<span>              data <span class="op">=</span> <span class="va">fs_dat_3fac</span>,</span>
-<span>              fsT <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat_3fac</span>, <span class="st">"fsT"</span><span class="op">)</span>,</span>
-<span>              fsL <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat_3fac</span>, <span class="st">"fsL"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="st">                               dem65 ~ ind60 + dem60"</span>,</span>
+<span>              data <span class="op">=</span> <span class="va">fs_dat_3fac</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">tspa_fit_3fac</span>, <span class="st">"tspaModel"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; # latent variables (indicated by factor scores)</span></span>
-<span><span class="co">#&gt;  ind60 =~ c(0.950647742844847) * fs_ind60 + c(-0.0206972362902851) * fs_dem60 + c(0.0986852834195767) * fs_dem65</span></span>
-<span><span class="co">#&gt;  # latent variables (indicated by factor scores)</span></span>
-<span><span class="co">#&gt;  dem60 =~ c(-0.00596712444175395) * fs_ind60 + c(0.533020047181513) * fs_dem60 + c(0.401095943690546) * fs_dem65</span></span>
-<span><span class="co">#&gt;  # latent variables (indicated by factor scores)</span></span>
-<span><span class="co">#&gt;  dem65 =~ c(0.0295113941487134) * fs_ind60 + c(0.416037872255944) * fs_dem60 + c(0.491333767947424) * fs_dem65</span></span>
-<span><span class="co">#&gt;  # constrain the errors</span></span>
-<span><span class="co">#&gt; fs_ind60 ~~ c(0.0340104951546674) * fs_ind60</span></span>
-<span><span class="co">#&gt;  # constrain the errors</span></span>
-<span><span class="co">#&gt; fs_dem60 ~~ c(0.00038816407039879) * fs_ind60</span></span>
-<span><span class="co">#&gt;  # constrain the errors</span></span>
-<span><span class="co">#&gt; fs_dem65 ~~ c(0.00502602420598866) * fs_ind60</span></span>
-<span><span class="co">#&gt;  # constrain the errors</span></span>
-<span><span class="co">#&gt; fs_dem60 ~~ c(0.0586870313996517) * fs_dem60</span></span>
-<span><span class="co">#&gt;  # constrain the errors</span></span>
-<span><span class="co">#&gt; fs_dem65 ~~ c(0.0533752457536215) * fs_dem60</span></span>
-<span><span class="co">#&gt;  # constrain the errors</span></span>
-<span><span class="co">#&gt; fs_dem65 ~~ c(0.0515732993693881) * fs_dem65</span></span>
-<span><span class="co">#&gt;  </span></span>
-<span><span class="co">#&gt;  # structural model</span></span>
-<span><span class="co">#&gt;  dem60 ~ ind60</span></span>
-<span><span class="co">#&gt;               dem65 ~ ind60 + dem60</span></span>
+<span><span class="co">#&gt; ind60 =~ 0.950647742844845 * fs_ind60 + -0.0206972362902852 * fs_dem60 + 0.0986852834195762 * fs_dem65</span></span>
+<span><span class="co">#&gt; # latent variables (indicated by factor scores)</span></span>
+<span><span class="co">#&gt; dem60 =~ -0.00596712444175296 * fs_ind60 + 0.533020047181513 * fs_dem60 + 0.401095943690547 * fs_dem65</span></span>
+<span><span class="co">#&gt; # latent variables (indicated by factor scores)</span></span>
+<span><span class="co">#&gt; dem65 =~ 0.0295113941487123 * fs_ind60 + 0.416037872255943 * fs_dem60 + 0.491333767947423 * fs_dem65</span></span>
+<span><span class="co">#&gt; # constrain the errors</span></span>
+<span><span class="co">#&gt; fs_ind60 ~~ 0.0340104951546672 * fs_ind60</span></span>
+<span><span class="co">#&gt; # constrain the errors</span></span>
+<span><span class="co">#&gt; fs_dem60 ~~ 0.000388164070398798 * fs_ind60</span></span>
+<span><span class="co">#&gt; # constrain the errors</span></span>
+<span><span class="co">#&gt; fs_dem65 ~~ 0.00502602420598861 * fs_ind60</span></span>
+<span><span class="co">#&gt; # constrain the errors</span></span>
+<span><span class="co">#&gt; fs_dem60 ~~ 0.0586870313996517 * fs_dem60</span></span>
+<span><span class="co">#&gt; # constrain the errors</span></span>
+<span><span class="co">#&gt; fs_dem65 ~~ 0.0533752457536214 * fs_dem60</span></span>
+<span><span class="co">#&gt; # constrain the errors</span></span>
+<span><span class="co">#&gt; fs_dem65 ~~ 0.051573299369388 * fs_dem65</span></span>
+<span><span class="co">#&gt; # constrain the intercepts</span></span>
+<span><span class="co">#&gt; fs_ind60 ~ 0 * 1</span></span>
+<span><span class="co">#&gt; # constrain the intercepts</span></span>
+<span><span class="co">#&gt; fs_dem60 ~ 0 * 1</span></span>
+<span><span class="co">#&gt; # constrain the intercepts</span></span>
+<span><span class="co">#&gt; fs_dem65 ~ 0 * 1</span></span>
+<span><span class="co">#&gt; # structural model</span></span>
+<span><span class="co">#&gt; dem60 ~ ind60</span></span>
+<span><span class="co">#&gt;                                dem65 ~ ind60 + dem60</span></span>
 <span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/parameterEstimates.html" class="external-link">parameterestimates</a></span><span class="op">(</span><span class="va">tspa_fit_3fac</span><span class="op">)</span></span>
 <span><span class="co">#&gt;         lhs op      rhs    est    se      z pvalue ci.lower ci.upper</span></span>
 <span><span class="co">#&gt; 1     ind60 =~ fs_ind60  0.951 0.000     NA     NA    0.951    0.951</span></span>
@@ -318,12 +335,18 @@ is generally not diagonal, as the following shows:</p>
 <span><span class="co">#&gt; 13 fs_dem60 ~~ fs_dem60  0.059 0.000     NA     NA    0.059    0.059</span></span>
 <span><span class="co">#&gt; 14 fs_dem60 ~~ fs_dem65  0.053 0.000     NA     NA    0.053    0.053</span></span>
 <span><span class="co">#&gt; 15 fs_dem65 ~~ fs_dem65  0.052 0.000     NA     NA    0.052    0.052</span></span>
-<span><span class="co">#&gt; 16    dem60  ~    ind60  0.448 0.114  3.937  0.000    0.225    0.671</span></span>
-<span><span class="co">#&gt; 17    dem65  ~    ind60  0.146 0.069  2.112  0.035    0.010    0.281</span></span>
-<span><span class="co">#&gt; 18    dem65  ~    dem60  0.913 0.073 12.435  0.000    0.769    1.057</span></span>
-<span><span class="co">#&gt; 19    ind60 ~~    ind60  1.000 0.169  5.902  0.000    0.668    1.332</span></span>
-<span><span class="co">#&gt; 20    dem60 ~~    dem60  0.799 0.153  5.224  0.000    0.499    1.099</span></span>
-<span><span class="co">#&gt; 21    dem65 ~~    dem65  0.026 0.043  0.620  0.535   -0.057    0.110</span></span></code></pre></div>
+<span><span class="co">#&gt; 16 fs_ind60 ~1           0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 17 fs_dem60 ~1           0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 18 fs_dem65 ~1           0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 19    dem60  ~    ind60  0.448 0.114  3.937  0.000    0.225    0.671</span></span>
+<span><span class="co">#&gt; 20    dem65  ~    ind60  0.146 0.069  2.112  0.035    0.010    0.281</span></span>
+<span><span class="co">#&gt; 21    dem65  ~    dem60  0.913 0.073 12.435  0.000    0.769    1.057</span></span>
+<span><span class="co">#&gt; 22    ind60 ~~    ind60  1.000 0.169  5.902  0.000    0.668    1.332</span></span>
+<span><span class="co">#&gt; 23    dem60 ~~    dem60  0.799 0.153  5.224  0.000    0.499    1.099</span></span>
+<span><span class="co">#&gt; 24    dem65 ~~    dem65  0.026 0.043  0.620  0.535   -0.057    0.110</span></span>
+<span><span class="co">#&gt; 25    ind60 ~1           0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 26    dem60 ~1           0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 27    dem65 ~1           0.000 0.000     NA     NA    0.000    0.000</span></span></code></pre></div>
 <p>Compare to SEM:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sem_3fac</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/sem.html" class="external-link">sem</a></span><span class="op">(</span><span class="st">"</span></span>
@@ -337,7 +360,7 @@ is generally not diagonal, as the following shows:</p>
 <span><span class="st">  "</span>,</span>
 <span>  data <span class="op">=</span> <span class="va">PoliticalDemocracy</span></span>
 <span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/standardizedSolution.html" class="external-link">standardizedSolution</a></span><span class="op">(</span><span class="va">sem_3fac</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/standardizedSolution.html" class="external-link">standardizedsolution</a></span><span class="op">(</span><span class="va">sem_3fac</span><span class="op">)</span></span>
 <span><span class="co">#&gt;      lhs op   rhs est.std    se      z pvalue ci.lower ci.upper</span></span>
 <span><span class="co">#&gt; 1  ind60 =~    x1   0.920 0.023 39.823  0.000    0.874    0.965</span></span>
 <span><span class="co">#&gt; 2  ind60 =~    x2   0.973 0.017 58.858  0.000    0.941    1.006</span></span>
@@ -367,6 +390,145 @@ is generally not diagonal, as the following shows:</p>
 <span><span class="co">#&gt; 26 ind60 ~~ ind60   1.000 0.000     NA     NA    1.000    1.000</span></span>
 <span><span class="co">#&gt; 27 dem60 ~~ dem60   0.799 0.091  8.737  0.000    0.620    0.978</span></span>
 <span><span class="co">#&gt; 28 dem65 ~~ dem65   0.026 0.046  0.579  0.562   -0.063    0.116</span></span></code></pre></div>
+<p>The <code><a href="https://rdrr.io/pkg/lavaan/man/sem.html" class="external-link">lavaan::sem()</a></code> fit above is the
+<strong>gold-standard</strong> joint model: it estimates the measurement
+model and the structural paths together, treating the indicators as
+observed, so no separate measurement-error correction is needed.
+<code><a href="../reference/tspa.html">tspa()</a></code> reaches the same structural estimates a different
+way — by correcting the stage-1 <em>scores</em> for their measurement
+error — so the two agree when the sample is large. The simulation
+studies find 2S-PA tracks the joint model closely while staying more
+reliable, with less biased standard errors and better coverage, in small
+samples and with unreliable or categorical items (Lai &amp; Hsiao, 2022;
+Lai et al., 2023). <code>PoliticalDemocracy</code> is a real data set,
+so there is no “true value” to compare against here; the point of
+putting the two side by side is that they target the same structural
+model.</p>
+</div>
+<div class="section level2">
+<h2 id="local-vs-joint-scores">Local vs joint scores<a class="anchor" aria-label="anchor" href="#local-vs-joint-scores"></a>
+</h2>
+<p>The <code><a href="../reference/get_fs.html">get_fs()</a></code> calls above all score from a <em>joint</em>
+multi-factor measurement model: one fit with all the latents estimated
+together. With freely correlated factors, each score is a weighted
+composite of <strong>all</strong> the indicators (the off-diagonals of
+the <code>alambda</code> matrices above), so the stage-2 model has to
+account for the cross-loadings explicitly. The canonical 2S-PA setup
+(Lai &amp; Hsiao, 2022) instead scores each latent from its
+<strong>own</strong> local measurement model.
+<code>get_fs(..., local = TRUE)</code> does this in one call and merges
+the per-construct results into the usual multi-factor layout:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="op">(</span><span class="va">fs_local</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">PoliticalDemocracy</span>,</span>
+<span>                    model <span class="op">=</span> <span class="va">cfa_3fac</span>,</span>
+<span>                    std.lv <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>                    local <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt;     fs_ind60   fs_dem60   fs_dem65 fs_ind60_se fs_dem60_se fs_dem65_se</span></span>
+<span><span class="co">#&gt; 1 -0.7883166 -1.2889577 -0.7194375   0.1818264   0.3168311   0.3002329</span></span>
+<span><span class="co">#&gt; 2  0.2152236 -1.4237084 -0.4987011   0.1818264   0.3168311   0.3002329</span></span>
+<span><span class="co">#&gt; 3  1.0702633  1.2529141  1.4360292   0.1818264   0.3168311   0.3002329</span></span>
+<span><span class="co">#&gt; 4  1.8576831  1.4038349  0.9362424   0.1818264   0.3168311   0.3002329</span></span>
+<span><span class="co">#&gt; 5  1.2463824  0.9023585  0.8101644   0.1818264   0.3168311   0.3002329</span></span>
+<span><span class="co">#&gt; 6  0.3181990  0.4653096 -0.5511437   0.1818264   0.3168311   0.3002329</span></span>
+<span><span class="co">#&gt;   ind60_by_fs_ind60 ind60_by_fs_dem60 ind60_by_fs_dem65 dem60_by_fs_ind60</span></span>
+<span><span class="co">#&gt; 1         0.9657673                 0                 0                 0</span></span>
+<span><span class="co">#&gt; 2         0.9657673                 0                 0                 0</span></span>
+<span><span class="co">#&gt; 3         0.9657673                 0                 0                 0</span></span>
+<span><span class="co">#&gt; 4         0.9657673                 0                 0                 0</span></span>
+<span><span class="co">#&gt; 5         0.9657673                 0                 0                 0</span></span>
+<span><span class="co">#&gt; 6         0.9657673                 0                 0                 0</span></span>
+<span><span class="co">#&gt;   dem60_by_fs_dem60 dem60_by_fs_dem65 dem65_by_fs_ind60 dem65_by_fs_dem60</span></span>
+<span><span class="co">#&gt; 1         0.8868049                 0                 0                 0</span></span>
+<span><span class="co">#&gt; 2         0.8868049                 0                 0                 0</span></span>
+<span><span class="co">#&gt; 3         0.8868049                 0                 0                 0</span></span>
+<span><span class="co">#&gt; 4         0.8868049                 0                 0                 0</span></span>
+<span><span class="co">#&gt; 5         0.8868049                 0                 0                 0</span></span>
+<span><span class="co">#&gt; 6         0.8868049                 0                 0                 0</span></span>
+<span><span class="co">#&gt;   dem65_by_fs_dem65 ev_fs_ind60 ecov_fs_dem60_fs_ind60 ev_fs_dem60</span></span>
+<span><span class="co">#&gt; 1         0.8998252  0.03306085                      0    0.100382</span></span>
+<span><span class="co">#&gt; 2         0.8998252  0.03306085                      0    0.100382</span></span>
+<span><span class="co">#&gt; 3         0.8998252  0.03306085                      0    0.100382</span></span>
+<span><span class="co">#&gt; 4         0.8998252  0.03306085                      0    0.100382</span></span>
+<span><span class="co">#&gt; 5         0.8998252  0.03306085                      0    0.100382</span></span>
+<span><span class="co">#&gt; 6         0.8998252  0.03306085                      0    0.100382</span></span>
+<span><span class="co">#&gt;   ecov_fs_dem65_fs_ind60 ecov_fs_dem65_fs_dem60 ev_fs_dem65</span></span>
+<span><span class="co">#&gt; 1                      0                      0   0.0901398</span></span>
+<span><span class="co">#&gt; 2                      0                      0   0.0901398</span></span>
+<span><span class="co">#&gt; 3                      0                      0   0.0901398</span></span>
+<span><span class="co">#&gt; 4                      0                      0   0.0901398</span></span>
+<span><span class="co">#&gt; 5                      0                      0   0.0901398</span></span>
+<span><span class="co">#&gt; 6                      0                      0   0.0901398</span></span></code></pre></div>
+<p>The merged result has the same layout as the joint output, with the
+cross terms <em>exactly</em> zero: the <code>fsT</code> and
+<code>fsL</code> attributes are block-diagonal, the <code>psi</code>
+attribute is diagonal, and the off-diagonal <code>_by_</code> loading
+columns and all <code>ecov_*</code> columns are zero. Each score is a
+<em>pure</em> per-construct score — the cross-factor structure is not
+estimated by design:</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_local</span>, <span class="st">"fsL"</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
+<span><span class="co">#&gt;              ind60     dem60     dem65</span></span>
+<span><span class="co">#&gt; fs_ind60 0.9657673 0.0000000 0.0000000</span></span>
+<span><span class="co">#&gt; fs_dem60 0.0000000 0.8868049 0.0000000</span></span>
+<span><span class="co">#&gt; fs_dem65 0.0000000 0.0000000 0.8998252</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">sapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"fs_ind60"</span>, <span class="st">"fs_dem60"</span>, <span class="st">"fs_dem65"</span><span class="op">)</span>,</span>
+<span>       <span class="kw">function</span><span class="op">(</span><span class="va">col</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">fs_local</span><span class="op">[[</span><span class="va">col</span><span class="op">]</span><span class="op">]</span> <span class="op">-</span> <span class="va">fs_dat_3fac</span><span class="op">[[</span><span class="va">col</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;   fs_ind60   fs_dem60   fs_dem65 </span></span>
+<span><span class="co">#&gt; 0.06198296 0.53354046 0.76242550</span></span></code></pre></div>
+<p>So local scores are not the same as joint scores: with freely
+correlated factors they differ (the maximum score differences above),
+because the joint fit scores every latent from all the indicators — even
+the joint fit’s own per-factor estimates shift under free correlation.
+With the factors constrained uncorrelated
+(e.g. <code>ind60 ~~ 0 * dem60</code> in the joint model), the
+likelihood factorizes and the two agree to optimizer tolerance.</p>
+<p>Because the merged result carries the usual
+<code>fsT</code>/<code>fsL</code> attributes (with the zero cross
+terms), it feeds <code><a href="../reference/tspa.html">tspa()</a></code> directly with no explicit
+<code>fsT</code>/<code>fsL</code> arguments — the stage-2 model picks up
+the zero cross-loadings and score error covariances from the
+attributes:</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tspa_fit_local</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60</span></span>
+<span><span class="st">                        dem65 ~ ind60 + dem60"</span>,</span>
+<span>                       data <span class="op">=</span> <span class="va">fs_local</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/parameterEstimates.html" class="external-link">parameterestimates</a></span><span class="op">(</span><span class="va">tspa_fit_local</span><span class="op">)</span></span>
+<span><span class="co">#&gt;         lhs op      rhs   est    se      z pvalue ci.lower ci.upper</span></span>
+<span><span class="co">#&gt; 1     ind60 =~ fs_ind60 0.966 0.000     NA     NA    0.966    0.966</span></span>
+<span><span class="co">#&gt; 2     ind60 =~ fs_dem60 0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 3     ind60 =~ fs_dem65 0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 4     dem60 =~ fs_ind60 0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 5     dem60 =~ fs_dem60 0.887 0.000     NA     NA    0.887    0.887</span></span>
+<span><span class="co">#&gt; 6     dem60 =~ fs_dem65 0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 7     dem65 =~ fs_ind60 0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 8     dem65 =~ fs_dem60 0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 9     dem65 =~ fs_dem65 0.900 0.000     NA     NA    0.900    0.900</span></span>
+<span><span class="co">#&gt; 10 fs_ind60 ~~ fs_ind60 0.033 0.000     NA     NA    0.033    0.033</span></span>
+<span><span class="co">#&gt; 11 fs_ind60 ~~ fs_dem60 0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 12 fs_ind60 ~~ fs_dem65 0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 13 fs_dem60 ~~ fs_dem60 0.100 0.000     NA     NA    0.100    0.100</span></span>
+<span><span class="co">#&gt; 14 fs_dem60 ~~ fs_dem65 0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 15 fs_dem65 ~~ fs_dem65 0.090 0.000     NA     NA    0.090    0.090</span></span>
+<span><span class="co">#&gt; 16 fs_ind60 ~1          0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 17 fs_dem60 ~1          0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 18 fs_dem65 ~1          0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 19    dem60  ~    ind60 0.453 0.113  4.000  0.000    0.231    0.675</span></span>
+<span><span class="co">#&gt; 20    dem65  ~    ind60 0.129 0.072  1.787  0.074   -0.012    0.271</span></span>
+<span><span class="co">#&gt; 21    dem65  ~    dem60 0.898 0.077 11.705  0.000    0.748    1.049</span></span>
+<span><span class="co">#&gt; 22    ind60 ~~    ind60 1.000 0.169  5.914  0.000    0.669    1.331</span></span>
+<span><span class="co">#&gt; 23    dem60 ~~    dem60 0.795 0.152  5.235  0.000    0.497    1.092</span></span>
+<span><span class="co">#&gt; 24    dem65 ~~    dem65 0.071 0.047  1.528  0.126   -0.020    0.163</span></span>
+<span><span class="co">#&gt; 25    ind60 ~1          0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 26    dem60 ~1          0.000 0.000     NA     NA    0.000    0.000</span></span>
+<span><span class="co">#&gt; 27    dem65 ~1          0.000 0.000     NA     NA    0.000    0.000</span></span></code></pre></div>
+<p><code>model</code> may also be a character vector (or a named list)
+of complete single-factor model strings, each element fit verbatim — the
+escape hatch for anything the strict string grammar rejects, e.g. a
+within-factor residual covariance (<code>y1 ~~ y4</code>).
+<code>vfsLT</code> (and hence <code>tspa(corrected_se = TRUE)</code>),
+<code>prior_cov</code>, and <code>reliability</code> are not supported
+in <code>local</code> mode (v1); see <code><a href="../reference/get_fs.html">?get_fs</a></code> (Details) for
+the full contract.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>
@@ -379,7 +541,7 @@ is generally not diagonal, as the following shows:</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

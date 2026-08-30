@@ -7,9 +7,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>2S-PA with Missing Data • R2spa</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.4.2/css/all.min.css" rel="stylesheet">
-<link href="../deps/font-awesome-6.4.2/css/v4-shims.min.css" rel="stylesheet">
+<link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="2S-PA with Missing Data">
 </head>
 <body>
@@ -34,18 +34,17 @@
 <li class="active nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/categorical-interaction.html">Using Two-Stage Path Analysis with Definition Variables for Latent Interactions with Categorical Indicators</a></li>
-    <li><a class="dropdown-item" href="../articles/corrected-se.html">Corrected Standard Errors</a></li>
+<li><a class="dropdown-item" href="../articles/corrected-se.html">Corrected Standard Errors</a></li>
     <li><a class="dropdown-item" href="../articles/correction-error.html">Correction to Measurement Error</a></li>
     <li><a class="dropdown-item" href="../articles/efa-score.html">EFA Scores</a></li>
-    <li><a class="dropdown-item" href="../articles/get_fs_int-vignette.html">get_fs_int-example</a></li>
     <li><a class="dropdown-item" href="../articles/gr-std-coef.html">Grand Standardized Coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/missing-data.html">2S-PA with Missing Data</a></li>
+    <li><a class="dropdown-item" href="../articles/multilevel.html">2S-PA with Random Effects</a></li>
     <li><a class="dropdown-item" href="../articles/multiple-factors.html">Multi-Factor Measurement Model</a></li>
-    <li><a class="dropdown-item" href="../articles/reliability.html">Reliability of Factor Scores</a></li>
+    <li><a class="dropdown-item" href="../articles/product-factor-scores.html">Product factor-score indicators (latent interactions)</a></li>
+    <li><a class="dropdown-item" href="../articles/scoring-matrices.html">Scoring Matrices: lavaan CFA and lme4</a></li>
     <li><a class="dropdown-item" href="../articles/tspa-growth-vignette.html">Linear Growth Modeling with Two-Stage Path Analysis</a></li>
-    <li><a class="dropdown-item" href="../articles/tspa-plot-vignette.html">Diagnostic plots for `tspa` models</a></li>
-    <li><a class="dropdown-item" href="../articles/tspa-vignette-mx.html">Multi-Factor Measurement Model (OpenMx)</a></li>
+    <li><a class="dropdown-item" href="../articles/tspa-vignette-mx.html">2S-PA with OpenMx and IRT (mirt)</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -70,7 +69,7 @@
       <h1>2S-PA with Missing Data</h1>
                         <h4 data-toc-skip class="author">Mark Lai</h4>
             
-            <h4 data-toc-skip class="date">2024-09-06</h4>
+            <h4 data-toc-skip class="date">2026-08-30</h4>
       
 
       <div class="d-none name"><code>missing-data.Rmd</code></div>
@@ -78,59 +77,69 @@
 
     
     
+<p>With missing data, two things change in two-stage path analysis.
+Stage 1 must be fitted with a missing-data method
+(<code>missing = "fiml"</code> in <code>lavaan</code>), and each case is
+then scored on its <em>own</em> observed indicators, so the score
+standard errors, implied loadings, and error variances are
+<strong>per-row</strong> quantities rather than one pooled matrix. And
+stage 2 has to use those per-row values: <code><a href="../reference/tspa.html">tspa()</a></code> (the
+<code>lavaan</code> backend) reduces the per-pattern values to a single
+representative matrix (<code>reduce =</code>), whereas
+<code><a href="../reference/tspa_mx_model.html">tspa_mx_model()</a></code> (the <code>OpenMx</code> backend) carries
+the per-row values through definition variables, and its raw-data FIML
+evaluation can also handle rows whose scores are dropped as
+<code>NA</code>. The stage-2 fits in this vignette therefore use
+<code><a href="../reference/tspa_mx_model.html">tspa_mx_model()</a></code>.</p>
+<p>For illustration, we create two missing data patterns on
+<code>PoliticalDemocracy</code>: (1) MCAR missingness in a single item
+(<code>x1</code>, about 30% of cases); (2) block missingness, where the
+last 10 cases are missing all four <code>dem65</code> indicators — a
+factor with no observed indicator at all.</p>
 <div class="section level2">
 <h2 id="single-factor-model">Single-Factor Model<a class="anchor" aria-label="anchor" href="#single-factor-model"></a>
 </h2>
-<p>For illustration, we will create an artificial data set with two
-missing data pattern:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">2225</span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://lavaan.ugent.be" class="external-link">lavaan</a></span><span class="op">)</span></span>
-<span><span class="co">#&gt; This is lavaan 0.6-18</span></span>
+<span><span class="co">#&gt; This is lavaan 0.7-2</span></span>
 <span><span class="co">#&gt; lavaan is FREE software! Please report any bugs.</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://gengrui-zhang.github.io/R2spa/">R2spa</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/tbates/umx#readme" class="external-link">umx</a></span><span class="op">)</span></span>
-<span><span class="co">#&gt; Loading required package: OpenMx</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://gengrui-zhang.github.io/R2spa/" class="external-link">R2spa</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://openmx.ssri.psu.edu/" class="external-link">OpenMx</a></span><span class="op">)</span></span>
 <span><span class="co">#&gt; To take full advantage of multiple cores, use:</span></span>
 <span><span class="co">#&gt;   mxOption(key='Number of Threads', value=parallel::detectCores()) #now</span></span>
 <span><span class="co">#&gt;   Sys.setenv(OMP_NUM_THREADS=parallel::detectCores()) #before library(OpenMx)</span></span>
-<span><span class="co">#&gt; For an overview type '?umx'</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Attaching package: 'umx'</span></span>
-<span><span class="co">#&gt; The following object is masked from 'package:stats':</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;     loadings</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="va">PoliticalDemocracy</span><span class="op">)</span></span>
 <span><span class="va">pd2</span> <span class="op">&lt;-</span> <span class="va">PoliticalDemocracy</span></span>
-<span><span class="co"># Add MCAR missing data</span></span>
-<span><span class="va">pd2</span><span class="op">[</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/stats/Binomial.html" class="external-link">rbinom</a></span><span class="op">(</span><span class="fl">75</span>, size <span class="op">=</span> <span class="fl">1</span>, prob <span class="op">=</span> <span class="fl">0.7</span><span class="op">)</span>, <span class="fl">9</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span></span></code></pre></div>
+<span><span class="co"># Add MCAR missing data to x1 (about 30% of the 75 cases)</span></span>
+<span><span class="va">pd2</span><span class="op">[</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/stats/Binomial.html" class="external-link">rbinom</a></span><span class="op">(</span><span class="fl">75</span>, size <span class="op">=</span> <span class="fl">1</span>, prob <span class="op">=</span> <span class="fl">0.7</span><span class="op">)</span>, <span class="st">"x1"</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span></span></code></pre></div>
 <p>Factor scores with <code><a href="https://rdrr.io/pkg/lavaan/man/lavPredict.html" class="external-link">lavaan::lavPredict()</a></code>:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/cfa.html" class="external-link">cfa</a></span><span class="op">(</span><span class="st">"ind60 =~ x1 + x2 + x3"</span>, data <span class="op">=</span> <span class="va">pd2</span>, missing <span class="op">=</span> <span class="st">"fiml"</span><span class="op">)</span></span>
 <span><span class="va">fs_lavaan</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/lavPredict.html" class="external-link">lavPredict</a></span><span class="op">(</span><span class="va">fit</span>, method <span class="op">=</span> <span class="st">"Bartlett"</span>, se <span class="op">=</span> <span class="cn">TRUE</span>, fsm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co"># # extract scoring matrix</span></span>
-<span><span class="co"># fsm &lt;- attr(fs_lavaan, "fsm")[[1]]</span></span>
-<span><span class="co"># # se for observations with complete data</span></span>
-<span><span class="co"># th &lt;- lavInspect(fit, what = "est")$theta</span></span>
-<span><span class="co"># sqrt(diag(fsm %*% th %*% t(fsm)))</span></span>
-<span><span class="co"># # se for observations missing item 1 (need conditional normal)</span></span>
-<span><span class="co"># fsm_mis1 &lt;- with(lavInspect(fit, what = "est"), {</span></span>
-<span><span class="co">#     lambda &lt;- lambda[2:3, , drop = FALSE]</span></span>
-<span><span class="co">#     theta &lt;- theta[2:3, 2:3, drop = FALSE]</span></span>
-<span><span class="co">#     # covy &lt;- (lambda %*% psi %*% t(lambda) + theta)</span></span>
-<span><span class="co">#     # ginvcovy &lt;- MASS::ginv(covy)</span></span>
-<span><span class="co">#     # tlam_invcov &lt;- crossprod(lambda, ginvcovy)</span></span>
-<span><span class="co">#     # psi %*% tlam_invcov</span></span>
-<span><span class="co">#     lamt_th_lam &lt;- crossprod(lambda, solve(theta, lambda))</span></span>
-<span><span class="co">#     solve(lamt_th_lam, crossprod(lambda, solve(theta)))</span></span>
-<span><span class="co"># })</span></span>
-<span><span class="co"># sqrt(diag(fsm_mis1 %*% th[2:3, 2:3, drop = FALSE] %*% t(fsm_mis1)))</span></span>
 <span><span class="co"># From R2spa</span></span>
-<span><span class="va">fs</span> <span class="op">&lt;-</span> <span class="fu">R2spa</span><span class="fu">::</span><span class="fu"><a href="../reference/get_fs_lavaan.html">get_fs_lavaan</a></span><span class="op">(</span><span class="va">fit</span>, method <span class="op">=</span> <span class="st">"Bartlett"</span><span class="op">)</span></span>
+<span><span class="va">fs</span> <span class="op">&lt;-</span> <span class="fu">R2spa</span><span class="fu">::</span><span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">fit</span>, method <span class="op">=</span> <span class="st">"Bartlett"</span><span class="op">)</span></span>
+<span><span class="co"># One SE per missing-data pattern</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span>pattern <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs</span>, <span class="st">"fs_pattern"</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">label</span>,</span>
+<span>            se <span class="op">=</span> <span class="va">fs</span><span class="op">$</span><span class="va">fs_ind60_se</span><span class="op">)</span>, <span class="fl">4</span><span class="op">)</span></span>
+<span><span class="co">#&gt;           se</span></span>
+<span><span class="co">#&gt; pattern    0.149802246676676 0.179196081489146</span></span>
+<span><span class="co">#&gt;   x1+x2+x3                48                 0</span></span>
+<span><span class="co">#&gt;   x2+x3                    0                27</span></span>
 <span><span class="co"># Compare factor scores</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">fs_lavaan</span>, <span class="va">fs</span><span class="op">$</span><span class="va">fs_ind60</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/abline.html" class="external-link">abline</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">0</span>, b <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></code></pre></div>
-<p><img src="missing-data_files/figure-html/unnamed-chunk-2-1.png" width="700"></p>
+<p><img src="missing-data_files/figure-html/unnamed-chunk-2-1.png" class="r-plt" alt="" width="700"></p>
+<p>Because each case is scored conditionally on its own observed
+indicators, <code><a href="../reference/get_fs.html">get_fs()</a></code> returns per-row standard errors and
+error variances: the 48 complete cases (pattern <code>"x1+x2+x3"</code>)
+get SE 0.150, and the 27 cases observed only on <code>x2</code> and
+<code>x3</code> get SE 0.179. The
+<code>fsT</code>/<code>fsL</code>/<code>fsb</code>/<code>scoring_matrix</code>
+attributes are correspondingly <em>lists</em> with one entry per
+pattern, and the <code>fs_pattern</code> attribute maps each row to its
+pattern. The plot confirms that the <code>R2spa</code> scores reproduce
+<code><a href="https://rdrr.io/pkg/lavaan/man/lavPredict.html" class="external-link">lavPredict()</a></code> exactly.</p>
 <div class="section level3">
 <h3 id="multiple-group">Multiple group<a class="anchor" aria-label="anchor" href="#multiple-group"></a>
 </h3>
@@ -140,134 +149,45 @@ missing data pattern:</p>
 <span>  missing <span class="op">=</span> <span class="st">"fiml"</span>,</span>
 <span>  group <span class="op">=</span> <span class="st">"group"</span></span>
 <span><span class="op">)</span></span>
-<span><span class="fu">R2spa</span><span class="fu">::</span><span class="fu"><a href="../reference/get_fs_lavaan.html">get_fs_lavaan</a></span><span class="op">(</span><span class="va">mg_fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt; $`1`</span></span>
+<span><span class="va">mg_fs</span> <span class="op">&lt;-</span> <span class="fu">R2spa</span><span class="fu">::</span><span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">mg_fit</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">mg_fs</span>, <span class="fl">10</span><span class="op">)</span></span>
 <span><span class="co">#&gt;        fs_ind60 fs_ind60_se ind60_by_fs_ind60 ev_fs_ind60 group</span></span>
-<span><span class="co">#&gt; 1  -0.629897437  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 2  -0.003597801  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 3   0.531621454  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 4   1.093150997  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 5   0.751322856  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 6   0.032310335  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 7  -0.001194933  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 8  -0.081265180  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 9   0.087671139  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 10  0.158890547  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 11  0.575151483  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 12  0.490722985  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 13  1.199738770  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 14  0.080689638  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 15  0.479293472  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 16  0.304725162  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 17 -0.006880589  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 18 -0.232201592  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 19  0.734594167  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 20  0.871472984  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 21  0.749217422  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 22  0.726471949  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 23  0.397941787  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 24  0.446676514  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 25  0.726400152  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 26 -1.023191030  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 27 -0.229774171  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 28 -0.589883012  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 29 -0.944983987  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 30 -1.473429633  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 31 -0.386068258  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 32 -1.339301841  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 33 -0.282299077  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 34 -0.197502508  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 35 -0.419983839  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 36 -0.737560746  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 37  0.066032960  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 38 -0.644149975  0.06327033         0.9907480 0.004003135     1</span></span>
-<span><span class="co">#&gt; 39 -1.198883624  0.06481192         0.9902871 0.004200585     1</span></span>
-<span><span class="co">#&gt; 40 -0.082046566  0.06327033         0.9907480 0.004003135     1</span></span>
+<span><span class="co">#&gt; 1  -0.629900908  0.06327411         0.9907469 0.004003613     1</span></span>
+<span><span class="co">#&gt; 2  -0.003598338  0.06481599         0.9902860 0.004201113     1</span></span>
+<span><span class="co">#&gt; 3   0.531624709  0.06327411         0.9907469 0.004003613     1</span></span>
+<span><span class="co">#&gt; 4   1.093155269  0.06481599         0.9902860 0.004201113     1</span></span>
+<span><span class="co">#&gt; 5   0.751323885  0.06481599         0.9902860 0.004201113     1</span></span>
+<span><span class="co">#&gt; 6   0.032310438  0.06481599         0.9902860 0.004201113     1</span></span>
+<span><span class="co">#&gt; 7  -0.001195823  0.06327411         0.9907469 0.004003613     1</span></span>
+<span><span class="co">#&gt; 8  -0.081264245  0.06481599         0.9902860 0.004201113     1</span></span>
+<span><span class="co">#&gt; 9   0.087672535  0.06327411         0.9907469 0.004003613     1</span></span>
+<span><span class="co">#&gt; 10  0.158894033  0.06327411         0.9907469 0.004003613     1</span></span>
+<span><span class="co"># Both groups contain the same two patterns</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">mg_fs</span>, <span class="st">"fs_pattern"</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">p</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span><span class="va">p</span><span class="op">$</span><span class="va">label</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; $`1`</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; x1+x2+x3    x2+x3 </span></span>
+<span><span class="co">#&gt;       25       15 </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $`2`</span></span>
-<span><span class="co">#&gt;       fs_ind60 fs_ind60_se ind60_by_fs_ind60 ev_fs_ind60 group</span></span>
-<span><span class="co">#&gt; 1   0.11486330    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 2  -0.41073122    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 3  -0.15711924    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 4  -0.76084565    0.172422         0.8992304  0.02972934     2</span></span>
-<span><span class="co">#&gt; 5  -0.88026683    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 6  -0.74845673    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 7  -0.85061057    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 8  -0.55025232    0.172422         0.8992304  0.02972934     2</span></span>
-<span><span class="co">#&gt; 9   0.26138642    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 10  0.32087466    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 11  0.50410306    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 12 -0.30439462    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 13  0.57282757    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 14  0.21646719    0.172422         0.8992304  0.02972934     2</span></span>
-<span><span class="co">#&gt; 15  0.56163448    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 16  0.30298279    0.172422         0.8992304  0.02972934     2</span></span>
-<span><span class="co">#&gt; 17  0.50001516    0.172422         0.8992304  0.02972934     2</span></span>
-<span><span class="co">#&gt; 18  0.74949815    0.172422         0.8992304  0.02972934     2</span></span>
-<span><span class="co">#&gt; 19  0.62556020    0.172422         0.8992304  0.02972934     2</span></span>
-<span><span class="co">#&gt; 20  1.22362501    0.172422         0.8992304  0.02972934     2</span></span>
-<span><span class="co">#&gt; 21  0.28280329    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 22 -0.72202779    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 23 -0.53354639    0.172422         0.8992304  0.02972934     2</span></span>
-<span><span class="co">#&gt; 24  0.02656067    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 25 -0.10062174    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 26  0.19661034    0.172422         0.8992304  0.02972934     2</span></span>
-<span><span class="co">#&gt; 27  0.17401287    0.172422         0.8992304  0.02972934     2</span></span>
-<span><span class="co">#&gt; 28 -0.85294266    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 29 -0.30843400    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 30 -0.49547393    0.172422         0.8992304  0.02972934     2</span></span>
-<span><span class="co">#&gt; 31 -0.46151949    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 32  0.39305019    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 33  1.01756027    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 34  0.23274175    0.132523         0.9432493  0.01756235     2</span></span>
-<span><span class="co">#&gt; 35 -0.13995593    0.132523         0.9432493  0.01756235     2</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; attr(,"fsT")</span></span>
-<span><span class="co">#&gt; attr(,"fsT")$`1`</span></span>
-<span><span class="co">#&gt;             fs_ind60</span></span>
-<span><span class="co">#&gt; fs_ind60 0.004003135</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; attr(,"fsT")$`2`</span></span>
-<span><span class="co">#&gt;            fs_ind60</span></span>
-<span><span class="co">#&gt; fs_ind60 0.01756235</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; attr(,"fsL")</span></span>
-<span><span class="co">#&gt; attr(,"fsL")$`1`</span></span>
-<span><span class="co">#&gt;             ind60</span></span>
-<span><span class="co">#&gt; fs_ind60 0.990748</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; attr(,"fsL")$`2`</span></span>
-<span><span class="co">#&gt;              ind60</span></span>
-<span><span class="co">#&gt; fs_ind60 0.9432493</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; attr(,"fsb")</span></span>
-<span><span class="co">#&gt; attr(,"fsb")$`1`</span></span>
-<span><span class="co">#&gt; fs_ind60 </span></span>
-<span><span class="co">#&gt;        0 </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; attr(,"fsb")$`2`</span></span>
-<span><span class="co">#&gt; fs_ind60 </span></span>
-<span><span class="co">#&gt;        0 </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; attr(,"scoring_matrix")</span></span>
-<span><span class="co">#&gt; attr(,"scoring_matrix")$`1`</span></span>
-<span><span class="co">#&gt;             [,1]      [,2]       [,3]</span></span>
-<span><span class="co">#&gt; ind60 0.04744877 0.4008488 0.01499426</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; attr(,"scoring_matrix")$`2`</span></span>
-<span><span class="co">#&gt;            [,1]      [,2]      [,3]</span></span>
-<span><span class="co">#&gt; ind60 0.4368268 0.1137155 0.1263754</span></span></code></pre></div>
+<span><span class="co">#&gt; x1+x2+x3    x2+x3 </span></span>
+<span><span class="co">#&gt;       23       12</span></span></code></pre></div>
+<p>The multigroup result is a single data frame with a
+<code>group</code> column, and each group’s
+<code>fsT</code>/<code>fsL</code>/<code>fsb</code>/<code>scoring_matrix</code>
+attribute is itself a per-pattern list.</p>
 </div>
 </div>
 <div class="section level2">
 <h2 id="multiple-factor-model">Multiple-Factor Model<a class="anchor" aria-label="anchor" href="#multiple-factor-model"></a>
 </h2>
-<div class="section level3">
-<h3 id="regression-scores">Regression scores<a class="anchor" aria-label="anchor" href="#regression-scores"></a>
-</h3>
+<p>The measurement model constrains the two factors’ loadings to be
+equal (labels <code>a</code>–<code>d</code>) and adds covariances
+between the corresponding indicators:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Make last 10 cases completely missing on y5-y8</span></span>
-<span><span class="va">pd2</span><span class="op">[</span><span class="fl">66</span><span class="op">:</span><span class="fl">75</span>, <span class="fl">5</span><span class="op">:</span><span class="fl">8</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span></span>
+<code class="sourceCode R"><span><span class="co"># Make last 10 cases completely missing on y5-y8 (all dem65 indicators)</span></span>
+<span><span class="va">pd2</span><span class="op">[</span><span class="fl">66</span><span class="op">:</span><span class="fl">75</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"y5"</span>, <span class="st">"y6"</span>, <span class="st">"y7"</span>, <span class="st">"y8"</span><span class="op">)</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span></span>
 <span><span class="va">fit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/cfa.html" class="external-link">cfa</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">  dem60 =~ a * y1 + b * y2 + c * y3 + d * y4</span></span>
 <span><span class="st">  dem65 =~ a * y5 + b * y6 + c * y7 + d * y8</span></span>
@@ -275,25 +195,27 @@ missing data pattern:</p>
 <span><span class="st">  y2 ~~ y6</span></span>
 <span><span class="st">  y3 ~~ y7</span></span>
 <span><span class="st">  y4 ~~ y8</span></span>
-<span><span class="st">"</span>, data <span class="op">=</span> <span class="va">pd2</span>, missing <span class="op">=</span> <span class="st">"fiml"</span><span class="op">)</span></span>
-<span><span class="va">fs2r</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/lavPredict.html" class="external-link">lavPredict</a></span><span class="op">(</span><span class="va">fit2</span>,</span>
-<span>  method <span class="op">=</span> <span class="st">"EBM"</span>, se <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  acov <span class="op">=</span> <span class="cn">TRUE</span>, fsm <span class="op">=</span> <span class="cn">TRUE</span></span>
-<span><span class="op">)</span></span>
-<span><span class="va">acov_r</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs2r</span>, <span class="st">"acov"</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
-<span><span class="co"># Obtain tidy-ed factor scores data</span></span>
+<span><span class="st">"</span>, data <span class="op">=</span> <span class="va">pd2</span>, missing <span class="op">=</span> <span class="st">"fiml"</span><span class="op">)</span></span></code></pre></div>
+<p>This block-missing pattern is the hard case: for the 10 affected
+rows, <code>dem65</code> has no observed indicator at all.</p>
+<div class="section level3">
+<h3 id="regression-scores">Regression scores<a class="anchor" aria-label="anchor" href="#regression-scores"></a>
+</h3>
+<p>With regression (EBM) scores, the <code>dem65</code> score is still
+<em>defined</em> for those rows — regression scoring uses the
+cross-factor covariances, so <code>dem65</code> is imputed from the
+<code>dem60</code> indicators. But the per-row measurement information
+is degenerate: the implied loading of the score on <code>dem65</code> is
+0, i.e. the score carries no information about <code>dem65</code>, so
+measurement-error correction is impossible. We therefore drop those
+<code>dem65</code> scores; OpenMx’s raw-data FIML then fits those rows
+from the structural model alone.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Obtain tidy-ed factor scores data</span></span>
 <span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu">R2spa</span><span class="fu">::</span><span class="fu"><a href="../reference/augment_lav_predict.html">augment_lav_predict</a></span><span class="op">(</span><span class="va">fit2</span><span class="op">)</span></span>
-<span><span class="co"># Run 2spa with OpenMx</span></span>
-<span><span class="co"># Build OpenMx model</span></span>
-<span><span class="va">fsreg_umx</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/umx/man/umxLav2RAM.html" class="external-link">umxLav2RAM</a></span><span class="op">(</span></span>
-<span>  <span class="st">"</span></span>
-<span><span class="st">    dem65 ~ dem60</span></span>
-<span><span class="st">    dem65 + dem60 ~ 1</span></span>
-<span><span class="st">  "</span>,</span>
-<span>  printTab <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span><span class="op">)</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; ?plot.MxModel options: std, means, digits, strip_zero, file, splines=T/F/ortho,..., min=, max =, same = , fixed, resid= 'circle|line|none'</span></span>
+<span><span class="co"># Per-row definition-variable matrices: each cell names the `fs_dat` column</span></span>
+<span><span class="co"># carrying that case's loadings / error variances (the exact, per-row</span></span>
+<span><span class="co"># correction that `tspa()`'s `reduce = ` pooling only approximates).</span></span>
 <span><span class="va">cross_load</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
 <span>  <span class="st">"dem60_by_fs_dem60"</span>, <span class="st">"dem60_by_fs_dem65"</span>,</span>
 <span>  <span class="st">"dem65_by_fs_dem60"</span>, <span class="st">"dem65_by_fs_dem65"</span></span>
@@ -304,103 +226,115 @@ missing data pattern:</p>
 <span>  <span class="st">"ecov_fs_dem60_fs_dem65"</span>, <span class="st">"ev_fs_dem65"</span></span>
 <span><span class="op">)</span>, nrow <span class="op">=</span> <span class="fl">2</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu">`dimnames&lt;-`</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"fs_dem60"</span>, <span class="st">"fs_dem65"</span><span class="op">)</span><span class="op">)</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co"># Need to make factor scores NA when loadings/error variances</span></span>
-<span><span class="co"># are inadmissible</span></span>
+<span><span class="co"># Drop the non-correctable dem65 scores of the 10 all-missing rows;</span></span>
+<span><span class="co"># OpenMx's raw-data FIML then fits those rows as usual.</span></span>
 <span><span class="va">fs_dat</span><span class="op">[</span><span class="fl">66</span><span class="op">:</span><span class="fl">75</span>, <span class="st">"fs_dem65"</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span></span>
-<span><span class="va">tspa_mx</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span><span class="va">fsreg_umx</span>,</span>
+<span><span class="va">tspa_mx</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span></span>
+<span>  <span class="st">"dem65 ~ dem60; dem65 + dem60 ~ 1"</span>,</span>
 <span>  data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
-<span>  mat_ld <span class="op">=</span> <span class="va">cross_load</span>, mat_ev <span class="op">=</span> <span class="va">err_cov</span></span>
+<span>  fsL <span class="op">=</span> <span class="va">cross_load</span>, fsT <span class="op">=</span> <span class="va">err_cov</span>,</span>
+<span>  fsb <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>fs_dem60 <span class="op">=</span> <span class="st">"int_fs_dem60"</span>, fs_dem65 <span class="op">=</span> <span class="st">"int_fs_dem65"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
+<span><span class="co">#&gt; Running m1 with 5 parameters</span></span>
 <span><span class="co"># Run OpenMx</span></span>
 <span><span class="va">tspa_mx_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxRun.html" class="external-link">mxRun</a></span><span class="op">(</span><span class="va">tspa_mx</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Running 2SPAD with 5 parameters</span></span>
+<span><span class="co">#&gt; Running m1 with 5 parameters</span></span>
 <span><span class="co"># Summarize the results</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">tspa_mx_fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Summary of 2SPAD </span></span>
+<span><span class="co">#&gt; Summary of m1 </span></span>
 <span><span class="co">#&gt;  </span></span>
 <span><span class="co">#&gt; free parameters:</span></span>
-<span><span class="co">#&gt;               name matrix   row   col      Estimate  Std.Error A</span></span>
-<span><span class="co">#&gt; 1   dem60_to_dem65   m1.A dem65 dem60  9.125862e-01 0.07157358  </span></span>
-<span><span class="co">#&gt; 2 dem65_with_dem65   m1.S dem65 dem65  5.369808e-01 0.23101709  </span></span>
-<span><span class="co">#&gt; 3 dem60_with_dem60   m1.S dem60 dem60  4.559667e+00 0.84137910  </span></span>
-<span><span class="co">#&gt; 4     one_to_dem65   m1.M     1 dem65  1.424734e-08 0.14212140  </span></span>
-<span><span class="co">#&gt; 5     one_to_dem60   m1.M     1 dem60 -2.019359e-08 0.26210295  </span></span>
+<span><span class="co">#&gt;        name matrix   row   col      Estimate Std.Error A</span></span>
+<span><span class="co">#&gt; 1 m1.A[4,3]      A dem65 dem60  9.125862e-01 0.0715752  </span></span>
+<span><span class="co">#&gt; 2 m1.S[3,3]      S dem60 dem60  4.559668e+00 0.8414167  </span></span>
+<span><span class="co">#&gt; 3 m1.S[4,4]      S dem65 dem65  5.369811e-01 0.2310376  </span></span>
+<span><span class="co">#&gt; 4 m1.M[1,3]      M     1 dem60 -4.568894e-08 0.2621047  </span></span>
+<span><span class="co">#&gt; 5 m1.M[1,4]      M     1 dem65 -5.709867e-08 0.1421203  </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Model Statistics: </span></span>
 <span><span class="co">#&gt;                |  Parameters  |  Degrees of Freedom  |  Fit (-2lnL units)</span></span>
-<span><span class="co">#&gt;        Model:              5                    275              404.9387</span></span>
-<span><span class="co">#&gt;    Saturated:             NA                     NA                    NA</span></span>
-<span><span class="co">#&gt; Independence:             NA                     NA                    NA</span></span>
-<span><span class="co">#&gt; Number of observations/statistics: 75/280</span></span>
+<span><span class="co">#&gt;        Model:              5                    135              404.9387</span></span>
+<span><span class="co">#&gt;    Saturated:              5                    135                    NA</span></span>
+<span><span class="co">#&gt; Independence:              4                    136                    NA</span></span>
+<span><span class="co">#&gt; Number of observations/statistics: 75/140</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Information Criteria: </span></span>
 <span><span class="co">#&gt;       |  df Penalty  |  Parameters Penalty  |  Sample-Size Adjusted</span></span>
-<span><span class="co">#&gt; AIC:      -145.0613               414.9387                 415.8083</span></span>
-<span><span class="co">#&gt; BIC:      -782.3705               426.5261                 410.7675</span></span>
-<span><span class="co">#&gt; CFI: NA </span></span>
-<span><span class="co">#&gt; TLI: 1   (also known as NNFI) </span></span>
-<span><span class="co">#&gt; RMSEA:  0  [95% CI (NA, NA)]</span></span>
-<span><span class="co">#&gt; Prob(RMSEA &lt;= 0.05): NA</span></span>
+<span><span class="co">#&gt; AIC:       134.9387               414.9387                 415.8083</span></span>
+<span><span class="co">#&gt; BIC:      -177.9222               426.5261                 410.7675</span></span>
 <span><span class="co">#&gt; To get additional fit indices, see help(mxRefModels)</span></span>
-<span><span class="co">#&gt; timestamp: 2024-09-06 04:19:22 </span></span>
-<span><span class="co">#&gt; Wall clock time: 0.05901241 secs </span></span>
+<span><span class="co">#&gt; timestamp: 2026-08-30 11:02:50 </span></span>
+<span><span class="co">#&gt; Wall clock time: 0.0296402 secs </span></span>
 <span><span class="co">#&gt; optimizer:  SLSQP </span></span>
-<span><span class="co">#&gt; OpenMx version number: 2.21.12 </span></span>
+<span><span class="co">#&gt; OpenMx version number: 2.22.11 </span></span>
 <span><span class="co">#&gt; Need help?  See help(mxSummary)</span></span></code></pre></div>
+<p>The per-row measurement values reach OpenMx as <em>definition
+variables</em>: <code>fsL</code> and <code>fsT</code> are character
+matrices whose cells name the <code>fs_dat</code> column holding that
+case’s value, so the stage-2 correction is per-row rather than pooled.
+<code>fsb</code> does the same for the per-row measurement intercepts
+(the <code>int_*</code> columns; a FIML fit estimates a mean structure,
+so the intercepts vary with the missing-data pattern).</p>
 </div>
 <div class="section level3">
 <h3 id="bartlett-scores">Bartlett scores<a class="anchor" aria-label="anchor" href="#bartlett-scores"></a>
 </h3>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Obtain tidy-ed factor scores data</span></span>
+<p>Bartlett scoring does not use the cross-factor covariances, so for
+the 10 rows with no observed <code>dem65</code> indicator the score is
+<code>NA</code> by convention — in contrast to the EBM case above, where
+the score was defined but non-correctable and had to be dropped.</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Obtain tidy-ed factor scores data (Bartlett weights)</span></span>
 <span><span class="va">fsb_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/augment_lav_predict.html">augment_lav_predict</a></span><span class="op">(</span><span class="va">fit2</span>, method <span class="op">=</span> <span class="st">"Bartlett"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Warning in sqrt(diag(fsT)): NaNs produced</span></span>
-<span><span class="va">tspab_mx</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span><span class="va">fsreg_umx</span>,</span>
+<span><span class="co"># fsb_dat[66:75, "fs_dem65"] is already NA (no observed indicator);</span></span>
+<span><span class="co"># stated explicitly to mirror the EBM case</span></span>
+<span><span class="va">fsb_dat</span><span class="op">[</span><span class="fl">66</span><span class="op">:</span><span class="fl">75</span>, <span class="st">"fs_dem65"</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span></span>
+<span><span class="va">tspab_mx</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span></span>
+<span>  <span class="st">"dem65 ~ dem60; dem65 + dem60 ~ 1"</span>,</span>
 <span>  data <span class="op">=</span> <span class="va">fsb_dat</span>,</span>
-<span>  mat_ld <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fsb_dat</span>, which <span class="op">=</span> <span class="st">"ld"</span><span class="op">)</span>,</span>
-<span>  mat_ev <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fsb_dat</span>, which <span class="op">=</span> <span class="st">"ev"</span><span class="op">)</span></span>
+<span>  fsL <span class="op">=</span> <span class="va">cross_load</span>, fsT <span class="op">=</span> <span class="va">err_cov</span>,</span>
+<span>  fsb <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>fs_dem60 <span class="op">=</span> <span class="st">"int_fs_dem60"</span>, fs_dem65 <span class="op">=</span> <span class="st">"int_fs_dem65"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
+<span><span class="co">#&gt; Running m1 with 5 parameters</span></span>
 <span><span class="co"># Run OpenMx</span></span>
 <span><span class="va">tspab_mx_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxRun.html" class="external-link">mxRun</a></span><span class="op">(</span><span class="va">tspab_mx</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Running 2SPAD with 5 parameters</span></span>
+<span><span class="co">#&gt; Running m1 with 5 parameters</span></span>
 <span><span class="co"># Summarize the results</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">tspab_mx_fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Summary of 2SPAD </span></span>
+<span><span class="co">#&gt; Summary of m1 </span></span>
 <span><span class="co">#&gt;  </span></span>
 <span><span class="co">#&gt; free parameters:</span></span>
-<span><span class="co">#&gt;               name matrix   row   col      Estimate  Std.Error A</span></span>
-<span><span class="co">#&gt; 1   dem60_to_dem65   m1.A dem65 dem60  9.125862e-01 0.07157513  </span></span>
-<span><span class="co">#&gt; 2 dem65_with_dem65   m1.S dem65 dem65  5.369808e-01 0.23103302  </span></span>
-<span><span class="co">#&gt; 3 dem60_with_dem60   m1.S dem60 dem60  4.559667e+00 0.84138189  </span></span>
-<span><span class="co">#&gt; 4     one_to_dem65   m1.M     1 dem65  1.424717e-08 0.14211902  </span></span>
-<span><span class="co">#&gt; 5     one_to_dem60   m1.M     1 dem60 -2.004115e-08 0.26209661  </span></span>
+<span><span class="co">#&gt;        name matrix   row   col      Estimate  Std.Error A</span></span>
+<span><span class="co">#&gt; 1 m1.A[4,3]      A dem65 dem60  9.125862e-01 0.07157514  </span></span>
+<span><span class="co">#&gt; 2 m1.S[3,3]      S dem60 dem60  4.559668e+00 0.84138958  </span></span>
+<span><span class="co">#&gt; 3 m1.S[4,4]      S dem65 dem65  5.369811e-01 0.23103931  </span></span>
+<span><span class="co">#&gt; 4 m1.M[1,3]      M     1 dem60 -4.578959e-08 0.26210338  </span></span>
+<span><span class="co">#&gt; 5 m1.M[1,4]      M     1 dem65 -5.290055e-08 0.14212079  </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Model Statistics: </span></span>
 <span><span class="co">#&gt;                |  Parameters  |  Degrees of Freedom  |  Fit (-2lnL units)</span></span>
-<span><span class="co">#&gt;        Model:              5                    275              536.4213</span></span>
-<span><span class="co">#&gt;    Saturated:             NA                     NA                    NA</span></span>
-<span><span class="co">#&gt; Independence:             NA                     NA                    NA</span></span>
-<span><span class="co">#&gt; Number of observations/statistics: 75/280</span></span>
+<span><span class="co">#&gt;        Model:              5                    135              536.4213</span></span>
+<span><span class="co">#&gt;    Saturated:              5                    135                    NA</span></span>
+<span><span class="co">#&gt; Independence:              4                    136                    NA</span></span>
+<span><span class="co">#&gt; Number of observations/statistics: 75/140</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Information Criteria: </span></span>
 <span><span class="co">#&gt;       |  df Penalty  |  Parameters Penalty  |  Sample-Size Adjusted</span></span>
-<span><span class="co">#&gt; AIC:      -13.57873               546.4213                 547.2908</span></span>
-<span><span class="co">#&gt; BIC:     -650.88796               558.0087                 542.2500</span></span>
-<span><span class="co">#&gt; CFI: NA </span></span>
-<span><span class="co">#&gt; TLI: 1   (also known as NNFI) </span></span>
-<span><span class="co">#&gt; RMSEA:  0  [95% CI (NA, NA)]</span></span>
-<span><span class="co">#&gt; Prob(RMSEA &lt;= 0.05): NA</span></span>
+<span><span class="co">#&gt; AIC:      266.42127               546.4213                 547.2908</span></span>
+<span><span class="co">#&gt; BIC:      -46.43962               558.0087                 542.2500</span></span>
 <span><span class="co">#&gt; To get additional fit indices, see help(mxRefModels)</span></span>
-<span><span class="co">#&gt; timestamp: 2024-09-06 04:19:22 </span></span>
-<span><span class="co">#&gt; Wall clock time: 0.07445168 secs </span></span>
+<span><span class="co">#&gt; timestamp: 2026-08-30 11:02:50 </span></span>
+<span><span class="co">#&gt; Wall clock time: 0.01694989 secs </span></span>
 <span><span class="co">#&gt; optimizer:  SLSQP </span></span>
-<span><span class="co">#&gt; OpenMx version number: 2.21.12 </span></span>
+<span><span class="co">#&gt; OpenMx version number: 2.22.11 </span></span>
 <span><span class="co">#&gt; Need help?  See help(mxSummary)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="compared-to-joint-model">Compared to Joint Model<a class="anchor" aria-label="anchor" href="#compared-to-joint-model"></a>
 </h3>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<p>The gold-standard reference is the joint model, which fits the
+measurement and structural parts simultaneously under FIML:</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">jfit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/sem.html" class="external-link">sem</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">  dem60 =~ a * y1 + b * y2 + c * y3 + d * y4</span></span>
 <span><span class="st">  dem65 =~ a * y5 + b * y6 + c * y7 + d * y8</span></span>
@@ -411,7 +345,7 @@ missing data pattern:</p>
 <span><span class="st">  dem65 ~ dem60</span></span>
 <span><span class="st">"</span>, data <span class="op">=</span> <span class="va">pd2</span>, missing <span class="op">=</span> <span class="st">"fiml"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">jfit</span><span class="op">)</span></span>
-<span><span class="co">#&gt; lavaan 0.6-18 ended normally after 53 iterations</span></span>
+<span><span class="co">#&gt; lavaan 0.7-2 ended normally after 53 iterations</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt;   Estimator                                         ML</span></span>
 <span><span class="co">#&gt;   Optimization method                           NLMINB</span></span>
@@ -485,12 +419,29 @@ missing data pattern:</p>
 <span><span class="co">#&gt;    .y8                2.628    0.702    3.745    0.000</span></span>
 <span><span class="co">#&gt;     dem60             4.560    1.038    4.394    0.000</span></span>
 <span><span class="co">#&gt;    .dem65             0.537    0.258    2.085    0.037</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># The three estimates of the dem65 ~ dem60 path:</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>EBM.mx <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">tspa_mx_fit</span><span class="op">)</span><span class="op">[</span><span class="st">"m1.A[4,3]"</span><span class="op">]</span>,</span>
+<span>  Bartlett.mx <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">tspab_mx_fit</span><span class="op">)</span><span class="op">[</span><span class="st">"m1.A[4,3]"</span><span class="op">]</span>,</span>
+<span>  joint <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">jfit</span><span class="op">)</span><span class="op">[</span><span class="st">"dem65~dem60"</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="co">#&gt;      EBM.mx.m1.A[4,3] Bartlett.mx.m1.A[4,3]     joint.dem65~dem60 </span></span>
+<span><span class="co">#&gt;             0.9125862             0.9125862             0.9125862</span></span></code></pre></div>
+<p>Both 2S-PA fits (regression and Bartlett scores) recover the
+<code>dem65 ~ dem60</code> path at 0.913, identical to the joint-model
+estimate to four decimal places.</p>
 </div>
 <div class="section level3">
 <h3 id="multiple-group-1">Multiple group<a class="anchor" aria-label="anchor" href="#multiple-group-1"></a>
 </h3>
-<p>Just to demonstrate the syntax for obtaining the input data</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<p>The same pipeline applies to multigroup fits:
+<code><a href="../reference/augment_lav_predict.html">augment_lav_predict()</a></code> returns a list with one tidy-ed data
+frame per group, each carrying that group’s per-row values. All 10
+block-missing rows fall in group 2, so only group 2 contains the pattern
+with no observed <code>dem65</code> indicator. (<code>lavaan</code>
+warns that a single label used in a multigroup fit imposes cross-group
+equality — that is intentional here: <code>a</code>–<code>d</code> are
+constrained equal in both groups.)</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">mg_fit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/cfa.html" class="external-link">cfa</a></span><span class="op">(</span><span class="st">"</span></span>
 <span><span class="st">  dem60 =~ a * y1 + b * y2 + c * y3 + d * y4</span></span>
 <span><span class="st">  dem65 =~ a * y5 + b * y6 + c * y7 + d * y8</span></span>
@@ -502,13 +453,35 @@ missing data pattern:</p>
 <span>  data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">pd2</span>, group <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">40</span>, <span class="fl">35</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>  missing <span class="op">=</span> <span class="st">"fiml"</span>, group <span class="op">=</span> <span class="st">"group"</span></span>
 <span><span class="op">)</span></span>
-<span><span class="co">#&gt; Warning: lavaan-&gt;lavParTable():  </span></span>
+<span><span class="co">#&gt; Warning: lavaan-&gt;lav_model_pt():  </span></span>
 <span><span class="co">#&gt;    using a single label per parameter in a multiple group setting implies </span></span>
 <span><span class="co">#&gt;    imposing equality constraints across all the groups; If this is not </span></span>
 <span><span class="co">#&gt;    intended, either remove the label(s), or use a vector of labels (one for </span></span>
 <span><span class="co">#&gt;    each group); See the Multiple groups section in the man page of </span></span>
 <span><span class="co">#&gt;    model.syntax.</span></span>
-<span><span class="fu"><a href="../reference/augment_lav_predict.html">augment_lav_predict</a></span><span class="op">(</span><span class="va">mg_fit2</span><span class="op">)</span></span></code></pre></div>
+<span><span class="va">mg_out</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">mg_fit2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">mg_out</span><span class="op">)</span></span>
+<span><span class="co">#&gt;     fs_dem60   fs_dem65 fs_dem60_se fs_dem65_se dem60_by_fs_dem60</span></span>
+<span><span class="co">#&gt; 1 -2.8000738 -2.3481803   0.4602081    0.484165         0.7056551</span></span>
+<span><span class="co">#&gt; 2 -3.0162173 -1.6560141   0.4602081    0.484165         0.7056551</span></span>
+<span><span class="co">#&gt; 3  2.6733722  3.0172082   0.4602081    0.484165         0.7056551</span></span>
+<span><span class="co">#&gt; 4  2.4571381  2.4920427   0.4602081    0.484165         0.7056551</span></span>
+<span><span class="co">#&gt; 5  1.3378821  1.3982512   0.4602081    0.484165         0.7056551</span></span>
+<span><span class="co">#&gt; 6  0.1326308 -0.4178734   0.4602081    0.484165         0.7056551</span></span>
+<span><span class="co">#&gt;   dem60_by_fs_dem65 dem65_by_fs_dem60 dem65_by_fs_dem65 ev_fs_dem60</span></span>
+<span><span class="co">#&gt; 1         0.2749477         0.2331707          0.681784   0.2117915</span></span>
+<span><span class="co">#&gt; 2         0.2749477         0.2331707          0.681784   0.2117915</span></span>
+<span><span class="co">#&gt; 3         0.2749477         0.2331707          0.681784   0.2117915</span></span>
+<span><span class="co">#&gt; 4         0.2749477         0.2331707          0.681784   0.2117915</span></span>
+<span><span class="co">#&gt; 5         0.2749477         0.2331707          0.681784   0.2117915</span></span>
+<span><span class="co">#&gt; 6         0.2749477         0.2331707          0.681784   0.2117915</span></span>
+<span><span class="co">#&gt;   ecov_fs_dem65_fs_dem60 ev_fs_dem65 group</span></span>
+<span><span class="co">#&gt; 1              0.1496662   0.2344158     1</span></span>
+<span><span class="co">#&gt; 2              0.1496662   0.2344158     1</span></span>
+<span><span class="co">#&gt; 3              0.1496662   0.2344158     1</span></span>
+<span><span class="co">#&gt; 4              0.1496662   0.2344158     1</span></span>
+<span><span class="co">#&gt; 5              0.1496662   0.2344158     1</span></span>
+<span><span class="co">#&gt; 6              0.1496662   0.2344158     1</span></span></code></pre></div>
 </div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
@@ -522,7 +495,7 @@ missing data pattern:</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

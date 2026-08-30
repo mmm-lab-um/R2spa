@@ -1,0 +1,692 @@
+# R2spa — Open Issues & Follow-ups
+
+Tracks remaining work from completed plans (see `archive/`). Update
+status as items are resolved; move finished items to the **Closed**
+section with the date and commit/PR reference.
+
+**Last updated:** 2026-08-30 — **Analytic (refit-free) corrected-SE
+Jacobian + general model coverage (PLAN 16, PR \#90 → `c08be75`)** —
+[`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md)’s
+stage-2 Jacobian is generalized from the saturated single-group
+finite-difference form to a refit-free (no optimizer noise) analytic
+influence function, deterministic per BLAS backend (drifts ~1e-8-1e-7
+relative across backends) (`J = -H^{-1} C`, with `H`/`C`
+central-differenced from the exact unweighted normal-ML score at
+`h = 1e-6·max(1,|param|)`), now the default `engine = "analytic"` (was
+`"fd"`); covers saturated, restricted (df \> 0), multigroup, and
+mean-structure models (fixed `fsb` score means read from the partable
+`est$nu`, not assumed 0), with the FD engine as the fallback and
+out-of-scope guards (row-count ≠ lavaan `nobs`, non-ML `estimator.orig`,
+case weights) returning `NULL` → FD. A/B-gated against the FD engine on
+every corrected-SE shape; T3 goldens pinned at the 1e-4 cross-BLAS drift
+floor. 473 tests / 4229 expectations, 0 fail; `R CMD check` 0/0/1 NOTE
+(pre-existing). Previous — **Pre-release branch cleanup (steps 1–3)** —
+(1) `refactor/core` merged into `devel` (fast-forward) and pushed; (2)
+local `plan06` (fully contained in `refactor/core`) and the 6 remote
+branches fully merged into `devel` (`27-2spa-for-latent-interactions`,
+`growth`, `issue76`, `marklhc/issue66`, `reliability`,
+`tspa-dignostic-plot`) deleted; (3) the unique drafts of the 5 remaining
+stale remote branches salvaged into `archive/branch-*/` (provenance:
+`archive/BRANCH_SALVAGE_2026-08-27.md` — `marklhc/issue83` ⇒
+alignment-reliability + compare-identification notes for open \#83,
+`marklhc/issue87` ⇒ `probit.rmd` draft for open \#87, `openmx` ⇒ 2023
+categorical-interaction sim scripts + `test_cat_int.Rmd` draft,
+`vignette` ⇒ `invariance-factor-score.Rmd`/`three_var.Rmd` drafts; the
+deleted `identification` branch was a content-subset of
+`marklhc/issue83`) and all 5 deleted. Also: `origin` remote URL +
+READMEs updated for the repo rename `Gengrui-Zhang/R2spa` →
+`mmm-lab-um/R2spa`. Previous — **Product-indicator error covariances in
+the stage-2 model (#28) + product factor-score vignette re-integrated
+(#29)** — (a) `73176e8`: DMC product indicators sharing a factor score
+(e.g. `xm` and `xz`) have correlated measurement errors (the shared
+score’s error enters both);
+[`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) now
+computes the error covariance for every pair of product latents from the
+stage-1 `fsL`/`fsT`/`psi` attributes (new `fs_prod_ecov()`) and emits
+fixed `fs_v1 ~~ fs_v2` rows on both the sf (`se_fs`) and mf
+(`fsT`/`fsL`) paths, `product = TRUE` and manual flows alike — removing
+the first-order (n-independent) attenuation of the structural product
+coefficients (n = 200k: 0.081/0.138/0.110 → ~0.10/0.15/0.12, the
+simulated values); attribute-less data with ≥2 product latents is
+rejected with the remedy. (b) `0cf3313`: the rewritten
+`get_fs_int-vignette.Rmd` (DGP scaled so the `y` latent has population
+variance exactly 1) left `.quarantine/` and is now built as
+`vignettes/product-factor-scores.Rmd` — quarantine holds only the stale
+`categorical-interaction.Rmd` and `reliability.Rmd` (+ fixture). Also:
+missing-data vignette refactor (`643fbbb`) and EFA vignette
+complete-case correlation (`759f779`). Suite **4052 pass** / 0 fail (1
+pre-existing warn in `test-tspa_mx.R`); `R CMD check` (as-cran) **0 / 0
+/ 0** on the 2026-08-27 tree. Previous — **`tspa(product = )` accepts
+lavaan’s interaction syntax +
+[`tspa_mx_model()`](https://mmm-lab-um.github.io/R2spa/reference/tspa_mx_model.md)
+`~~` defvar orientation fix** — (a) `8ed5c7a`: a model latent may name
+the product of two factor scores in lavaan’s interaction syntax (`x:m`)
+as well as by concatenation (`xm`); the interaction form is rewritten to
+the concatenated render name by `tspa_rewrite_product_toks()` before
+rendering (the generated model would otherwise parse `x:m` as an
+interaction of the (latent) variables); a non-score `a:b` token
+(e.g. `x:g` with `g` an observed covariate) is not claimed and passes
+through to lavaan as an ordinary interaction; the same pair named twice
+(`x:m` and `xm`) or a render name colliding with another model variable
+is an error; an explicit product `se_fs` entry may be keyed by the `a:b`
+token (stored check.names()-ed as `x.m`, renamed to the render name);
+the quarantined `get_fs_int-vignette.Rmd` was rewritten on top of the
+new API (still not built) and drops the `standardizedSolution()`
+workaround for interaction terms. (b) `34eec17` (see Closed \#27):
+`tspa_mx_defvar_col()` falls back to the transposed triangle when
+`lavaanify()` presents a `~~` row reversed relative to the score order —
+**resolves the PLAN 15 V3c scope narrowing** (q ≥ 2 per-row/per-pattern
+defvar fits are now pinned numerically end-to-end). Remaining documented
+finding: `mxData()` rejects the `:` in `get_fs(product = )` product
+columns (the explicit route fails identically). Suite **3985 pass** / 0
+fail (1 pre-existing warn in `test-tspa_mx.R`); `R CMD check` **0 / 0 /
+0**. Previous — **PLAN 15:
+[`tspa_mx_model()`](https://mmm-lab-um.github.io/R2spa/reference/tspa_mx_model.md)
+auto-derives measurement inputs from a
+[`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)
+result** — with `se_fs`/`fsL`/`fsT`/`fsb` all omitted, constant
+quantities (plain-matrix attributes: lavaan SG complete, `local = TRUE`
+compact, `format = "list"`) become fixed numerics and per-row /
+per-pattern quantities (mirt `mirt_per_obs`, FIML `per_obs` / joint
+per-pattern) become definition-variable matrices referencing the
+result’s own `_by_`/`ev_`/`ecov_` columns, with `int_fs_*` intercept
+columns auto-appended from the `fsb` attribute — no pooling (the OpenMx
+route is exact-or-fail, unlike `tspa(reduce = )`); explicit args always
+win; provenance-gated on `resolve_fs_per_row()` like PLAN 13, with a
+fail-fast replacing the misleading `'fsL' rows must be named...` error
+and a clear multigroup refusal (the `group_col` attribute is the MG
+signal, matching
+[`compute_fs_prod()`](https://mmm-lab-um.github.io/R2spa/reference/compute_fs_prod.md);
+a mirt MG result — `group` column, no `group_col` attr — derives as a
+pooled per-row-corrected fit, documented). New internal
+`tspa_mx_derive_measurement()` (R/tspa_mx.R, additive). Roxygen
+(`@details` auto-derivation subsection, `@param data/se_fs/fsL/fsT/fsb`,
+examples lead with the derived call, product-column `:` caveat); NEWS
+bullet; `tspa-vignette-mx.Rmd` (direct-call demo on the mirt
+`prior_mean`/zero-mean results + EAP-section pointer) and `R2spa.Rmd`
+(one-line pointer); 70 new expectations (`test-tspa_mx_derived.R`, 13
+blocks; all A/Bs bit-exact, D1–D7 pins, V3c-narrowed FIML string-level +
+q=1 pins, mirt-MG pooled-behavior pin, product-column inertness pin).
+Findings (pre-existing, documented): OpenMx 2.22.11 aborts q≥2
+off-diagonal-defvar fits on both derived and manual routes (V3c);
+`mxData()` rejects the `:` in product columns (explicit route fails
+identically). Suite **3940 pass** / 0 fail (1 pre-existing warn in
+`test-tspa_mx.R`); `R CMD check` **0 / 0 / 0**. Previous —
+**`tspa(product = TRUE)` opt-in product-score auto-compute** (branch
+`rejoin/fs-prod`, worktree `/home/marklai/R2spa-fs-prod`; see Closed
+\#26). Previous — **Product factor-score indicators:
+[`compute_fs_prod()`](https://mmm-lab-um.github.io/R2spa/reference/compute_fs_prod.md)
+/ `get_fs(product = )` replaces the quarantined `get_fs_int()`** (see
+Closed \#25). Previous (2026-08-24) — **PLAN 14:
+`get_fs(..., local = TRUE)` — per-construct local stage-1 scoring** —
+each latent is scored from its own local measurement model (the
+canonical per-construct 2S-PA stage 1) instead of the single joint
+multi-factor model; `model` a single string (strict per-latent
+`lhs =~ i1 + i2 + ...` grammar, error-first with line-numbered messages)
+or a character vector / named list of complete single-factor strings fit
+verbatim (escape hatch). Merged result = the joint layout with
+exactly-zero cross-terms (block-diagonal `fsT`/`fsL`/`psi`, zero
+off-diagonal `_by_`/`ecov_*` columns); per-row merge via
+`resolve_fs_per_row()` +
+[`block_diag()`](https://mmm-lab-um.github.io/R2spa/reference/block_diag.md)
+with compact per-group matrices on complete data; FIML
+(`missing = "fiml"` forwarded per local fit) → per-row attribute lists +
+`per_obs = TRUE` marker (listwise deletion errors — row counts differ
+per local fit). Supported:
+`group`/`std.lv`/`method`/`corrected_fsT`/`prior_mean`/`sum_items`;
+rejected in v1: `vfsLT` (no cross-latent sampling covariances across
+separate fits ⇒ no `tspa(corrected_se = TRUE)`), `prior_cov`,
+`reliability`. New internals
+`get_fs_local()`/`split_local_models()`/`parse_local_statement()`/`local_model_syntax_error()`/`merge_local_fs()`
+(R/get_fs_methods.R) + `per_obs || mirt_per_obs` OR-checks in
+R/fs_indiv.R and R/tspa.R — the result feeds
+[`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md)
+directly (PLAN 13 derivation). Also fixed at root: a pre-existing
+`resolve_group_blocks()` single-pattern NA-row misrouting (R/fs_indiv.R)
+and two local-mode parser bugs found in review (multi-detail
+[`stop()`](https://rdrr.io/r/base/stop.html) arity; empty-RHS `NA` from
+`strsplit` trailing-field drop). Verified: local ≡ joint(uncorrelated)
+at 1.16e-5 (bridge case); local ≠ joint under free correlation (max
+score diff ~1.5 in the 3-factor test); scoring-matrix identity exact for
+regression/Bartlett. Roxygen (`@param local`, `@details` subsection,
+`@return` `per_obs`, 2 examples); 113 new expectations
+(`test-get_fs_local.R`, 18 blocks, incl. 14 parser prefix pins + 7
+detail fragments, FIML per-row, MG, vector form, guards,
+corrected_fsT/std.lv A/Bs, downstream tspa/tspa_mx_model); new “Local vs
+joint scores” section in `vignettes/multiple-factors.Rmd` (derived
+one-call flow). Suite **3720 pass** / 0 fail (1 pre-existing warn in
+`test-tspa_mx.R`); `R CMD check` **0 / 0 / 0**. Prior (2026-08-24) —
+**PLAN 13:
+[`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md)
+auto-derives measurement inputs from a
+[`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)
+result** — `tspa(model, fs)` now works directly: with `fsT`/`fsL`
+omitted (and no `se_fs` supplied), the multi-factor inputs are read from
+the result’s `fsT`/`fsL`/`fsb` attributes (provenance-gated on
+`resolve_fs_per_row()` — hand-rolled attributes rejected with an
+informative error); otherwise a single-factor `se_fs` is derived from
+the `fs_<v>`/`fs_<v>_se` columns (cbind()’d frames —
+[`cbind()`](https://rdrr.io/r/base/cbind.html) drops attributes) per
+group column (`group_col` attr → `group =` argument → literal `group`
+column) in **first-appearance order** (verified lavaan 0.7-2 group order
+for character and factor columns alike). Explicit arguments always win;
+a supplied `se_fs` (even [`list()`](https://rdrr.io/r/base/list.html))
+suppresses the multi-factor derivation; `vfsLT`/`group=` stay
+explicit-only. A fail-fast error replaces lavaan’s “model is NULL”. New
+co-located helpers `derive_sf_se_fs()`/`fs_group_order()`; no
+schema/renderer/pooling changes; `tspa_args` on derived fits carry the
+resolved values (replay skips derivation — no double pooling;
+[`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md)
+works on derived fits). The derivation picks up `fsb`, so derived fits
+fix the score intercepts (SG: numerically identical to the no-`fsb`
+explicit form; MG: the no-`fsb` form additionally estimates them freely
+under lavaan’s auto mean structure). Roxygen
+(`@param data/se_fs/fsT/fsL/fsb`, new `@details` derivation subsection,
+`@return` replay note, 3 minimal-form examples) + 80 new expectations
+(`test-tspa_derived.R`: the 12 plan cases + edges — corrected_se on
+derived attrs, FIML replay, mirt/merMod, precedence, provenance-gate
+errors, reversed-factor-level group order); vignettes
+`R2spa`/`multiple-factors` drop the boilerplate in favor of the derived
+form (derived SEs are full precision — the old hardcoded values were
+7-dp roundings, max\|Δcoef\| 4.6e-8). Suite **3607 pass** / 0 fail (1
+pre-existing warn in `test-tspa_mx.R`); `R CMD check` **0 / 0 / 0**.
+Also 2026-08-24:
+[`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md)’s
+stage-2 model string (the `tspaModel` attribute) renders with normalized
+operator spacing (`lhs =~ rhs`, `lhs ~~ rhs`) and without
+[`c()`](https://rdrr.io/r/base/c.html) for single-value fixed statements
+(fitted models/parameter tables/vcov unchanged — A/B-gated in
+`test-tspa_render.R`); vignette alignment +
+[`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)
+output table (fsT/fsL/fsb rows) fixes. Prior (2026-08-24) — **PLAN 12:
+report fixed structural slopes in
+[`grand_standardized_solution()`](https://mmm-lab-um.github.io/R2spa/reference/grand_standardized_solution.md)**
+— a user-fixed slope (`~ k*var`, no free position) is now reported
+alongside free ones: its `est.std` = user value × (grand/case) SD ratio
+and its `se` = the first-order delta SE, both matching
+[`lavaan::standardizedSolution()`](https://rdrr.io/pkg/lavaan/man/standardizedSolution.html).
+New internal `tsp_beta_names()` (`R/lavaan_compat.R`; per-group β
+row/col variable names from `lavInspect(fit,"est")$beta` — SG flat / MG
+nested; `lavTech(est)$beta` strips them). `out_idx`
+(`R/grandStandardizedSolution.R`) keeps the free-position anchor for
+free cells and falls back to the `(c-1)*nrow + r` β-dimnames col-major
+position for fixed cells (equal to the free anchor on free rows); the
+blanket `stop("...must be free")` is replaced by a drift-defensive guard
+(every real `~` row resolves to a β cell — means are `~1`, excluded
+upstream by `op=="~"`). Roxygen `@details` + `man/` + `NEWS.md` updated;
+`NAMESPACE` unchanged. 6 new tests (SG fixed ≡ `standardizedSolution()`,
+SG mixed, MG fixed + grand-SD hand-calc, 2S-PA corrected SG, all-free
+regression, dimnames canary, guard via `local_mocked_bindings`). Suite 0
+fail (1 pre-existing warn in `test-tspa_mx.R`); `R CMD check` **0 / 0 /
+0**. Prior (2026-08-23) — **multigroup `corrected_se` + corrected
+grand-standardized SEs + `corrected-se` vignette re-integration**:
+removed the single-group-only guard so `tspa(corrected_se = TRUE)`
+builds a corrected **multigroup** fit
+([`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md)
+was already multi-group — its per-group `fsL`-then-`fsT` layout matches
+`get_fs(vfsLT = TRUE)`);
+[`grandStandardizedSolution()`](https://mmm-lab-um.github.io/R2spa/reference/grand_standardized_solution.md)
+reports corrected grand-std SEs on a corrected fit (`est.std` unchanged,
+no code change — it threads `vcov(object)`); `corrected-se.Rmd`
+re-integrated to `vignettes/` (public-API `vfsLT` in place of
+`R2spa:::vcov_ld_evfs`, SG named-lookup + one-call `corrected_se` route,
+MG in-place + corrected grand-std showcase) with its bootstrap fixtures
+consolidated into `vignettes/` (shared with the tests); tests add **T9**
+(MG independent Jacobian wiring), IT6–IT8, and a grandSS MG-corrected
+A/B block. Suite **3454 pass** / 0 fail (1 pre-existing warn in
+`test-tspa_mx.R`); `R CMD check` **0 / 0 / 0**. Prior (2026-08-23) —
+**corrected-SE re-join**: `R/tspa_corrected_se.R`
+([`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md),
+now an export) `git mv`’d from `.quarantine/`;
+[`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) gains
+`corrected_se = FALSE, vfsLT = NULL, which_free = NULL` — when `TRUE`
+(single-group; multigroup / no-`fsT` rejected) it runs
+[`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md)
+and overwrites the fit covariance via the new `tsp_set_vcov()`
+lavaan-compat boundary — only `fit@vcov[["vcov"]]` is written
+(`@vcov$se`/`@Options$se` untouched), so `standardizedSolution()`
+reports corrected std SEs with `est.std` unchanged; sets
+`tspa_corrected = TRUE`, a double-correction guard rejects an
+already-corrected fit. Suite **3442 pass** / 0 fail, `R CMD check` **0
+errors / 0 warnings / 0 notes**. Prior (2026-08-22) —
+**grand-standardized solution re-join**:
+`R/grandStandardizedSolution.R` +
+`tests/testthat/test-grandStandardizedSolution.R` restored from
+`.quarantine/` (pure rename, zero code edits); `document()` restores the
+2 exports + `importFrom(lavaan, lav_func_jacobian_complex)` /
+[`stats::pnorm`](https://rdrr.io/r/stats/Normal.html)+`qnorm` /
+[`utils::tail`](https://rdrr.io/r/utils/head.html); suite **3377 pass**
+/ 0 fail, `R CMD check` **0 errors / 0 warnings / 0 notes** (as-cran;
+the 4 restored package examples run OK; the OpenMx NOTE is no longer
+applicable — `tspa_mx()` was already re-integrated in `bcd42a3`). The
+`vignettes/gr-std-coef.Rmd` vignette is reintroduced separately in a
+follow-up commit. Prior: **multi-group mirt
+[`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)
+(31b3809 / PLAN 10 / F7)**:
+[`get_fs.MultipleGroupClass()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)
+implemented — whole-fit per-observation scores + trailing `group`
+column + a per-group (`list`) `psi` attr, reusing the single-group
+per-row `mirt_per_obs` engine; fully-missing rows reconciled via
+`completely_missing`; new `test-get_fs_mirt_multigroup.R`. Suite **3358
+pass** / 0 fail, `R CMD check` 0/0/0. **mirt
+[`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) ψ
+fix (fc16f81)**:
+[`get_fs.SingleGroupClass()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)
+now uses the model’s **full** estimated factor covariance
+(`mirt_full_cov()`, between-factor covariances included) as `psi`, not
+the unit-variance quadrature prior — fixing a ≥2-factor
+latent-covariance bug that only surfaced off the diagonal (1-D
+invariant). **P0/P1/P2 vignette review** (d5fac0d / 4d44a56 / 8867f6f):
+motivation + Crossref-verified references;
+[`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)
+column glossary + 2S-PA framing (P1); vignette cross-link hub via
+relative `.html` links + `\VignetteIndexEntry`/title normalization (P2 —
+`?vignette=` does not resolve under rmarkdown 2.31, so the hub uses
+plain sibling links); correction-error scope note. New plan
+`archive/PLAN_10_multigroup_mirt.md` (follow-up **F7**: multi-group mirt
+[`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)).
+Suite **3298 pass** / 0 fail. Prior: 2026-08-20 — **PLAN 09**:
+[`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md)
+per-unit `fsL`/`fsT` pooling — new `reduce = c("mean", "median")`
+collapses FIML per-pattern and merMod per-cluster `fsT`/`fsL`/`fsb` to
+one representative value per group (replaces PLAN 06 §4’s “not
+supported” [`stop()`](https://rdrr.io/r/base/stop.html); enables
+missing-data + merMod 2S-PA). Prior: 2026-08-19 two features landed on
+`refactor/core`: **PLAN 07** `b9ca3c9` — new exported
+[`fs_indiv()`](https://mmm-lab-um.github.io/R2spa/reference/fs_indiv.md)
+per-row API + `psi`/`alpha` latent-moment attributes on
+[`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) +
+[`augment_lav_predict()`](https://mmm-lab-um.github.io/R2spa/reference/augment_lav_predict.md)
+refactored onto the shared engine — resolves F4, closed \#14; then the
+**`mirt` `SingleGroupClass`
+[`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)
+method** (follow-up F2) + per-row `mirt` branch in
+[`fs_indiv()`](https://mmm-lab-um.github.io/R2spa/reference/fs_indiv.md)
+— closed \#15; plus the `correct_evfs()` performance fix closing the
+last tracked Open item \#5. Suite **3176 pass** / 0 fail, check 0/0/1
+OpenMx NOTE. Prior context: WI-1/WI-2 `10b5b0d`/`966ff9b` (2339), PLAN
+06 `7c51d23`, `method="ML"`/`"mean"` + merMod speedup
+`aa5be3e`/`b730b53`)
+
+## Open
+
+\_No tracked open issues as of 2026-08-19. The sole open item, `#5`
+(`correct_evfs()` performance, P2), was closed that day — see Closed.
+Remaining work is future-scope (Follow-ups F1/F5) or the quarantined
+stage-2 re-integration (now **complete**: `get_fs_int()` replaced by
+[`compute_fs_prod()`](https://mmm-lab-um.github.io/R2spa/reference/compute_fs_prod.md)
+/ `get_fs(product = )`, see Closed \#25;
+[`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md)
+re-integrated 2026-08-23, `tspa_mx()` in `bcd42a3`, grand
+standardization re-integrated 2026-08-22, see
+`archive/PLAN_QUARANTINE.md`).\*
+
+## Follow-ups (future work, explicitly out of scope for their plans)
+
+| \# | Item | Source | Status |
+|----|----|----|----|
+| F1 | Wire [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) to accept unified/list factor-score shapes natively (via [`fs_to_group_list()`](https://mmm-lab-um.github.io/R2spa/reference/fs_to_group_list.md) or dual support) — currently relies on attributes; the `format` default change shifts multigroup output to list-valued attributes that [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) must keep parsing. | PLAN 01, remaining issue 7 | deferred |
+| F2 | `mirt` S3 method (`get_fs.SingleGroupClass`) — **resolved 2026-08-19**: per-row regression-form `fsL = I − Vpost·Ψ⁻¹` (univariate = `1 − SE²`); `mirt` stays a `Suggests` dependency; `get_fs.MultipleGroupClass` errors. See \#15. | PLAN 01, remaining issue 8 | resolved 2026-08-19 (#15) |
+| F3 | **Resolved 2026-08-20 via the pooling variant (#16)** — `tspa(reduce = "mean"/"median")` converts per-pattern (FIML) / per-cluster (merMod) `fsL`/`fsT`/`fsb` to long-form individual-specific values, then reduces them to one representative value per group feeding the usual schema (small patterns are pooled, not fit as tiny sub-groups). The **sub-group** variant below remains deferred. | *sub-group variant (deferred):* [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) per-pattern stage 2 via lavaan sub-groups `(group × pattern)` from a synthesized pattern column off `fs_pattern` (extend `tspa_schema_mf()` group indices to (group, pattern) pairs; user `group.equal` still applies). Hazard: lavaan’s level ordering for `group = c(a, b)` must be derived + pinned canary-style (cf. `R/lavaan_compat.R`); tiny sub-groups (n ≲ 5) may not converge. Design: PLAN 06 §7a. | PLAN 06, §7a |
+| F4 | Per-row column API (user-requested): user-level function appending individual-specific `fsL`/`fsT`/`fsb` values as columns to the factor-score data frame, keyed by `fs_pattern`’s per-row labels (e.g. `ld_fs_visual_x1`, `ev_fs_visual`) so each case carries the matrices matching its own pattern. **Resolved 2026-08-19** by the exported [`fs_indiv()`](https://mmm-lab-um.github.io/R2spa/reference/fs_indiv.md) (see \#14). | PLAN 06, §7b | resolved 2026-08-19 (#14) |
+| F5 | mirt-EAP per-row SE variant: the per-row `mirt` SE is currently mirt’s `fscores(..., full.scores.SE = TRUE)`; also expose the alternative `sqrt(diag(Vpost_i))` (regression-SE convention) as an option/flag so both conventions are available. | plan `archive/PLAN_08_mirt_fs.md`, follow-up | deferred |
+| F6 | mirt `psi` = the estimated factor covariance. The **single-group** path is handled: [`get_fs.SingleGroupClass()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) uses `mirt_full_cov()` (reads `COV_ij` / factor variances) as `psi` — **resolved 2026-08-22 (fc16f81)** (supersedes the `psi = diag(q)` wording in \#15 / PLAN 08 for the SG path). The **multi-group** path uses the **group-specific** covariance (per-group `mirt_group_pars()`) — **resolved 2026-08-22 (31b3809, F7)**; both SG and MG paths are done. | plan `archive/PLAN_08_mirt_fs.md` | SG resolved (fc16f81); MG resolved (31b3809) |
+| F7 | ~~multi-group mirt [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) (`MultipleGroupClass`)~~ — **resolved 2026-08-22 (31b3809)**: [`get_fs.MultipleGroupClass()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) implemented (see Closed \#18) — per-group `psi` via `mirt_full_cov(mirt::extract.group(object, k))` (new `mirt_group_pars()`), whole-fit scores/SEs/`return.acov`, trailing `group` column + per-group (`list`) `psi` attr, reusing the SG per-row `mirt_per_obs` list attrs. | plan `archive/PLAN_10_multigroup_mirt.md` | **done 2026-08-22 (31b3809)** |
+
+## Closed
+
+| \# | Issue | Closed | Reference |
+|----|----|----|----|
+| 30 | **Analytic (refit-free) corrected-SE Jacobian + general model coverage (PLAN 16)** — [`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md)’s stage-2 Jacobian `J` is generalized from the saturated single-group finite-difference form to a refit-free (no optimizer noise) analytic influence function, deterministic per BLAS backend (drifts ~1e-8-1e-7 relative across backends): `J = -H^{-1} C` where `H` (the log-likelihood Hessian over the free params) and `C` (the cross-derivative w.r.t. the fixed `fsL`/`fsT`) are both central-differenced from the exact unweighted normal-ML score `s(θ,η)` (a pure matrix function of the implied-covariance geometry) at `h = 1e-6·max(1,|param|)`. Covers saturated, restricted (df \> 0), multigroup, and mean-structure models (per-group `xbar`/`S_ml`; fixed `fsb` score means read from the partable `est$nu`, not assumed 0 — fixes the spurious mean-coupling leak). The multiplier is the analytic Hessian `-H^{-1}`, not `vcov(fit)` (which differs by O(base residual) and is wrong against the large restricted `C` — Phase-0 gate 0.19 vs 0.013). `engine = "analytic"` is now the default (was `"fd"`); `"fd"` (the original central-difference at `h0 = 1e-5`, refits via `tspa_args`) is the fallback and the explicit route. Guards return `NULL` → FD when out of scope: unrecognised free param, unequal per-group free counts, per-group row-count ≠ lavaan `nobs` (score scaling aligned via `tsp_nobs()`), non-ML `estimator.orig` (MLR reports its base likelihood as “ML”, so `estimator` alone can’t distinguish it), or case weights. A/B-gated against the FD engine on every corrected-SE shape (saturated 3-factor 0.0049/0.88, restricted 0.0128/0.001, 2-factor ~0/1.4e-6, fixed-mean prior 0.0088/0.0095, multigroup+means ~0/2.8e-5, max-abs/max-rel); T3 goldens pinned at the 1e-4 cross-BLAS drift floor. 473 tests / 4229 expectations, 0 fail; `R CMD check` (as-cran) 0/0/1 NOTE (pre-existing title-case + URL 404). | 2026-08-30 | PR \#90 (merge `c08be75`) + `archive/PLAN_16_analytic_corrected_se.md` |
+| 29 | **Product factor-score vignette re-integrated from quarantine** — the rewritten `get_fs_int-vignette.Rmd` (on [`compute_fs_prod()`](https://mmm-lab-um.github.io/R2spa/reference/compute_fs_prod.md) / `get_fs(product = )` / `tspa(product = )`, \#28’s fixed product-indicator error covariances, DGP residual variance `0.58890039` so the `y` latent has population variance exactly 1) left `.quarantine/vignettes/` and is now built as `vignettes/product-factor-scores.Rmd` (`git mv` + `\VignetteIndexEntry` aligned to the title; renders clean — manual ≡ auto `all.equal` `TRUE`, the `std.lv` A/B table on the estimated latent scale). `.quarantine/vignettes/` now holds only `categorical-interaction.Rmd` (stale) and `reliability.Rmd` (+ `sim_results_reliability.RDS`). AGENTS.md quarantine bullets + re-integration log updated; NEWS entry. | 2026-08-27 | this commit |
+| 28 | **Product-indicator error covariances fixed in the stage-2 model** — DMC product indicators sharing a factor score (e.g. `xm` and `xz`) have correlated measurement errors (the shared score’s error enters both), and the stage-2 model previously left that covariance free, where it was absorbed by the free latent covariances — a first-order (n-independent) attenuation of the structural product coefficients (~−0.01…−0.02 on coefficients of size 0.1–0.15). [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) now computes, from the stage-1 `fsL`/`fsT`/`psi` attributes, the error covariance for every pair of product latents (verified formula `tau_ik c_jl + tau_il c_jk + tau_jk c_il + tau_jl c_ik + c_ik c_jl + c_il c_jk` with `tau_uv = L_u psi L_v'`, `c_uv = T[u,v]`; new pure-matrix helper `fs_prod_ecov()` — a diagonal `T` (disjoint-indicator CFAs) reduces the shared-factor pair to `tau_jl s_i^2`, local-mode separate-models results to zero) and emits fixed `fs_v1 ~~ fs_v2` rows — both the single-factor (`se_fs`) and multi-factor (`fsT`/`fsL`) paths, both the `product = TRUE` auto-compute flow and the manual flow (product columns pre-computed with `get_fs(product = )`/[`compute_fs_prod()`](https://mmm-lab-um.github.io/R2spa/reference/compute_fs_prod.md) and listed in `se_fs`; detection via `tspa_sf_alias()`’s `prod_map`). Data lacking the stage-1 attributes (e.g. a [`cbind()`](https://rdrr.io/r/base/cbind.html)’d [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) result) with two or more product latents is now rejected with an informative error (remedy: pass the un-[`cbind()`](https://rdrr.io/r/base/cbind.html)’d result). Single-group (v1). Files: `R/tspa.R` (`tspa_prod_ecov()`), `R/compute_fs_prod.R` (`fs_prod_ecov()`), tests, `.quarantine/vignettes/get_fs_int-vignette.Rmd` (DGP residual variance → 0.58890039 so the `y` latent has population variance exactly 1; narrative updated). Numerically verified (n = 200k): the product coefficients move from 0.081/0.138/0.110 to ~0.10/0.15/0.12 (the simulated values). | 2026-08-27 | `73176e8` |
+| 27 | **[`tspa_mx_model()`](https://mmm-lab-um.github.io/R2spa/reference/tspa_mx_model.md) `~~` definition-variable lookup orientation fix** — `lavaanify()` may present a `~~` row with (lhs, rhs) reversed relative to the score order, and the defvar overlay looked up `spec$T$coln[si, sj]` only in partable order; with a lower-triangle-only `fsT` (the documented convention and the auto-derivation convention) the off-diagonal defvar was therefore not found and the `c(1)` sentinel leaked into the model as a fixed unit covariance between the scores — q≥2 per-row/per-pattern fits (multi-factor mirt per-row, single-group FIML per-pattern) aborted with ‘implied covariance not positive definite’. `tspa_mx_defvar_col()` (R/tspa_mx.R) now falls back to the transposed triangle. **Resolves the PLAN 15 V3c scope narrowing**: q ≥ 2 per-row/per-pattern defvar fits are now pinned numerically end-to-end (SG FIML q = 2 A/B upgraded from the string pin; new mirt 2-factor A/B on the vignette case; unit pin of the orientation-agnostic lookup). `tspa-vignette-mx.Rmd`: the multidimensional example now uses the auto-derived measurement inputs (the EAP section keeps its hand-rolled route — its per-person quantities come from outside [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)). NEWS Bug Fixes + Documentation entries. Suite **3985 pass** / 0 fail (1 pre-existing warn in `test-tspa_mx.R`); `R CMD check` **0 / 0 / 0**. | 2026-08-26 | `34eec17` |
+| 26 | **`tspa(product = TRUE)` opt-in product-score auto-compute (Phase 2)** — [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) gains `product = FALSE` (opt-in). When `TRUE`, `tspa_product_latents()` detects model variables whose name concatenates two of the model’s factor scores, or names them in lavaan’s interaction syntax (`x:m`, rewritten to the render name `xm` via `tspa_rewrite_product_toks()` before rendering, since the generated model would otherwise parse `x:m` as an interaction of the (latent) variables; a non-score `a:b` token, e.g. `x:g`, passes through to lavaan as an ordinary interaction; the same pair named twice, or a render name colliding with another model variable, errors; an explicit product `se_fs` entry may be keyed by the `a:b` token, stored check.names()-ed as `x.m` and renamed to the render name) (identifier tokens of the comment-stripped model string; not data columns; not numeric values/labels; a known score that already has its `fs_v` column wins over the product reading; a candidate matching two different pairs errors). `tspa_ensure_product_cols()` computes the missing DMC product columns via [`compute_fs_prod()`](https://mmm-lab-um.github.io/R2spa/reference/compute_fs_prod.md) (canonical sorted pair order; pre-existing columns in either orientation are used as-is; attribute-less data — e.g. a [`cbind()`](https://rdrr.io/r/base/cbind.html)’d [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) result — is rejected with the remedy). **sf path**: the per-group pooled (by `reduce`) product SE joins `se_fs` (new `pool_se_col()`, which `pool_se_fs()` is refactored onto; an explicit `se_fs` entry for the product latent wins), and the product latent loads 1 on its indicator (the shipped score-scale convention, unchanged). **mf path** (the “mf schema extension”): `tspa_schema_mf()` accepts `prods` and emits, per product latent, a fixed loading row `v =~ gamma * fs_v` and a fixed error row `fs_v ~~ se_P^2 * fs_v` evaluated at the (pooled) `fsL`/`fsT` with the `psi` attribute — the true-latent scale of this path (gamma = L_aa·L_bb + L_ab·L_ba; se_P^2 = tau_a s_b^2 + tau_b s_a^2 + s_a^2 s_b^2 + c^2 + 2 tau_ab c; new `fs_psi_matrix()` unwraps the `psi` attribute). v1 rejections: multigroup, `corrected_se = TRUE`, non-logical `product`; local-mode complete-data results work (block-diagonal attributes reduce to the separate-models formula, gamma = lambda_a·lambda_b). `tspa_args` records `product` (replay is idempotent: the columns exist and `se_fs` is complete on replay). Roxygen `@param product` + Details subsection + example. 61 new expectations in `tests/testthat/test-tspa_product.R` (detection units, sf auto ≡ manual with byte-identical models for regression + Bartlett, reversed-orientation column reuse, explicit-SE precedence, mf gamma/se_P^2 model-string pins (regression gamma != 1, Bartlett gamma = 1), FIML per-row columns + pooled-SE identity, FIML mf, replay idempotency, all rejections, `pool_se_fs()` refactor regression). Suite **3870 pass** / 0 fail (1 pre-existing warn in `test-tspa_mx.R`); `R CMD check` **0 / 0 / 0**. | 2026-08-26 | base `f52f12d` (merged into `refactor/core` as `bb57071`) + `8ed5c7a` (`x:m` extension) |
+| 25 | **Product factor-score indicators — [`compute_fs_prod()`](https://mmm-lab-um.github.io/R2spa/reference/compute_fs_prod.md) / `get_fs(product = )` replaces the quarantined `get_fs_int()`** — new export `compute_fs_prod(fs, product)` (`R/compute_fs_prod.R`): for each requested pair of distinct latents (`"a:b + c:d"` string, list of length-2 name pairs, or 2-column matrix/data frame; same-factor and duplicate pairs rejected) appends the double-mean-centered product indicator `fs_a:fs_b`, its per-row SE `fs_a:fs_b_se`, and implied loading `fs_a:fs_b_ld` (the old `get_fs_int()` column conventions, kept so the [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) auto-alias works unchanged). Attribute-driven — per-pattern `fsL`/`fsT` via `resolve_fs_per_row()`, shared `psi` — so FIML resolves per observed-indicator pattern and fully-missing rows get NA. The SE uses the general joint-model joint-normal formula `se_P^2 = tau_a s_b^2 + tau_b s_a^2 + s_a^2 s_b^2 + c^2 + 2 tau_ab c` (derivation in roxygen `@details`; pure-matrix helpers `fs_prod_se2()`/`fs_prod_gamma()` + spec parser `parse_product_spec()` co-located), which reduces to the old separate-single-factor formula for diagonal `L`/`T` — the `c^2` and `2 tau_ab c` terms (correlated factors, cross-loadings, error covariances) were exactly what the old code dropped. [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) gains `product` (on [`get_fs.lavaan()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) and forwarded by [`get_fs.data.frame()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md); multi-group and `local = TRUE` rejected, v1; single-group lavaan only). Breaking: quarantined `.quarantine/R/get_fs_int.R` + `.quarantine/tests/test-get_fs_int.R` deleted (NEWS breaking-changes entry); `R/tspa.R` auto-alias comments reworded (behavior unchanged). 81 new expectations in `tests/testthat/test-compute_fs_prod.R` (independent-MC moment check, population MC for regression + Bartlett incl. cross-loading and error covariance, legacy-formula reduction, exact integration incl. std.lv/`format = "list"`/attribute preservation, FIML per-pattern + NA rows, end-to-end [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) auto-alias with manual-rename bit-identity, all error cases). Suite **3809 pass** / 0 fail (1 pre-existing warn in `test-tspa_mx.R`). Quarantined vignettes (`get_fs_int-vignette.Rmd`, `categorical-interaction.Rmd`) left stale pending a later rewrite. Deferred follow-up: opt-in `tspa(product = )` auto-compute + mf schema extension. | 2026-08-25 | `9a0a8e1`, merged into `refactor/core` as `bb57071` |
+| 24 | **`get_fs(..., local = TRUE)` — per-construct local stage-1 scoring (PLAN 14)** — each latent scored from its own local measurement model (canonical per-construct 2S-PA stage 1) instead of the joint multi-factor model; `model` a single string (strict per-latent `=~` grammar, line-numbered errors) or a character vector / named list of single-factor strings fit verbatim (escape hatch). Merged result = joint layout, exactly-zero cross-terms (block-diagonal `fsT`/`fsL`/`psi`, zero `ecov_*`/off-diagonal `_by_` columns); per-row merge (`resolve_fs_per_row()` + [`block_diag()`](https://mmm-lab-um.github.io/R2spa/reference/block_diag.md)), compact matrices on complete data; FIML → per-row lists + `per_obs = TRUE` marker (listwise deletion errors). Supported `group`/`std.lv`/`method`/`corrected_fsT`/`prior_mean`/`sum_items`; v1 rejections `vfsLT`/`prior_cov`/`reliability`. New internals in R/get_fs_methods.R + `per_obs || mirt_per_obs` OR-checks (R/fs_indiv.R, R/tspa.R); feeds [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) directly via PLAN 13 derivation. Root-cause fixes found in flight: pre-existing `resolve_group_blocks()` single-pattern NA-row misrouting; local-mode parser [`stop()`](https://rdrr.io/r/base/stop.html) arity + empty-RHS `strsplit` NA. Verified local ≡ joint(uncorrelated) at 1.16e-5, ≠ under free correlation; scoring-matrix identity exact (regression/Bartlett). 113 new expectations (`test-get_fs_local.R`); “Local vs joint scores” vignette section. Suite **3720 pass** / 0 fail (1 pre-existing warn in `test-tspa_mx.R`); `R CMD check` **0 / 0 / 0**. | 2026-08-24 | this commit + `archive/PLAN_14_get_fs_local.md` |
+| 23 | **[`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) auto-derives measurement inputs from a [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) result (PLAN 13)** — `tspa(model, fs)` works directly: multi-factor `fsT`/`fsL` (and `fsb`) derived from the result’s attributes when omitted (provenance-gated on `resolve_fs_per_row()`), single-factor `se_fs` derived from the `fs_<v>`/`fs_<v>_se` columns (cbind’d frames) with per-group values in first-appearance order (`group_col` attr → `group =` argument → literal `group` column); explicit arguments always win, a supplied `se_fs` (even [`list()`](https://rdrr.io/r/base/list.html)) suppresses the multi-factor derivation, `vfsLT`/`group=` stay explicit-only; fail-fast error replaces lavaan’s “model is NULL”. New co-located `derive_sf_se_fs()`/`fs_group_order()` in `R/tspa.R`; no schema/renderer/pooling changes; `tspa_args` carry resolved values (replay skips derivation; [`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md) works on derived fits). Derived fits fix the score intercepts (pick up `fsb`). Roxygen + 3 minimal-form examples; 80 new expectations in `test-tspa_derived.R` (12 plan cases + edges: corrected_se on derived attrs SG+MG, FIML replay, mirt/merMod, precedence, provenance-gate errors, reversed-factor-level group order). Vignettes `R2spa`/`multiple-factors` drop the `fsT = attr(...)`/hardcoded-`se_fs` boilerplate (other vignettes keep the explicit form deliberately). Suite **3607 pass** / 0 fail (1 pre-existing warn in `test-tspa_mx.R`); `R CMD check` **0 / 0 / 0**. | 2026-08-24 | this commit + `archive/PLAN_13_tspa_derived_attrs.md` |
+| 22 | **Report fixed structural slopes in [`grand_standardized_solution()`](https://mmm-lab-um.github.io/R2spa/reference/grand_standardized_solution.md) (PLAN 12)** — a user-fixed slope (`~ k*var`, no free position) now reports alongside free ones: `est.std` = user value × (grand/case) SD ratio + first-order delta `se`, both ≡ [`lavaan::standardizedSolution()`](https://rdrr.io/pkg/lavaan/man/standardizedSolution.html). New internal `tsp_beta_names()` (`R/lavaan_compat.R`; per-group β row/col variable names from `lavInspect(fit,"est")$beta` — SG flat / MG nested; `lavTech(est)$beta` strips them, so the dimname source stays `lavInspect`); `out_idx` (`R/grandStandardizedSolution.R`) free-position anchor for free cells + `(c-1)*nrow + r` β-dimnames col-major fallback for fixed cells (equal to the free anchor on free rows); the blanket `stop("...must be free")` is replaced by a drift-defensive guard on unresolvable rows (all real `~` rows resolve to β cells; means are `~1`, excluded upstream by `op=="~"`). Roxygen `@details` + `man/` + `NEWS.md`; `NAMESPACE` unchanged. 6 new tests (SG fixed ≡ `standardizedSolution()`, SG mixed free+fixed, MG fixed + grand-SD hand-calc, 2S-PA corrected SG, all-free regression, dimnames canary, guard via `local_mocked_bindings`). No `Imports`/`Suggests` change. Suite 0 fail (1 pre-existing warn in `test-tspa_mx.R`); `R CMD check` 0/0/0. | 2026-08-24 | this commit + `archive/PLAN_12_grand_std_fixed_paths.md` |
+| 21 | **Multigroup `corrected_se` + corrected grand-standardized SEs + `corrected-se` vignette re-integration** — lifted the single-group-only guard on `tspa(corrected_se = TRUE)` (`R/tspa.R`): [`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md) was already multi-group (its per-group `fsL`-then-`fsT` `val_fsLT` layout exactly matches `get_fs(vfsLT = TRUE)`’s producer order), so no math changed — only the guard was removed, and the in-place path now builds a corrected MG fit (per-group list `fsL`/`fsT` refit via `tspa_args` + dimension-agnostic `tsp_set_vcov`). [`grandStandardizedSolution()`](https://mmm-lab-um.github.io/R2spa/reference/grand_standardized_solution.md) needs no code change: threading `vcov(object)` (or `acov_par = vcov(corrected_fit)`) carries the corrected covariance into the grand-standardized SEs with `est.std` unchanged. Roxygen updated in `R/tspa.R` / `R/tspa_corrected_se.R` / `R/grandStandardizedSolution.R` (per-group `which_free` order; corrected grand-std semantics); `NAMESPACE` unchanged. `corrected-se.Rmd` `git mv`’d from `.quarantine/vignettes/` to `vignettes/`: `R2spa:::vcov_ld_evfs(fit)` → public `attr(get_fs_lavaan(fit, vfsLT = TRUE), "vfsLT")`; a redundant CFA dropped; the SG standardized-SE block now uses named lookups (not `[8]`) and keeps the hand `numDeriv` derivation alongside the one-call `tspa(corrected_se = TRUE)` route; a new MG in-place `corrected_se` + corrected [`grandStandardizedSolution()`](https://mmm-lab-um.github.io/R2spa/reference/grand_standardized_solution.md) showcase added. Bootstrap fixtures consolidated into `vignettes/` (`boo_joint.RDS` from `tests/testthat/`, `boo_separate.RDS` from `.quarantine/`), shared with the tests. Tests — `test-tspa_corrected_se.R`: IT4 MG-rejection dropped; file-scope `tspa_mg_corr`/`vcov_corr_mg` fixtures; IT6 (MG in-place == standalone), IT7 (MG SE-only), IT8 (MG `tspa_args` replay), **T9** (MG independent central-difference Jacobian wiring — closes the SG-only T8 gap; `cor_pkg == J·vfsLT·Jᵀ` to ~3e-18); `test-grandStandardizedSolution.R`: MG 2S-PA corrected grand-std A/B block (injected-corrected-cov == corrected-fit SEs; `est.std` unchanged). No new `Imports`/`Suggests`. Suite **3454 pass** / 0 fail (1 pre-existing warn in `test-tspa_mx.R` T1b); `R CMD check` **0 / 0 / 0** (vignettes rebuilt). | 2026-08-23 | this commit |
+| 20 | **First-order (delta-method) corrected-SE re-integration (from `.quarantine/`) + in-place [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) option** — `R/tspa_corrected_se.R` ([`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md) + internal `check_refit_convergence`/`tsp_tri2full_colmajor`) `git mv`’d from `.quarantine/` (now a package export; the 2026-08-22 fix — col-major `fsT` assembly, explicit central-difference stage-2 Jacobian at `h0 = 1e-5`, self-contained `tspa_args` refit, hard convergence gate, fail-fast `which_free`/`vfsLT`/PSD guards — carried over; T1–T8 A/B-gated on relocation, byte-identical). [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) gains `corrected_se = FALSE, vfsLT = NULL, which_free = NULL`: when `TRUE` (single-group; multigroup and no-`fsT` rejected) it runs [`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md) and overwrites the fit covariance through the new internal `tsp_set_vcov()` (`R/lavaan_compat.R`) — a canary-covered single-boundary write of `fit@vcov[["vcov"]]` only (`@vcov$se`/`@Options$se` untouched), so `standardizedSolution()`/[`vcov()`](https://rdrr.io/r/stats/vcov.html)/`se()` report corrected SEs with `est.std` unchanged; `tspa_corrected = TRUE` is set, a double-correction guard rejects an already-corrected fit, and a recurrence guard (`a$corrected_se <- FALSE`) keeps the Jacobian refits plain. New `tests/testthat/test-tspa_corrected_se.R` (T1–T8 + IT1–IT5), `boo_joint.RDS` fixture moved to `tests/testthat/`, and a `tsp_set_vcov` canary in `test-lavaan_compat.R`. No `DESCRIPTION` change (`numDeriv` stays `Suggests`, test-only). Suite **3442 pass** / 0 fail; `R CMD check` **0 errors / 0 warnings / 0 notes** (as-cran; new example + tests + vignette rebuild OK). | 2026-08-23 | this commit + `archive/PLAN_QUARANTINE.md` |
+| 19 | **Grand-standardized solution re-integration (from `.quarantine/`)** — `R/grandStandardizedSolution.R` + `tests/testthat/test-grandStandardizedSolution.R` restored by pure `git mv` (zero code edits; quarantined intact in `6dddf5f`, and the self-contained test file — incl. the grandSS wrapper A/B block appended in quarantine Phase 2.5 — passes unmodified on the settled contracts). `devtools::document()` restores `export(grand_standardized_solution)` + `export(grandStandardizedSolution)` (legacy alias pair, kept in sync), `importFrom(lavaan, lav_func_jacobian_complex)`, `stats` `pnorm`/`qnorm`, `utils` `tail`, and `man/grand_standardized_solution.Rd`; the 4 package examples (PoliticalDemocracy / HolzingerSwineford1939, SG + MG) run OK under check. `vignettes/gr-std-coef.Rmd` is reintroduced separately in a follow-up commit (no `VignetteBuilder`/index change). No `DESCRIPTION` change; no OpenMx interaction (the `OpenMx` `Imports` entry is consumed by `tspa_mx()` since `bcd42a3`). Quarantine residue narrows to `R/{get_fs_int.R, tspa_corrected_se.R}` + their test files (plus the stale `.quarantine/tests/test-tspa_mx.R` leftover of the `bcd42a3` rewrite-style re-integration). Suite **3377 pass** / 0 fail; `R CMD check` **0 errors / 0 warnings / 0 notes** (as-cran). | 2026-08-22 | this commit + `archive/PLAN_QUARANTINE.md` |
+| 18 | **Multi-group mirt [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) (`MultipleGroupClass`) (PLAN 10)** — [`get_fs.MultipleGroupClass()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) replaces the prior “not supported” stub. Per-observation scores/SEs + posterior covariance come from [`mirt::fscores()`](https://philchalmers.github.io/mirt/reference/fscores.html) on the whole fit; each observation’s regression-form `(fsL, fsT, fsb)` is built by the shared `compute_lav_fs_matrices()` using its own group’s factor covariance (new co-located `mirt_group_pars()`, reusing `mirt_full_cov()` on `mirt::extract.group(object, k)`). Output = the single-group per-row column set + a trailing `group` column (the model’s `groupNames`; `NA` for completely-missing rows, matching the all-NA row convention). `attr("psi")` is a named list (one `q x q` per group) — the one structural difference from the single-group result. Completely-missing rows are reconciled against the full row set via `mirt::extract.mirt(object, "completely_missing")` (mirt drops them from every extraction; `N`/`group`/`rowID` are scorable-length). [`fs_indiv()`](https://mmm-lab-um.github.io/R2spa/reference/fs_indiv.md) dispatches on the unchanged `mirt_per_obs` marker (per-row `fsL`/`fsT`/`fsb`), dropping the `group` column. No `NAMESPACE`/`Imports` change. Docs: [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) description + `prior_mean`/`format` params; NEWS entry. New `test-get_fs_mirt_multigroup.R` (9 units); the single-group dispatch test no longer asserts the removed guard. Suite **3358 pass** / 0 fail; `R CMD check` 0 errors / 0 warnings / 0 notes. | 2026-08-22 | `31b3809` |
+| 17 | **mirt [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) ψ fix — use the estimated factor covariance** — [`get_fs.SingleGroupClass()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) set `psi = diag(q)` (mirt’s **unit-variance quadrature** prior, not an estimate); with ≥2 correlated factors the shrinkage loadings / error covariances (`fsL = I − Vpost·Ψ⁻¹`, `fsT = fsL·Vpost`) silently dropped the between-factor covariances (1-D invariant: mirt fixes `COV_11 = 1`). New co-located `mirt_full_cov()` (R/get_fs_methods.R) reads the model’s estimated `COV_ij` from `coef(fit)$GroupPars` and supplies it as `psi`. Verified: [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) now matches the previously-correct hand-rolled full-covariance score matrices exactly (1-D and 2-D); the lavaan path already used `est$psi` (unchanged); new correlated-2-factor mirt regression test in `test-get_fs_mirt.R`. Roxygen/comments corrected. Suite **3298 pass** / 0 fail; check 0 errors / 0 warnings. | 2026-08-22 | `fc16f81` |
+| 16 | **[`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) per-unit `fsL`/`fsT` pooling (PLAN 09)** — new `tspa(reduce = c("mean", "median"), ...)` collapses per-unit factor-score attributes to one representative value per group before the usual stage-2 schema. Detection `is_per_unit_fs()` (3-D arrays for merMod; a per-group list-of-matrices for multiple missing-data patterns), pooling `pool_per_unit()` (reuses `resolve_fs_per_row()` + `fs_row_cols()` from `R/fs_indiv.R` for long-form per-row values; reduces each column by `mean`/`median` with `na.rm`; reassembles one `fsT`/`fsL`/`fsb` per group or single), and single-factor `pool_se_fs()`. Replaces PLAN 06 §4’s per-pattern [`stop()`](https://rdrr.io/r/base/stop.html) — FIML and merMod factor scores now fit (merMod [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md), previously broken at `upper.tri`, now works). `mean` keeps the pooled `fsT` positive semi-definite (convex); `median` is opt-in with a PSD guard warning. Pooled values + `pooled_fs` marker attached to the fit; complete-data paths are a no-op (byte-identical, identity-tested). No new `Imports`; no `NAMESPACE` change (internal helpers) + `@param reduce`/`fsT`/`fsL`/`fsb`/`@details`/`@examples`. Out of scope: mirt per-obs (not pooled), the sub-group variant, cluster-size weighting. 12 new `test_that` (66 expectations) in `test-tspa_pooled.R` + 3 stale PLAN 06 units in `test-tspa.R` rewritten. Suite **3247 pass** / 0 fail, 0 skip; check 0/0/1 OpenMx NOTE. | 2026-08-20 | this commit + `archive/PLAN_09_per_unit_pooled_fs.md` |
+| 5 | **`correct_evfs()` dominated `corrected_fsT = TRUE` runtime** — the per-row `lav_func_jacobian_complex()` loop did `q × (npar+1) × 2 + 1` `lavInspect()` file-reads per call (57 traced on a 13-param 2-factor fit). Two numerically-**exact** optimizations in `R/get_fscore_math.R`: (a) one `lav_func_jacobian_complex()` over the **full** `p × c` `a` matrix instead of one call per row — row `i`’s Jacobian is the column-major slice `J[i + p*(0:(c-1)), ]`, entry-identical to the per-row call (complex-step perturbations are parameter-local and linear in the output entries), giving `q×` fewer `a`-matrix evaluations; and (b) `compute_fspars()`/`compute_a()` now accept pre-fetched `frees`/`mats`, hoisting the `lavInspect("free")`/`("est")` file-reads out of the per-evaluation loop (`psi_override` semantics unchanged). Verified **bit-identical** ([`identical()`](https://rdrr.io/r/base/identical.html), `all.equal` tolerance 0) across 1/2/3-factor SG, prior-adjusted, and 2-group MG fits under both `regression` and `Bartlett`. `corrected_fsT = TRUE` runtime (regression, median) — 1-factor 0.011→0.005 s, 2-factor 0.033→0.007 s, 3-factor **0.076→0.010 s (~8×)**, 2-group **0.198→0.029 s (~7×)**; the win scales with factor count. No `NAMESPACE`/roxygen change (internal, undocumented helpers). | 2026-08-19 | `#5` (this commit) |
+| 15 | **`mirt` Item-Response [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) support (`SingleGroupClass`)** — new [`get_fs.SingleGroupClass()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) (S4 mirt fit, univariate & multi-factor) + a [`get_fs.MultipleGroupClass()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) guard that errors with a “fit/extract the single group first” message. Scores are the EAP posterior means (`fs_<factor>`, named by the mirt factor names via `mirt::extract.mirt(m, "factorNames")`); per-observation `fsL`/`fsT` are **per-row lists** of `q × q` regression-form matrices from `compute_lav_fs_matrices(Vpost_i, diag(q), 0, "regression")` where `Vpost_i` is mirt’s `fscores(..., return.acov = TRUE)` posterior covariance (`diag(Vpost_i) = SE²`). Unidimensional: `F1_by_fs_F1 = 1 − SE²`, `ev = (1 − SE²)·SE²` (machine precision); multi-factor off-diagonals give the shrinkage loadings / error covariances. `fs_pattern = list(label = seq_len(n), pat = NULL)`, marker `mirt_per_obs = TRUE`, `psi = diag(q)`, `alpha = 0` (mirt’s default unit/zero prior; `prior_*` unsupported here). [`fs_indiv()`](https://mmm-lab-um.github.io/R2spa/reference/fs_indiv.md) gained a **first-dispatch** per-row branch (`resolve_per_obs()`) that mints one block per row — the [`fs_indiv()`](https://mmm-lab-um.github.io/R2spa/reference/fs_indiv.md) body is otherwise unchanged, so a mirt output round-trips through it like lavaan/merMod. Missing data: no-scorable-indicator rows → all-NA block (NA score/SE/ev/intercept), matching lavaan. `mirt` stays in `DESCRIPTION: Suggests` (namespaced `mirt::` calls, `require_mirt()` guard). New `tests/testthat/test-get_fs_mirt.R` (72 expectations). Resolves follow-up F2. | 2026-08-19 | this commit + `archive/PLAN_08_mirt_fs.md` |
+| 14 | **[`fs_indiv()`](https://mmm-lab-um.github.io/R2spa/reference/fs_indiv.md) per-row API + effective latent `psi`/`alpha` + [`augment_lav_predict()`](https://mmm-lab-um.github.io/R2spa/reference/augment_lav_predict.md) reconcile (PLAN 07)** — new exported `fs_indiv(fs)` re-derives, per row, the individual-specific values (`_se`, `<lvs>_by_<lv>_*`, `ev_*`/`ecov_*`, and the per-pattern `fsb` intercepts) from the pattern’s `fsL`/`fsT`/`fsb` via a shared **value-only** engine `fs_row_cols()` that [`augment_lav_predict()`](https://mmm-lab-um.github.io/R2spa/reference/augment_lav_predict.md) now also uses (SEs are therefore always pattern-consistent); returns a data frame with exactly the factor-structure columns (score columns kept, the other [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) extras dropped) + `group_col`/`id_vals`/`block_label` attributes, under a one-block-per-group contract (lavaan: complete-data `fsT`; all-missing patterns → all-NA block). Adds effective latent-moment attributes to **every** get_fs() backend: `psi` = `prior_cov` if supplied else the lavaan/RE-term covariance, `alpha` = `prior_mean` if supplied else the lavaan mean (merMod: named zero vector) — point estimates only, carried through [`fs_to_group_list()`](https://mmm-lab-um.github.io/R2spa/reference/fs_to_group_list.md). Refactors [`augment_lav_predict()`](https://mmm-lab-um.github.io/R2spa/reference/augment_lav_predict.md) onto `augment_fs2()` (drops the ~54-line duplicate `fsL`/`fsT`/`fsb` derivation). Resolves follow-up F4; documents F5 (mirt-EAP SE variant, out of scope). | 2026-08-19 | `b9ca3c9` + `archive/PLAN_07_fs_indiv_and_latent_moments.md` |
+| 13 | **`get_D()` lme4-2.x RE-covariance convention (merMod EB)** — `get_D(object)` is now self-contained: splits `@theta` by `@cnms` block lengths (the same idiom lme4’s `mkVarCorr` uses; no dependence on the `"clen"` attribute, absent on `@theta` since lme4 2.x even for single-term fits) and returns the SCALED first RE-term covariance `VarCorr(x)[[1]]/sigma(x)^2`; the lme4 2.0.6 convention is documented in-source (R/get_fs_methods.R ~:601). Baseline (step 1) showed the `b730b53` clen restore had already made the value exact under 2.x — the plan’s “missing `sigma^2` factor” premise was a misread (the motivating probe gap of 1378.179 vs 1.435 was exactly `sigma^2`; the EB formulas carry the explicit scale) — so the change is numerically **bit-identical** (RDS-verified, all 8 EB/ML outputs on 4 fixtures; no user-visible value change, no stage-2 SE shift, no vignette re-knit). New `tests/testthat/test-lme4_compat.R` canary (per-term `s^2 * tcrossprod(L) == VarCorr` at 1e-15, `get_D == VarCorr[[1]]/s^2`, warning-free multi-term parse) guards future lme4 theta drift — needed because scores are D-free via `getME("b")`, so ranef-identity tests alone would stay green through a convention change. Term-1-only EB `fsT`/`fsL`/`scoring_matrix` reference tests for the 2+1/2+2 fixtures at 1e-12 (joint-vs-term-1 posterior gap recorded in-test, no multi-term score-identity pin by design); roxygen accuracy fixes (EB scores documented as first-term `ranef()`; `corrected_fsT`/`format` declared-but-ignored notes for merMod). | 2026-08-18 | `966ff9b` + `archive/get_d-mermod-lme4-2x.md` |
+| 4 | **`reliability = TRUE` + single-group multi-factor + default `unified` format → hard error** — the [`get_fs.lavaan()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) reliability guard now derives dimensionality from the model (`nrow(est$psi)` for SG, `nrow(est[[1]]$psi)` for MG — format-agnostic; the PLAN 06 missing-data stop for reliability still fires upstream, so per-pattern fits cannot misfire) instead of the `fsb` attribute-shape test that never fired for SG in the unified format. SG multi-factor now warns (“Computation of reliability for a multi-factor model is not currently supported.”) and omits the attribute in BOTH formats; all other cases verified unchanged (SG unidimensional pin .9607411, MG unidimensional per-group + overall values/names, non-standardized warning, priors/mean rejections). 4 new tests in `test-get_fscore.R` (SG 2-factor unified + list — the unified case is the pre-fix-failing regression net — MG 2-factor both formats, MG 1-factor guard); `@param reliability` wording updated (roxygen only). | 2026-08-18 | `10b5b0d` (PLAN 01, remaining issue 4) |
+| 12 | **Per-pattern factor-score attributes for lavaan missing-data fits** — `assemble_fs_blocks()` now keeps one `fsT`/`fsL`/`fsb`/`scoring_matrix` value per observed-indicator pattern: a k=1 group keeps a plain matrix/vector (complete-data values/shapes unchanged, regression-tested), and a group with k≥2 patterns gets a named list keyed by pattern label (observed indicators joined with `"+"` in indicator order). New per-group `fs_pattern` attribute = `list(label, pat)` (per-case pattern label — `NA` for cases with all indicators missing — plus a named logical p×k indicator-by-pattern matrix) so a future API (follow-up F4) can index per-row columns. `prepare_fs()` carries `pat_label`/`pat` through the blocks; the “blocks have differing fsT/fsL/fsb attributes” message and `check_blocks_identical()` deleted (nothing is dropped anymore). [`fs_to_group_list()`](https://mmm-lab-um.github.io/R2spa/reference/fs_to_group_list.md) round-trips the nested shapes and `fs_pattern` in both directions. SE paths (`corrected_fsT`/`reliability`/`vfsLT`) now [`stop()`](https://rdrr.io/r/base/stop.html) explicitly on multi-pattern data (previously a cryptic dimension error deep in `compute_fspars()`/`correct_evfs()`); [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) rejects nested per-pattern `fsT`/`fsL`/`fsb` attributes with an explicit error (both the single-group k\>1 “misread as k groups” trap and multigroup covered; per-pattern stage 2 is follow-up F3). Tests: per-pattern contract + `fs_pattern` content in `test-assemble_fs_blocks.R`; new `test-get_fs_missing.R` (SG/MG, pattern matrices matched against `lavPredict(acov=TRUE)` **by pattern label**, `fs_pattern` vs raw NA positions, `format="list"`, complete-data regression guard); SE-path errors in `test-get_fscore.R`; guard tests in `test-tspa.R` (incl. real [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) missing-data output); `fs_pattern` round-trips in `test-fs_converters.R`. Implementation note: a pattern’s `fsT`/`fsL` equal lavaan’s raw `acov` entry only via the package’s canonical mapping `compute_lav_fs_matrices()` (`fsT = (I − AΨ⁻¹)A`, pinned in `test-lavPredict_equivalence.R`) — the tests assert that reference, not raw acov equality. Quarantined consumers (`vcov_corrected`, `tspa_mx_model`, `grandStandardizedSolution`) read `fsT`/`fsL` as single matrices and need adapting at re-integration. Also: `^\.git$` added to `.Rbuildignore` (worktree `.git` *file* leaked into built packages, adding a hidden-file NOTE). | 2026-08-18 | `archive/PLAN_06_per_pattern_fs_attrs.md` (implementation `bb64d2e`, merged into `refactor/core` in `7c51d23`) |
+| 11 | **Quarantine of [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)/[`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md)-consuming code** — while those two contracts are being revised, every in-package consumer moved to `.quarantine/{R,tests,vignettes}/` (excluded from the build via `^\.quarantine$` in `.Rbuildignore`): `R/get_fs_int.R`, `R/tspa_mx.R`, `R/tspa_corrected_se.R`, `R/grandStandardizedSolution.R`; full test files `test-get_fs_int.R`, `test-grandStandardizedSolution.R`; 8 vignettes + 3 RDS fixtures. Embedded blocks extracted into 2 new self-contained quarantined test files (`test-tspa_mx.R`: the Mx comparison block + umx/OpenMx missing-data block with copied setups; `test-vcov_corrected.R`: the MG [`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md) + prior-adjusted [`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md) tests with copied setups) and appended to the 2 quarantined files (product-score auto-alias section → `test-get_fs_int.R`; grandSS wrapper A/B → `test-grandStandardizedSolution.R`). Kept in-package by decision: `R/lavaan_compat.R` (now consumed only by its own canary tests — its only package consumers were the two quarantined files) and the 6 core vignettes. `NAMESPACE` shrinks to 8 exports + 4 `get_fs` S3 methods (no `OpenMx`/`utils`; `stats` = `setNames`; `lavaan::vcov` re-declared on [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) for the bare [`vcov()`](https://rdrr.io/r/stats/vcov.html) calls in `get_fscore_math.R`). Roxygen links to quarantined topics reworded. [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) product-score auto-alias (`tspa_sf_alias`) retained (no `get_fs_int` dependency) with the ambiguous-candidates core test kept in `test-tspa_render.R`. Quarantined tests are self-contained (setups copied) with provenance headers for re-integration (`git mv` back → `document()` → `test()` → `check()`). `OpenMx` kept in `DESCRIPTION: Imports` until re-integration. | 2026-08-17 | `archive/PLAN_QUARANTINE.md` |
+| 1 | **merMod column-name regression** — restored pre-refactor `u0_eb`-style *column names* in the merMod path via `legacy_names` switch; [`get_fs_lmer()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs_lmer.md) defaults `legacy_names = TRUE` so `vignettes/multilevel.rmd` (`tspa_mx_model`) works unchanged; default [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)/[`get_fs.merMod()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) now use `fs_u0`-style names. Legacy output is name-compatible (not byte-identical) with the pre-refactor result — extra `_se` columns, `fsL`/`fsT` attributes, NULL row names (delta documented on [`get_fs_lmer()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs_lmer.md)/[`get_fs.merMod()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)). Fixed the related overwritten-`fsT`-rownames + duplicate-`re_names` bugs (item 7 sub-bullets). | 2026-08-15 | PLAN 02, Step 2 |
+| 2 | **Vignette breakage on `format = "unified"`** (verified failure set 3/13: `corrected-se.Rmd`, `multilevel.rmd`, `tspa-vignette-mx.Rmd`) — `multilevel.rmd` fixed by item 1; `R/tspa.R` now validates `fsT`/`fsL` group-count consistency (plain matrix = 1 group, so single-group length-1 list attributes may be mixed with plain matrices, e.g. Bartlett identity `fsL`) with a clear mismatch error, and `tspa_mf()` accepts all single-group shape combinations; `tspa-vignette-mx.Rmd` uses `format = "list"` for its direct attribute arithmetic. 6 new regression tests. **13/13 vignettes build** (verified 2026-08-16). | 2026-08-16 | PLAN 02, Step 3 |
+| 3 | **`get_fs(data = matrix)` dispatch** — already resolved in the working tree: [`get_fs.data.frame()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) re-dispatches matrices (`is.matrix(data)` → `as.data.frame(data)` → [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)). Live check: `get_fs(as.matrix(...))` is [`identical()`](https://rdrr.io/r/base/identical.html) to `get_fs(data.frame)` incl. attributes. Locked in with a regression test in `test-get_fscore.R`. | 2026-08-16 | PLAN 02, Step 4 |
+| 6 | **Missed cheap-lookup `lavInspect` sites** — all 3 replaced with direct slot access: `tspa_corrected_se.R` (`@Data@ngroups`), `get_fs_methods.R` (`unlist(@Data@norig)`), `grandStandardizedSolution.R` (`unlist(@Data@nobs)`). Slot values proven equal to `lavInspect()` output (SG + MG); MG standardization path A/B’d by existing tests; MG reliability `norig` path A/B’d live. One further cheap lookup noted out of scope: `get_fscore_math.R:128` (`"ngroups"` in [`augment_lav_predict()`](https://mmm-lab-um.github.io/R2spa/reference/augment_lav_predict.md)). | 2026-08-16 | PLAN 02, Step 5 |
+| 7 | **Dead-code cleanup** — remaining pieces removed: commented-out `# fs_se[is.nan(fs_se)] <- 0` line in `augment_fs()` (`get_fscore.R`) and the unreachable [`is.data.frame()`](https://rdrr.io/r/base/as.data.frame.html) guard in [`get_fs.data.frame()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) (`get_fs_methods.R`); the merMod `fsT_j` rownames + duplicate `re_names` sub-bullets were fixed in Step 2. | 2026-08-16 | PLAN 02, Step 6 |
+| 8 | **merMod `scoring_matrix` + Z-design fix + vignette** — [`get_fs.merMod()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md) now emits a per-cluster `scoring_matrix` (named list, one `num_re × n_j` matrix per cluster; score = `S_j %*% (y_j − X_j β)`), and `get_fs_blocks.merMod()` builds `Kz` from the random-effects design `Z` (`lme4::getME(object, "Z")`) instead of the fixed-effects `pp$X` — fixing the `Z ≠ X` crash (e.g. `Reaction ~ Days + (1 \| Subject)` → “non-conformable arguments”). Numerically inert where the old code worked (`Z == X` ⇒ `crossprod(zj) == crossprod(xj)` exactly). Roxygen (`get_fs`/`get_fs.merMod`/`get_fs_lmer`) + `AGENTS.md` attribute listing document the new attribute for both backends; new vignette `vignettes/scoring-matrices.Rmd` (lavaan CFA + lme4, hand-reconstruction of scores, comparison table). 5 new `test_that` blocks (score identity vs `ranef()`, structure, Z≠X regression, unbalanced clusters, legacy [`get_fs_lmer()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs_lmer.md)). | 2026-08-16 | PLAN 03 |
+| 9 | **merMod cluster-name robustness + efficiency pass** — `get_fs_blocks.merMod()` named blocks by *first appearance* in the data (`unique(as.character(object@flist[[1]]))`) while every lme4 structure it consumes ([`split()`](https://rdrr.io/r/base/split.html)/factor levels, the `Z` columns, the `b` random-effect vector, `ranef()` row order) follows the *canonical level order* — blocks were mislabeled whenever appearance order ≠ level order (shuffled rows, reversed factor levels, non-monotonic numeric cluster ids; values were always correct, only the labels wrong). Now names/rows come from `levels(as.factor(object@flist[[1]]))`, Z is sliced by level index `(j−1)·num_re+1:num_re`, and EB scores use `lme4::getME(object, "b")` reshaped level-major (bit-identical to `ranef()`, ~7× faster) — also dropping the unused `model.frame(object)` call. Verified: lme4 2.0.6 exposes no `pp$Z` (refclass `merPredD` has only `Zt`), so exported `getME()` is both the only and the stable choice; direct-slot access is not faster (sub-µs either way); per-cluster sparse `Zt[rws, idx]` slicing benchmarked and rejected (~55 µs/call vs 0.2 ms full densification at K=300). 3 new regression tests (shuffled rows, reversed factor levels, non-monotonic numeric ids); each confirmed to fail against the appearance-order naming. | 2026-08-16 | PLAN 03, follow-up |
+| 10 | **User-supplied latent priors `prior_mean`/`prior_cov` for [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)** (lavaan-only) — new arguments on [`get_fs.data.frame()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md), [`get_fs.lavaan()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md), and the [`get_fs_lavaan()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs_lavaan.md) wrapper (placed before `...` so they are never forwarded to [`lavaan::cfa()`](https://rdrr.io/pkg/lavaan/man/cfa.html)); non-NULL priors are treated as **fixed external priors shared across all lavaan groups**. Semantics: NULL preserves current behavior exactly; priors may be supplied independently; `prior_mean` is a length-q vector, `prior_cov` a q×q matrix (scalar/1×1 for q = 1); named inputs validated against latent names and reordered to model order; `prior_cov` validated finite/square/symmetric/positive-definite. Restrictions: regression/EB only (Bartlett/ML error), `reliability = TRUE` errors, merMod + [`get_fs_lmer()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs_lmer.md) reject via `...`. Math: `psi_override` threaded through `compute_fspars()`/`compute_a()`/`compute_evfs()`/`compute_ldfs()`/`compute_grad_ld_evfs()`/`vcov_ld_evfs()`/`correct_evfs()`, so `corrected_fsT = TRUE` and `vfsLT = TRUE` treat the supplied covariance as fixed (no prior sampling uncertainty propagated); `prepare_fs()` in `get_fs_blocks.lavaan()` uses the overridden `psi`/`alpha` for complete data, every missing-data pattern, and every group. All derived outputs (`fs`, `fsT`, `fsL`, `fsb`, `scoring_matrix`, `se_*`, `ev_*`, `ecov_*`) are recomputed from the prior-based scoring matrix — verified equivalent to manual [`compute_fscore()`](https://mmm-lab-um.github.io/R2spa/reference/compute_fscore.md) calls. Roxygen docs + multi-group example; 22 new `test_that` blocks in `test-get_fs_priors.R` (equivalence, attributes, reordering, all validation errors, corrected-SE/vcov, [`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md) on a prior-adjusted [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md) fit, data.frame/matrix/legacy entry points, q = 1 forms, multi-group incl. identical-group invariance, missing data, merMod rejection). [`fs_to_group_list()`](https://mmm-lab-um.github.io/R2spa/reference/fs_to_group_list.md) round-trip verified on prior-adjusted unified output. Out of scope (unchanged): group-specific priors, reliability under priors, merMod priors, [`augment_lav_predict()`](https://mmm-lab-um.github.io/R2spa/reference/augment_lav_predict.md)/OpenMx-facing helpers. | 2026-08-16 | PLAN 03 (fs priors) |
+
+## Verification state (2026-08-16/17 — PLAN 02, PLAN 03 \[mermod\], PLAN 03 \[fs priors\], PLAN 04 + check cleanup, QUARANTINE)
+
+- `devtools::test()`: **596 pass, 0 fail, 0 warn** (435 at the PLAN 02
+  close; +151 expectations from PLAN 03’s 5 new `test_that` blocks in
+  `test-get_fscore.R`; +10 from the 3 robustness regression tests in the
+  PLAN 03 follow-up). Also re-run inside the full check
+  (`checking tests ... OK`).
+- `devtools::document()`: OK, idempotent (pre-existing `tspa_plot.R`
+  link warning — file now in `legacy/`).
+- PLAN 03 full `devtools::check()` (2026-08-16, builds vignettes):
+  `checking package vignettes ... OK` — **all 14 vignettes rebuild**;
+  `checking tests ... OK`; status **0 errors, 2 WARNINGs, 4 NOTEs**.
+  Caveat: `devtools::check()` defaults to `cran = TRUE` ⇒
+  `R CMD check --as-cran`, which adds an as-cran-only “top-level files”
+  NOTE (a plain `R CMD check` skips that step entirely). A/B-verified in
+  a clean worktree at `9c60ff8`: that NOTE **already fired on the
+  pre-existing** top-level files (`PERF_FIX_SUMMARY.md`, `STATUS.md`,
+  `archive/`, `dependency_analysis.md`, `legacy/`) before this change;
+  PLAN 03 only adds `_PLAN_03_mermod_scoring_matrix.md` to that
+  already-triggered list. The other findings are all pre-existing
+  baseline items: S3-consistency for
+  [`get_fs.lavaan()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)/[`get_fs.merMod()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md),
+  undocumented `fsm`/`...` Rd args (2 WARNINGs); `.lintr` hidden file,
+  unused `Matrix` Import,
+  [`stats::model.frame`](https://rdrr.io/r/stats/model.frame.html) not
+  imported (3 NOTEs). Under the plain-`R CMD check` measurement used for
+  the recorded baseline, the current tree reproduces exactly the same
+  2W/3N.
+- PLAN 03 follow-up full `devtools::check()` (2026-08-16, after the
+  robustness/efficiency fixes; as-cran default): **0 errors, 2 WARNINGs,
+  3 NOTEs** — tests OK, all 14 vignettes rebuild. Strictly better than
+  the PLAN 03 baseline (2W/4N): removing the unused
+  `model.frame(object)` call in `get_fs_blocks.merMod()` resolved the
+  pre-existing
+  “[`stats::model.frame`](https://rdrr.io/r/stats/model.frame.html) not
+  imported” NOTE. The remaining findings are all pre-existing baseline
+  items (S3 consistency for
+  [`get_fs.lavaan()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)/
+  [`get_fs.merMod()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md),
+  undocumented `fsm`/`...` Rd args; `.lintr`, unused `Matrix` Import,
+  top-level files incl. the PLAN 03 plan file).
+- PLAN 03 (fs priors) verification (2026-08-16): `devtools::test()`
+  **658 pass, 0 fail, 0 warn, 0 skip** (596 at the PLAN 03 \[mermod\]
+  close; +62 expectations from the 22 new `test_that` blocks in
+  `test-get_fs_priors.R`, A/B-verified by running the suite with the new
+  file removed). `devtools::document()` OK and idempotent (regenerates
+  `man/get_fs.Rd`, `man/get_fs_lavaan.Rd`; re-run changes nothing). Full
+  `devtools::check()` (as-cran default; `checking examples ... OK`
+  incl. the new multi-group prior example; all 14 vignettes rebuild;
+  tests OK under check): **0 errors, 2 WARNINGs, 3 NOTEs** —
+  byte-for-byte the pre-existing baseline items (S3-consistency for
+  [`get_fs.lavaan()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)/[`get_fs.merMod()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md);
+  undocumented `fsm`/`...` Rd args; `.lintr` hidden file, unused
+  `Matrix` Import, top-level files). No new check findings introduced.
+- PLAN 04 (tspa partable / schema renderer) verification (2026-08-17):
+  `devtools::test()` **763 pass, 0 fail, 0 warn, 0 skip** (658 at the
+  PLAN 04 start; +40 expectations from the new `R/lavaan_compat.R`
+  compat module and its golden canary
+  `tests/testthat/test-lavaan_compat.R`; +65 from
+  `tests/testthat/test-tspa_render.R` — pinned-format renderer tests,
+  schema construction,
+  [`tspa()`](https://mmm-lab-um.github.io/R2spa/reference/tspa.md)
+  contract/attributes, product-score auto-alias incl. ambiguity errors).
+  Phase-2 A/B gate: schema renderer output character-for-character
+  identical to the legacy string-append builders in 10/10 canonical
+  cases (SF SG/MG/3-predictor/verbatim user models incl. comments and
+  trailing newlines; MF SG 2- and 3-factor, list-attr and plain matrix
+  `fsT`/`fsL`, growth with intercepts); product-score auto-alias
+  bit-identical to the old manual-rename workaround (model, coef, vcov,
+  standardizedSolution; both vignette data paths). `DESCRIPTION` and
+  `NAMESPACE` unchanged by design (no new exports; lavaan bound
+  intentionally undeclared — drift defense is the compat module’s
+  dependency-contract table, the “layout not supported” error naming the
+  tested-up-to version, the canary tests, and the new CI lavaan axis in
+  `.github/workflows/R-CMD-check.yaml`: pinned 0.7-2 full-check job +
+  lavaan-dev tripwire running only the `test-tspa*.R` /
+  `test-lavaan_compat.R` / `test-get_fs_int.R` subset). Vignettes:
+  `R2spa.Rmd` + `multiple-factors.Rmd` re-knit verification-only (all 5
+  printed `tspaModel` blocks unchanged, confirmed in the knit
+  artifacts); `get_fs_int-vignette.Rmd` now relies on the automatic
+  product-score alias (manual rename workaround removed; estimates
+  identical). The cutover fallback (`tspa_env$render = "string"` +
+  verbatim legacy builders) was removed at plan completion; the pinned
+  format it guaranteed is frozen in `test-tspa_render.R` as in-test
+  reference builders `ref_sf()`/`ref_mf()`. Full `devtools::check()` in
+  the final state (as-cran default; all 16 vignettes rebuild;
+  `checking tests ... OK`; vignette output re-build OK): **0 errors, 2
+  WARNINGs, 3 NOTEs** — byte-for-byte the pre-existing baseline items
+  (S3-consistency for
+  [`get_fs.lavaan()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)/[`get_fs.merMod()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md);
+  undocumented `fsm`/`...` Rd args; `.lintr` hidden file, unused
+  `Matrix` Import, top-level files). No new check findings introduced.
+- Check-cleanup verification (2026-08-17, after PLAN 04) — **all
+  pre-existing baseline findings cleared**:
+  1.  **S3 generic/method consistency WARNING** (the
+      [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)
+      one): first formal renamed `data` → `object` in the
+      [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)
+      generic **and all four methods** (`tools:::checkS3methods`
+      compares the first positional arg symmetrically across every
+      method, so the generic-only rename would have just moved the
+      warning onto `.data.frame`/`.default`). Named call sites updated
+      for identical behavior: `R/tspa.R` `@examples` (4),
+      `tests/testthat/test-tspa.R` (2), `vignettes/R2spa.Rmd` (7),
+      `vignettes/corrected-se.Rmd` (2),
+      `vignettes/categorical-interaction.Rmd` (1),
+      `README.Rmd`/`README.md` (2 each). One canonical `@param object`
+      kept on the generic; 3 stale `@param object` lines removed from
+      method blocks.
+  2.  **Undocumented Rd args WARNING**: `@param fsm` (“Currently not
+      used.” — signature-only arg) added to `get_fs.merMod`;
+      `@param ...` (“Additional arguments, passed on to
+      [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)”)
+      added to `get_fs_lmer`.
+  3.  **Unused `Matrix` Import NOTE**: `Matrix` moved `Imports` →
+      `Suggests` in `DESCRIPTION` (still exercised by
+      `vignettes/correction-error.Rmd`, so no “suggested but not used”
+      flip).
+  4.  **`.lintr` + top-level-files NOTEs**: `.Rbuildignore` now excludes
+      the dev-only top-level entries (`.lintr`, `archive/`, `legacy/`,
+      `PERF_FIX_SUMMARY.md`, `STATUS.md`, `dependency_analysis.md`,
+      `^_PLAN_.*\.md$` plan files). `devtools::document()` regenerated
+      only `man/get_fs.Rd`, `man/get_fs_lavaan.Rd`,
+      `man/get_fs_lmer.Rd`, `man/tspa.Rd`; `NAMESPACE` byte-identical.
+      `devtools::test()`: **763 pass, 0 fail, 0 warn, 0 skip** (count
+      unchanged). Final full `devtools::check()` (as-cran default; all
+      16 vignettes rebuild; `checking tests ... OK`; vignette re-build
+      OK; run 2026-08-17): **0 errors, 0 warnings, 0 notes** — first
+      fully clean check in the recorded history. The only intermediate
+      finding was the untracked top-level `_PLAN_QUARANTINE.md` (future
+      quarantine plan doc, now excluded by the `^_PLAN_.*\.md$`
+      build-exclusion).
+- QUARANTINE verification (2026-08-17): `devtools::test()` **707 pass, 0
+  fail, 0 warn, 0 skip** (763 pre-quarantine; the delta is exactly the
+  56 expectations in the quarantined blocks: Mx comparison + umx/OpenMx
+  missing-data in `test-tspa.R`/`test-get_fscore.R`,
+  [`vcov_corrected()`](https://mmm-lab-um.github.io/R2spa/reference/vcov_corrected.md)
+  in `test-tspa_render.R`/`test-get_fs_priors.R`, product-score
+  auto-alias in `test-tspa_render.R`, grandSS wrapper A/B in
+  `test-lavaan_compat.R`). `devtools::document()` idempotent — re-run
+  changes nothing; `NAMESPACE` and `man/` diffs are purely the removed
+  exports (4 Rd files deleted,
+  `get_fs.Rd`/`get_fs_lavaan.Rd`/`augment_lav_predict.Rd` updated for
+  the reworded `vfsLT` param / de-linked
+  [`tspa_mx_model()`](https://mmm-lab-um.github.io/R2spa/reference/tspa_mx_model.md)).
+  Full `devtools::check()`: **0 errors, 0 warnings, 1 NOTE** — the sole
+  NOTE is “‘OpenMx’ in DESCRIPTION Imports but not imported from
+  anywhere”, the expected direct consequence of keeping `OpenMx` in
+  `Imports` until the OpenMx path is re-integrated. No new findings
+  beyond that expected NOTE.
+- PLAN 06 (per-pattern missing-data attributes) verification
+  (2026-08-18): implemented in worktree `plan06` (no shared-library
+  install; `load_all()` only), then merged into `refactor/core`.
+  Worktree `devtools::test()`: **886 pass, 0 fail, 0 warn, 0 skip**.
+  Merged-tree `devtools::test()` (with the in-flight
+  `method="ML"`/`"mean"` + merMod speedup commits `aa5be3e`/`b730b53`
+  present): **1594 pass, 0 fail, 0 warn, 0 skip**. The only merge
+  conflict was a docs block in the
+  [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)
+  roxygen `@return` (both sides’ attribute docs in the same block);
+  resolved as the union and both Rd files regenerated via
+  `devtools::document()` (`NAMESPACE` untouched). Full
+  `devtools::check()` in the merged tree: **0 errors, 0 warnings, 1
+  NOTE** — the sole NOTE is the expected OpenMx baseline item.
+- WI-1/WI-2 verification (2026-08-18): `10b5b0d` (reliability guard,
+  this table’s \#4) + `966ff9b` (lme4-2.x `get_D()`, Closed \#13).
+  Suites: 1594 → **1604** after WI-1 (+4 `test_that` blocks, +10
+  expectations) → **2339 pass / 0 fail / 0 warn / 0 skip** after WI-2
+  (new `tests/testthat/test-lme4_compat.R` canary +9; +726 per-cluster
+  term-1 attribute expectations on the 2+1/2+2 fixtures). Both
+  `devtools::document()` idempotent (`NAMESPACE` unchanged; only
+  `man/get_fs.Rd` + `man/get_fs_lavaan.Rd` regenerated, from roxygen
+  accuracy wording). merMod `fsT`/`fsL`/`scoring_matrix` values: **no
+  change** (bit-identical RDS-verified; no stage-2 SE shift,
+  `vignettes/scoring-matrices.Rmd` needs no re-knit). Full
+  `devtools::check()` at each step: **0 errors, 0 warnings, 1 NOTE**
+  (the expected OpenMx item).
+- PLAN 07 + mirt
+  [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)
+  verification (2026-08-19): `devtools::test()` **3104 pass / 0 fail / 0
+  warn / 0 skip** at the PLAN 07 (#14) close (2339 → +765 from
+  `test-fs_indiv.R` + `test-get_fs_latent_moments.R`), and **3176 pass /
+  0 fail / 0 warn / 0 skip** after the mirt `#15` method (+72 from
+  `test-get_fs_mirt.R`). Independently green at each commit
+  (bisect-checked: the PLAN 07 tree alone runs its full 3104 with the
+  mirt test removed).
+  [`augment_lav_predict()`](https://mmm-lab-um.github.io/R2spa/reference/augment_lav_predict.md)
+  A/B: 1–4-factor lavaan fits identical to the old inline implementation
+  after the `augment_fs2()` reconcile. Unidimensional mirt:
+  `F1_by_fs_F1 == 1 − SE²` and `ev == (1 − SE²)·SE²` to ≈1e-16,
+  off-diagonals match the regression-form algebra by hand; the mirt
+  per-row branch is dormant unless the `mirt_per_obs` marker is set
+  (never on lavaan/merMod). `devtools::document()` run with the pinned
+  **roxygen2 8.1.0** (the sandbox’s global 7.3.1 would churn
+  `RoxygenNote` + `importFrom` splitting) — `NAMESPACE`/`man/` carry
+  only the intended `fs_indiv` export / mirt-method changes. Real bug
+  fixed en route: `resolve_group_blocks()` no longer
+  [`stop()`](https://rdrr.io/r/base/stop.html)s on all-missing-pattern
+  rows (returns an all-NA block, preserving `nrow`). Full
+  `devtools::check()` (`--no-manual`; the PDF-manual build errors are
+  the environmental missing `pdflatex`, not a package issue): **0
+  errors, 0 warnings, 1 NOTE** — the sole NOTE is the expected OpenMx
+  `Imports` baseline item.
+- Grand-standardized-solution re-integration verification (2026-08-22,
+  branch `rejoin/grand-std-sol`, parent `126a63a`): `git mv` of
+  `R/grandStandardizedSolution.R`
+  - `tests/testthat/test-grandStandardizedSolution.R` out of
+    `.quarantine/` (zero content edits); `devtools::document()` restores
+    the 2 exports + `importFrom(lavaan, lav_func_jacobian_complex)` /
+    `stats` `pnorm` + `qnorm` / `utils` `tail` +
+    `man/grand_standardized_solution.Rd`. `devtools::test()`: **3377
+    pass / 0 fail / 0 skip** (3358 at the parent; the delta is exactly
+    the restored grandSS test file). Full `devtools::check()` (as-cran
+    default; all 8 active vignettes rebuild + re-knit OK;
+    `checking examples ... OK` incl. the 4 restored examples): **0
+    errors, 0 warnings, 0 notes** — the historical “OpenMx in Imports
+    but not imported from” NOTE is no longer applicable (`tspa_mx()`
+    re-integrated in `bcd42a3`); the pre-existing lavaan test warning
+    (negative `lv` variance emit in `test-tspa_mx.R`) remains a
+    test-emitted warning, not a check finding.
+- Vignette build history: exactly **3 of 13 failed** on the pre-PLAN 02
+  Step-1 tree (`corrected-se.Rmd`, `multilevel.rmd`,
+  `tspa-vignette-mx.Rmd` — the “7/8 of 13” reports were wrong); **13/13
+  build on 2026-08-16** after PLAN 02 Steps 2–3; **14/14 on 2026-08-16**
+  after PLAN 03’s `scoring-matrices.Rmd`. Caveat:
+  `devtools::check(args = "--ignore-vignettes")` still knits vignettes
+  in the *build* phase; scope with
+  `R CMD build --no-build-vignettes .` +
+  `R CMD check --ignore-vignettes --no-manual <tarball>`.
+
+## Notes
+
+- PLAN 01/02 code is committed (258b673..5f72883; plan files archived in
+  9c60ff8). PLAN 03 (merMod `scoring_matrix`) code is committed
+  (00bf670); its plan file is archived as
+  `archive/PLAN_03_mermod_scoring_matrix.md`.
+- PLAN 03 (fs priors) is committed (`32fc817`); its plan file is
+  archived as `archive/PLAN_03_fs_priors.md`.
+- **PLAN 04 (tspa partable) + check cleanup is committed** — `7c173ab`
+  (schema renderer + compat module + render tests + CI lavaan axis) and
+  `0d782b4` (S3
+  [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)
+  arg rename, Rd `fsm`/`...` docs, `Matrix` → `Suggests`, top-level
+  `.Rbuildignore` exclusions); plan archived as
+  `archive/PLAN_04_tspa_partable.md`.
+- **QUARANTINE is committed** in `6dddf5f` (renames into
+  `.quarantine/{R,tests,vignettes}/`, embedded-block deletions, the 2
+  new self-contained quarantined test files, hygiene changes:
+  `.Rbuildignore`, `NAMESPACE`, `man/`, `vfsLT` reword +
+  `@importFrom lavaan vcov`); docs refreshed in `4e4a805`. Plan archived
+  as `archive/PLAN_QUARANTINE.md`. `OpenMx` stays in
+  `DESCRIPTION: Imports` until the OpenMx path is re-integrated (the
+  sole expected check NOTE) — superseded: `tspa_mx()` re-integrated in
+  `bcd42a3` (OpenMx is imported from again; the NOTE no longer fires);
+  [`grand_standardized_solution()`](https://mmm-lab-um.github.io/R2spa/reference/grand_standardized_solution.md)
+  re-integrated 2026-08-22 (Closed \#19).
+- **PLAN 07
+  ([`fs_indiv()`](https://mmm-lab-um.github.io/R2spa/reference/fs_indiv.md) +
+  latent `psi`/`alpha`) is committed** in `b9ca3c9`; plan archived as
+  `archive/PLAN_07_fs_indiv_and_latent_moments.md` (resolves F4, closed
+  \#14).
+- **The `mirt` `SingleGroupClass`
+  [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md)
+  method is committed** (follow-up F2, closed \#15); recorded in
+  `archive/PLAN_08_mirt_fs.md`. `mirt` remains a `Suggests`-only
+  dependency (no `DESCRIPTION` `Imports` change); per-obs
+  [`fs_indiv()`](https://mmm-lab-um.github.io/R2spa/reference/fs_indiv.md)
+  support rides on the `mirt_per_obs` marker. Follow-ups F5 (mirt-EAP SE
+  variant) + F6 (2-factor `psi` unit-by-convention) documented.
+- Suggested order (all plans complete): F1 / F3 / F5 / F6 (future; \#5
+  perf, F2, and F4 resolved 2026-08-19).
+- 2026-08-18 work-item plans archived under `archive/` (previously
+  tracked only via gitignored `.opencode/plans/` paths):
+  `get_d-mermod-lme4-2x.md` (lme4 `get_D()`, now \#13 / `966ff9b`),
+  `get_fs-lavaan-mean.md` (`method = "mean"`, lavaan),
+  `get_fs-mermod-ml.md` (`method = "ML"`, merMod; the two landed
+  together in `aa5be3e`, with the merMod speedup in `b730b53`).
+- **Vignette doc hygiene (2026-08-20)** — doc-only cleanup of shipped
+  vignettes; no `R/`/roxygen/test/check impact (no `document()` needed).
+  1.  `correction-error.Rmd` unwraps the `eval=FALSE` sim blocks’
+      `scoring_matrix` attribute with `[[1]]` — under the default
+      `format = "unified"` a single-group `scoring_matrix` attribute is
+      a length-1 list, so the bare value no longer assigns into the
+      numeric `a_sim` array for a reader running the block (verified:
+      `[[1]]` yields the plain 1×3 / 2×6 matrix). (b)
+      `multiple-factors.Rmd` normalizes `standardizedSolution` →
+      canonical `standardizedsolution` (×3; lavaan 0.7.2 exports both
+      casings). (c) `R2spa.Rmd` drops the unused `a/b/c` loading labels
+      from the example-1 model string so it matches the CFA the code
+      actually fits. The 3 edited vignettes re-knit clean (R 4.6.1,
+      lavaan 0.7.2, R2spa 0.0.4). Deferred (tracked for the multilevel
+      re-integration, see `archive/PLAN_QUARANTINE.md`): the dead
+      `(multilevel.html)` cross-ref in
+      `vignettes/scoring-matrices.Rmd:35-37`.
+- **`missing-data.Rmd` re-integrated from `.quarantine/vignettes/`
+  (2026-08-24, branch `rejoin/missing-data`)** — the only remaining
+  “missing data” vignette. `git mv` back, then modernized to the current
+  **umx-free**
+  [`tspa_mx_model()`](https://mmm-lab-um.github.io/R2spa/reference/tspa_mx_model.md):
+  the structural model is now passed as a **string**
+  (`"dem65 ~ dem60; dem65 + dem60 ~ 1"`) with the per-row `fsL`/`fsT`
+  **definition-variable** matrices (the exact, non-pooled correction)
+  and `fsb = c(fs_dem60 = "int_fs_dem60", fs_dem65 = "int_fs_dem65")`;
+  the old `umx::umxLav2RAM(...)` wrapper, the `mat_ld =`/`mat_ev =`
+  arguments and the dead `attr(.., "ld")`/`("ev")` names are gone, and
+  [`library(umx)`](https://github.com/tbates/umx#readme) is replaced by
+  [`library(OpenMx)`](https://openmx.ssri.psu.edu/). The
+  `fs_dat[66:75, "fs_dem65"] <- NA` line is **kept** (it is *required*:
+  the 10 rows all-missing on y5-y8 carry non-identifiable per-row dem65
+  loadings / error variances, and without dropping their dem65 score the
+  raw-data-FIML OpenMx fit goes RED, status 5 non-convex Hessian). Also
+  fixed a **pre-existing** undefined-name bug in the Bartlett section
+  (model object assigned `tspa_b_mx` but referenced as `tspab_mx`).
+  Verified: the single- factor sections are unchanged / already current;
+  the per-row OpenMx (regression **and** Bartlett) fits **converge**
+  (`status 0`) with `dem65 ~ dem60 = 0.9126`, matching the joint
+  `lavaan::sem(missing = "fiml")` baseline to 4 dp. `R CMD check`
+  (2026-08-24, `--no-manual`): **0 / 0 / 0** (new vignette builds +
+  re-builds OK; umx no longer pulled by this vignette). Remaining
+  quarantined vignettes: `reliability.Rmd` (+
+  `sim_results_reliability.RDS`), `categorical-interaction.Rmd`,
+  `get_fs_int-vignette.Rmd`.

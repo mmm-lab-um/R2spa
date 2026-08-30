@@ -7,9 +7,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Correction to Measurement Error • R2spa</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.4.2/css/all.min.css" rel="stylesheet">
-<link href="../deps/font-awesome-6.4.2/css/v4-shims.min.css" rel="stylesheet">
+<link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Correction to Measurement Error">
 </head>
 <body>
@@ -34,18 +34,17 @@
 <li class="active nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/categorical-interaction.html">Using Two-Stage Path Analysis with Definition Variables for Latent Interactions with Categorical Indicators</a></li>
-    <li><a class="dropdown-item" href="../articles/corrected-se.html">Corrected Standard Errors</a></li>
+<li><a class="dropdown-item" href="../articles/corrected-se.html">Corrected Standard Errors</a></li>
     <li><a class="dropdown-item" href="../articles/correction-error.html">Correction to Measurement Error</a></li>
     <li><a class="dropdown-item" href="../articles/efa-score.html">EFA Scores</a></li>
-    <li><a class="dropdown-item" href="../articles/get_fs_int-vignette.html">get_fs_int-example</a></li>
     <li><a class="dropdown-item" href="../articles/gr-std-coef.html">Grand Standardized Coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/missing-data.html">2S-PA with Missing Data</a></li>
+    <li><a class="dropdown-item" href="../articles/multilevel.html">2S-PA with Random Effects</a></li>
     <li><a class="dropdown-item" href="../articles/multiple-factors.html">Multi-Factor Measurement Model</a></li>
-    <li><a class="dropdown-item" href="../articles/reliability.html">Reliability of Factor Scores</a></li>
+    <li><a class="dropdown-item" href="../articles/product-factor-scores.html">Product factor-score indicators (latent interactions)</a></li>
+    <li><a class="dropdown-item" href="../articles/scoring-matrices.html">Scoring Matrices: lavaan CFA and lme4</a></li>
     <li><a class="dropdown-item" href="../articles/tspa-growth-vignette.html">Linear Growth Modeling with Two-Stage Path Analysis</a></li>
-    <li><a class="dropdown-item" href="../articles/tspa-plot-vignette.html">Diagnostic plots for `tspa` models</a></li>
-    <li><a class="dropdown-item" href="../articles/tspa-vignette-mx.html">Multi-Factor Measurement Model (OpenMx)</a></li>
+    <li><a class="dropdown-item" href="../articles/tspa-vignette-mx.html">2S-PA with OpenMx and IRT (mirt)</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -70,7 +69,7 @@
       <h1>Correction to Measurement Error</h1>
                         <h4 data-toc-skip class="author">Mark Lai</h4>
             
-            <h4 data-toc-skip class="date">2024-09-06</h4>
+            <h4 data-toc-skip class="date">2026-08-30</h4>
       
 
       <div class="d-none name"><code>correction-error.Rmd</code></div>
@@ -84,23 +83,37 @@ aka assuming that they are known. However, when sample size is small,
 ignoring those can be problematic as the model parameters are imprecise.
 This vignette provides details on how to obtain more realistic estimates
 of standard errors of factor scores.</p>
+<p>In short: by default <code><a href="../reference/get_fs.html">get_fs()</a></code> computes score error
+variances <em>conditional on the estimated</em> parameters — i.e. it
+treats the scoring weights as known. That is the within-sample error
+variance, but in small samples, or weakly-identified models (where the
+weights are estimated with substantial error), it understates the
+score’s error variance. <code>get_fs(..., corrected_fsT = TRUE)</code>
+adds the delta-method correction term for the sampling error of the
+scoring weights, inflating <code>fsT</code> accordingly. The effect is
+negligible in large, well-identified samples (the weight-sampling
+variance tends to zero) and grows as identification gets poorer.
+Scope/constraints: <code>corrected_fsT</code> applies to
+<code>lavaan</code> regression / Bartlett scores; it is ignored for
+<code>merMod</code> objects and is not supported when the data contain
+missing values.</p>
 <div class="section level2">
 <h2 id="unidimensional-case">Unidimensional Case<a class="anchor" aria-label="anchor" href="#unidimensional-case"></a>
 </h2>
 <p>Consider the conditional variance of the factor scores,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>V</mi><mi>a</mi><mi>r</mi><mrow><mo stretchy="true" form="prefix">(</mo><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>∣</mo><mi>η</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">Var(\tilde \eta \mid \eta)</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>V</mi><mi>a</mi><mi>r</mi><mo stretchy="false" form="prefix">(</mo><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>∣</mo><mi>η</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">Var(\tilde \eta \mid \eta)</annotation></semantics></math>,
 with
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>=</mo><msup><mi>𝐚</mi><mi>⊤</mi></msup><mi>𝐲</mi></mrow><annotation encoding="application/x-tex">\tilde \eta = \boldsymbol{a}^\top \boldsymbol{y}</annotation></semantics></math>.
 From the factor model, we have</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>V</mi><mi>a</mi><mi>r</mi><mrow><mo stretchy="true" form="prefix">(</mo><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>∣</mo><mi>η</mi><mo stretchy="true" form="postfix">)</mo></mrow><mo>=</mo><mi>V</mi><mi>a</mi><mi>r</mi><mrow><mo stretchy="true" form="prefix">(</mo><msup><mi>𝐚</mi><mi>⊤</mi></msup><mi>𝛌</mi><mi>η</mi><mo>+</mo><msup><mi>𝐚</mi><mi>⊤</mi></msup><mi>𝛆</mi><mo>∣</mo><mi>η</mi><mo stretchy="true" form="postfix">)</mo></mrow><mo>=</mo><msup><mi>η</mi><mn>2</mn></msup><mi>V</mi><mi>a</mi><mi>r</mi><mrow><mo stretchy="true" form="prefix">(</mo><msup><mi>𝐚</mi><mi>⊤</mi></msup><mi>𝛌</mi><mo stretchy="true" form="postfix">)</mo></mrow><mo>+</mo><mi>V</mi><mi>a</mi><mi>r</mi><mrow><mo stretchy="true" form="prefix">(</mo><msup><mi>𝐚</mi><mi>⊤</mi></msup><mi>𝛆</mi><mo stretchy="true" form="postfix">)</mo></mrow><mi>.</mi></mrow><annotation encoding="application/x-tex">Var(\tilde \eta \mid \eta) = Var(\boldsymbol{a}^\top \boldsymbol{\lambda} \eta + \boldsymbol{a}^\top \boldsymbol{\varepsilon} \mid \eta) = \eta^2 Var(\boldsymbol{a}^\top \boldsymbol{\lambda}) + Var(\boldsymbol{a}^\top \boldsymbol{\varepsilon}).</annotation></semantics></math></p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>V</mi><mi>a</mi><mi>r</mi><mo stretchy="false" form="prefix">(</mo><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>∣</mo><mi>η</mi><mo stretchy="false" form="postfix">)</mo><mo>=</mo><mi>V</mi><mi>a</mi><mi>r</mi><mo stretchy="false" form="prefix">(</mo><msup><mi>𝐚</mi><mi>⊤</mi></msup><mi>𝛌</mi><mi>η</mi><mo>+</mo><msup><mi>𝐚</mi><mi>⊤</mi></msup><mi>𝛆</mi><mo>∣</mo><mi>η</mi><mo stretchy="false" form="postfix">)</mo><mo>=</mo><msup><mi>η</mi><mn>2</mn></msup><mi>V</mi><mi>a</mi><mi>r</mi><mo stretchy="false" form="prefix">(</mo><msup><mi>𝐚</mi><mi>⊤</mi></msup><mi>𝛌</mi><mo stretchy="false" form="postfix">)</mo><mo>+</mo><mi>V</mi><mi>a</mi><mi>r</mi><mo stretchy="false" form="prefix">(</mo><msup><mi>𝐚</mi><mi>⊤</mi></msup><mi>𝛆</mi><mo stretchy="false" form="postfix">)</mo><mi>.</mi></mrow><annotation encoding="application/x-tex">Var(\tilde \eta \mid \eta) = Var(\boldsymbol{a}^\top \boldsymbol{\lambda} \eta + \boldsymbol{a}^\top \boldsymbol{\varepsilon} \mid \eta) = \eta^2 Var(\boldsymbol{a}^\top \boldsymbol{\lambda}) + Var(\boldsymbol{a}^\top \boldsymbol{\varepsilon}).</annotation></semantics></math></p>
 <p>The second term is the error component. Here is a small
 simulation:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co">#' Load package and set seed</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://lavaan.ugent.be" class="external-link">lavaan</a></span><span class="op">)</span></span>
-<span><span class="co">#&gt; This is lavaan 0.6-18</span></span>
+<span><span class="co">#&gt; This is lavaan 0.7-2</span></span>
 <span><span class="co">#&gt; lavaan is FREE software! Please report any bugs.</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://gengrui-zhang.github.io/R2spa/">R2spa</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://gengrui-zhang.github.io/R2spa/" class="external-link">R2spa</a></span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">191254</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co">#' Fixed conditions</span></span>
@@ -115,7 +128,7 @@ simulation:</p>
 <span></span>
 <span><span class="co">#' Function for simulating y</span></span>
 <span><span class="va">simy</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">eta</span>, <span class="va">lambda</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/crossprod.html" class="external-link">tcrossprod</a></span><span class="op">(</span><span class="va">lambda</span>, <span class="va">eta</span><span class="op">)</span> <span class="op">+</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/pkg/Matrix/man/matmult-methods.html" class="external-link">tcrossprod</a></span><span class="op">(</span><span class="va">lambda</span>, <span class="va">eta</span><span class="op">)</span> <span class="op">+</span></span>
 <span>          <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">lambda</span><span class="op">)</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">eta</span><span class="op">)</span>, sd <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="va">theta</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
@@ -131,7 +144,7 @@ simulation:</p>
 <span>    <span class="op">)</span></span>
 <span>    <span class="va">fsy</span> <span class="op">&lt;-</span> <span class="fu">R2spa</span><span class="fu">::</span><span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">y</span>, std.lv <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span>    <span class="va">fsy_sim</span><span class="op">[</span>, <span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">fsy</span><span class="op">[</span>, <span class="fl">1</span><span class="op">]</span></span>
-<span>    <span class="va">a_sim</span><span class="op">[</span>, <span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fsy</span>, which <span class="op">=</span> <span class="st">"scoring_matrix"</span><span class="op">)</span></span>
+<span>    <span class="va">a_sim</span><span class="op">[</span>, <span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fsy</span>, which <span class="op">=</span> <span class="st">"scoring_matrix"</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co">#' Average conditional variance</span></span>
@@ -157,14 +170,14 @@ However, when
 is unknown and estimated as
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><annotation encoding="application/x-tex">\tilde{\boldsymbol{a}}</annotation></semantics></math>
 from the data,</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>V</mi><mi>a</mi><mi>r</mi><mrow><mo stretchy="true" form="prefix">(</mo><msup><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>⊤</mi></msup><mi>𝛆</mi><mo stretchy="true" form="postfix">)</mo></mrow><mo>=</mo><mi>E</mi><mrow><mo stretchy="true" form="prefix">[</mo><mi>V</mi><mi>a</mi><mi>r</mi><mrow><mo stretchy="true" form="prefix">(</mo><msup><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>⊤</mi></msup><mi>𝛆</mi><mo>∣</mo><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mo stretchy="true" form="postfix">)</mo></mrow><mo stretchy="true" form="postfix">]</mo></mrow><mo>+</mo><mi>V</mi><mi>a</mi><mi>r</mi><mrow><mo stretchy="true" form="prefix">[</mo><mi>E</mi><mrow><mo stretchy="true" form="prefix">(</mo><msup><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>⊤</mi></msup><mi>𝛆</mi><mo>∣</mo><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mo stretchy="true" form="postfix">)</mo></mrow><mo stretchy="true" form="postfix">]</mo></mrow><mi>.</mi></mrow><annotation encoding="application/x-tex">Var(\tilde{\boldsymbol{a}}^\top \boldsymbol{\varepsilon}) = E[Var(\tilde{\boldsymbol{a}}^\top \boldsymbol{\varepsilon} \mid \tilde{\boldsymbol{a}})] + Var[E(\tilde{\boldsymbol{a}}^\top \boldsymbol{\varepsilon} \mid \tilde{\boldsymbol{a}})].</annotation></semantics></math></p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>V</mi><mi>a</mi><mi>r</mi><mo stretchy="false" form="prefix">(</mo><msup><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>⊤</mi></msup><mi>𝛆</mi><mo stretchy="false" form="postfix">)</mo><mo>=</mo><mi>E</mi><mo stretchy="false" form="prefix">[</mo><mi>V</mi><mi>a</mi><mi>r</mi><mo stretchy="false" form="prefix">(</mo><msup><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>⊤</mi></msup><mi>𝛆</mi><mo>∣</mo><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mo stretchy="false" form="postfix">)</mo><mo stretchy="false" form="postfix">]</mo><mo>+</mo><mi>V</mi><mi>a</mi><mi>r</mi><mo stretchy="false" form="prefix">[</mo><mi>E</mi><mo stretchy="false" form="prefix">(</mo><msup><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>⊤</mi></msup><mi>𝛆</mi><mo>∣</mo><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mo stretchy="false" form="postfix">)</mo><mo stretchy="false" form="postfix">]</mo><mi>.</mi></mrow><annotation encoding="application/x-tex">Var(\tilde{\boldsymbol{a}}^\top \boldsymbol{\varepsilon}) = E[Var(\tilde{\boldsymbol{a}}^\top \boldsymbol{\varepsilon} \mid \tilde{\boldsymbol{a}})] + Var[E(\tilde{\boldsymbol{a}}^\top \boldsymbol{\varepsilon} \mid \tilde{\boldsymbol{a}})].</annotation></semantics></math></p>
 <p>Under the assumption of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>E</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>𝛆</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">E(\boldsymbol{\varepsilon})</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>E</mi><mo stretchy="false" form="prefix">(</mo><mi>𝛆</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">E(\boldsymbol{\varepsilon})</annotation></semantics></math>
 =
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>𝟎</mn><annotation encoding="application/x-tex">\boldsymbol{0}</annotation></semantics></math>,
 the second term is 0. The first term is an expectation of a quadratic
 form,</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>E</mi><mrow><mo stretchy="true" form="prefix">(</mo><msup><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>⊤</mi></msup><mi>𝚯</mi><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mo stretchy="true" form="postfix">)</mo></mrow><mo>=</mo><mi>E</mi><mrow><mo stretchy="true" form="prefix">(</mo><msup><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>⊤</mi></msup><mo stretchy="true" form="postfix">)</mo></mrow><mi>𝚯</mi><mi>E</mi><mrow><mo stretchy="true" form="prefix">(</mo><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mo stretchy="true" form="postfix">)</mo></mrow><mo>+</mo><mrow><mi mathvariant="normal">t</mi><mi mathvariant="normal">r</mi></mrow><mrow><mo stretchy="true" form="prefix">(</mo><mi>𝚯</mi><msub><mi>𝐕</mi><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover></msub><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">E(\tilde{\boldsymbol{a}}^\top \boldsymbol{\Theta} \tilde{\boldsymbol{a}}) = E(\tilde{\boldsymbol{a}}^\top) \boldsymbol{\Theta} E(\tilde{\boldsymbol{a}}) + \mathrm{tr}(\boldsymbol{\Theta} \boldsymbol{V}_{\tilde{\boldsymbol{a}}})</annotation></semantics></math></p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>E</mi><mo stretchy="false" form="prefix">(</mo><msup><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>⊤</mi></msup><mi>𝚯</mi><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mo stretchy="false" form="postfix">)</mo><mo>=</mo><mi>E</mi><mo stretchy="false" form="prefix">(</mo><msup><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>⊤</mi></msup><mo stretchy="false" form="postfix">)</mo><mi>𝚯</mi><mi>E</mi><mo stretchy="false" form="prefix">(</mo><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mo stretchy="false" form="postfix">)</mo><mo>+</mo><mrow><mi mathvariant="normal">t</mi><mi mathvariant="normal">r</mi></mrow><mo stretchy="false" form="prefix">(</mo><mi>𝚯</mi><msub><mi>𝐕</mi><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover></msub><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">E(\tilde{\boldsymbol{a}}^\top \boldsymbol{\Theta} \tilde{\boldsymbol{a}}) = E(\tilde{\boldsymbol{a}}^\top) \boldsymbol{\Theta} E(\tilde{\boldsymbol{a}}) + \mathrm{tr}(\boldsymbol{\Theta} \boldsymbol{V}_{\tilde{\boldsymbol{a}}})</annotation></semantics></math></p>
 <p>where
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>𝐕</mi><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover></msub><annotation encoding="application/x-tex">\boldsymbol{V}_{\tilde{\boldsymbol{a}}}</annotation></semantics></math>
 is the covariance matrix of
@@ -182,13 +195,13 @@ We can see this using the simulated data</p>
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>𝐕</mi><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover></msub><annotation encoding="application/x-tex">\boldsymbol{V}_{\tilde{\boldsymbol{a}}}</annotation></semantics></math>
 using the <a href="https://en.wikipedia.org/wiki/Delta_method" class="external-link">delta
 method</a>, and the other terms in the above using sample estimates</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>⊤</mi></msup><mover><mi>𝚯</mi><mo accent="true">̂</mo></mover><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mo>+</mo><mrow><mi mathvariant="normal">t</mi><mi mathvariant="normal">r</mi></mrow><mrow><mo stretchy="true" form="prefix">(</mo><mover><mi>𝚯</mi><mo accent="true">̂</mo></mover><msub><mover><mi>𝐕</mi><mo accent="true">̂</mo></mover><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover></msub><mo stretchy="true" form="postfix">)</mo></mrow><mi>.</mi></mrow><annotation encoding="application/x-tex">\tilde{\boldsymbol{a}}^\top \hat{\boldsymbol{\Theta}} \tilde{\boldsymbol{a}} + \mathrm{tr}(\hat{\boldsymbol{\Theta}} \hat{\boldsymbol{V}}_{\tilde{\boldsymbol{a}}}).</annotation></semantics></math></p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>⊤</mi></msup><mover><mi>𝚯</mi><mo accent="true">̂</mo></mover><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mo>+</mo><mrow><mi mathvariant="normal">t</mi><mi mathvariant="normal">r</mi></mrow><mo stretchy="false" form="prefix">(</mo><mover><mi>𝚯</mi><mo accent="true">̂</mo></mover><msub><mover><mi>𝐕</mi><mo accent="true">̂</mo></mover><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover></msub><mo stretchy="false" form="postfix">)</mo><mi>.</mi></mrow><annotation encoding="application/x-tex">\tilde{\boldsymbol{a}}^\top \hat{\boldsymbol{\Theta}} \tilde{\boldsymbol{a}} + \mathrm{tr}(\hat{\boldsymbol{\Theta}} \hat{\boldsymbol{V}}_{\tilde{\boldsymbol{a}}}).</annotation></semantics></math></p>
 <p>The delta method estimate,
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mover><mi>𝐕</mi><mo accent="true">̂</mo></mover><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover></msub><annotation encoding="application/x-tex">\hat{\boldsymbol{V}}_{\tilde{\boldsymbol{a}}}</annotation></semantics></math>,
 is</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝐉</mi><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover></msub><msup><mrow><mo stretchy="true" form="prefix">(</mo><mi>𝛉</mi><mo stretchy="true" form="postfix">)</mo></mrow><mi>⊤</mi></msup><msub><mover><mi>𝐕</mi><mo accent="true">̂</mo></mover><mover><mi>𝛉</mi><mo accent="true">̃</mo></mover></msub><msub><mi>𝐉</mi><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover></msub><mrow><mo stretchy="true" form="prefix">(</mo><mi>𝛉</mi><mo stretchy="true" form="postfix">)</mo></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">\boldsymbol{J}_{\tilde{\boldsymbol{a}}}(\boldsymbol{\theta})^\top \hat{\boldsymbol{V}}_{\tilde{\boldsymbol{\theta}}} \boldsymbol{J}_{\tilde{\boldsymbol{a}}}(\boldsymbol{\theta}),</annotation></semantics></math></p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝐉</mi><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover></msub><mo stretchy="false" form="prefix">(</mo><mi>𝛉</mi><msup><mo stretchy="false" form="postfix">)</mo><mi>⊤</mi></msup><msub><mover><mi>𝐕</mi><mo accent="true">̂</mo></mover><mover><mi>𝛉</mi><mo accent="true">̃</mo></mover></msub><msub><mi>𝐉</mi><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover></msub><mo stretchy="false" form="prefix">(</mo><mi>𝛉</mi><mo stretchy="false" form="postfix">)</mo><mo>,</mo></mrow><annotation encoding="application/x-tex">\boldsymbol{J}_{\tilde{\boldsymbol{a}}}(\boldsymbol{\theta})^\top \hat{\boldsymbol{V}}_{\tilde{\boldsymbol{\theta}}} \boldsymbol{J}_{\tilde{\boldsymbol{a}}}(\boldsymbol{\theta}),</annotation></semantics></math></p>
 <p>where
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝐉</mi><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover></msub><mrow><mo stretchy="true" form="prefix">(</mo><mi>𝛉</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">\boldsymbol{J}_{\tilde{\boldsymbol{a}}}(\boldsymbol{\theta})</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝐉</mi><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover></msub><mo stretchy="false" form="prefix">(</mo><mi>𝛉</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\boldsymbol{J}_{\tilde{\boldsymbol{a}}}(\boldsymbol{\theta})</annotation></semantics></math>
 is the Jacobian matrix, and
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mover><mi>𝐕</mi><mo accent="true">̂</mo></mover><mover><mi>𝛉</mi><mo accent="true">̃</mo></mover></msub><annotation encoding="application/x-tex">\hat{\boldsymbol{V}}_{\tilde{\boldsymbol{\theta}}}</annotation></semantics></math>
 is the sampling variance of the sample estimator of
@@ -203,8 +216,8 @@ The Jacobian can be approximated using finite difference with
 <span><span class="co"># Jacobian</span></span>
 <span><span class="fu">R2spa</span><span class="fu">:::</span><span class="fu">compute_a</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">cfa_fit</span><span class="op">)</span>, lavobj <span class="op">=</span> <span class="va">cfa_fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [[1]]</span></span>
-<span><span class="co">#&gt;         [,1]      [,2]     [,3]      [,4]</span></span>
-<span><span class="co">#&gt; f 0.09890619 0.3246767 0.450034 0.3134454</span></span>
+<span><span class="co">#&gt;         [,1]      [,2]      [,3]      [,4]</span></span>
+<span><span class="co">#&gt; f 0.09890619 0.3246767 0.4500339 0.3134454</span></span>
 <span><span class="va">jac_a</span> <span class="op">&lt;-</span> <span class="fu">lavaan</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/lav_func.html" class="external-link">lav_func_jacobian_complex</a></span><span class="op">(</span></span>
 <span>    \<span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu">R2spa</span><span class="fu">:::</span><span class="fu">compute_a</span><span class="op">(</span><span class="va">x</span>, lavobj <span class="op">=</span> <span class="va">cfa_fit</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>,</span>
 <span>    <span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">cfa_fit</span><span class="op">)</span></span>
@@ -214,11 +227,13 @@ The Jacobian can be approximated using finite difference with
 <span><span class="co">#&gt; [1] 0.02152978</span></span>
 <span><span class="va">fsy</span> <span class="op">&lt;-</span> <span class="fu">R2spa</span><span class="fu">::</span><span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">y</span>, std.lv <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fsy</span>, which <span class="op">=</span> <span class="st">"fsT"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [[1]]</span></span>
 <span><span class="co">#&gt;           fs_f1</span></span>
 <span><span class="co">#&gt; fs_f1 0.2014365</span></span>
 <span><span class="co"># Using `get_fs(..., corrected_fsT = TRUE)</span></span>
 <span><span class="va">fsy2</span> <span class="op">&lt;-</span> <span class="fu">R2spa</span><span class="fu">::</span><span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">y</span>, std.lv <span class="op">=</span> <span class="cn">TRUE</span>, corrected_fsT <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fsy2</span>, which <span class="op">=</span> <span class="st">"fsT"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [[1]]</span></span>
 <span><span class="co">#&gt;           fs_f1</span></span>
 <span><span class="co">#&gt; fs_f1 0.2229663</span></span></code></pre></div>
 </div>
@@ -242,7 +257,7 @@ The Jacobian can be approximated using finite difference with
 <span></span>
 <span><span class="co">#' Function for simulating y</span></span>
 <span><span class="va">simy</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">eta</span>, <span class="va">lambda</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/crossprod.html" class="external-link">tcrossprod</a></span><span class="op">(</span><span class="va">eta</span>, <span class="va">lambda</span><span class="op">)</span> <span class="op">+</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/pkg/Matrix/man/matmult-methods.html" class="external-link">tcrossprod</a></span><span class="op">(</span><span class="va">eta</span>, <span class="va">lambda</span><span class="op">)</span> <span class="op">+</span></span>
 <span>        <span class="fu">MASS</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/MASS/man/mvrnorm.html" class="external-link">mvrnorm</a></span><span class="op">(</span><span class="va">num_obs</span>, mu <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">theta</span><span class="op">)</span><span class="op">)</span>, Sigma <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/diag.html" class="external-link">diag</a></span><span class="op">(</span><span class="va">theta</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
@@ -261,13 +276,13 @@ The Jacobian can be approximated using finite difference with
 <span>        model <span class="op">=</span> <span class="st">"f1 =~ y1 + y2 + y3 + y4\nf2 =~ y5 + y6 + y7"</span>,</span>
 <span>        std.lv <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span>    <span class="va">fsy_sim</span><span class="op">[</span>, , <span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">fsy</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span></span>
-<span>    <span class="va">a_sim</span><span class="op">[</span>, , <span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fsy</span>, which <span class="op">=</span> <span class="st">"scoring_matrix"</span><span class="op">)</span></span>
+<span>    <span class="va">a_sim</span><span class="op">[</span>, , <span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fsy</span>, which <span class="op">=</span> <span class="st">"scoring_matrix"</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co">#' Average conditional variance</span></span>
 <span><span class="co"># a known</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="va">tfsy_sim</span>, MARGIN <span class="op">=</span> <span class="fl">1</span>, FUN <span class="op">=</span> \<span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cov</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span> </span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/colSums.html" class="external-link">rowMeans</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span>ncol <span class="op">=</span> <span class="fl">2</span>, nrow <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/pkg/Matrix/man/colSums-methods.html" class="external-link">rowMeans</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span>ncol <span class="op">=</span> <span class="fl">2</span>, nrow <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
 <span><span class="co">#&gt;            [,1]       [,2]</span></span>
 <span><span class="co">#&gt; [1,]  0.1789934 -0.0483855</span></span>
 <span><span class="co">#&gt; [2,] -0.0483855  0.2022312</span></span>
@@ -279,7 +294,7 @@ The Jacobian can be approximated using finite difference with
 <span><span class="co">#&gt; [2,] -0.04855749  0.20339709</span></span>
 <span><span class="co"># a estimated</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="va">fsy_sim</span>, MARGIN <span class="op">=</span> <span class="fl">1</span>, FUN <span class="op">=</span> \<span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cov</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span> </span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/colSums.html" class="external-link">rowMeans</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span>ncol <span class="op">=</span> <span class="fl">2</span>, nrow <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/pkg/Matrix/man/colSums-methods.html" class="external-link">rowMeans</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span>ncol <span class="op">=</span> <span class="fl">2</span>, nrow <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
 <span><span class="co">#&gt;             [,1]        [,2]</span></span>
 <span><span class="co">#&gt; [1,]  0.20175239 -0.05254471</span></span>
 <span><span class="co">#&gt; [2,] -0.05254471  0.23427145</span></span></code></pre></div>
@@ -298,11 +313,11 @@ The Jacobian can be approximated using finite difference with
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math>,
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>j</mi><annotation encoding="application/x-tex">j</annotation></semantics></math>
 element of the correction matrix can be approximated by
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mi mathvariant="normal">t</mi><mi mathvariant="normal">r</mi></mrow><mrow><mo stretchy="true" form="prefix">(</mo><mover><mi>𝚯</mi><mo accent="true">̂</mo></mover><msub><mover><mi>𝐕</mi><mo accent="true">̂</mo></mover><mrow><msub><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>i</mi></msub><msub><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>j</mi></msub></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathrm{tr}(\hat{\boldsymbol{\Theta}} \hat{\boldsymbol{V}}_{{\tilde{\boldsymbol{a}}_i}{\tilde{\boldsymbol{a}}_j}})</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mi mathvariant="normal">t</mi><mi mathvariant="normal">r</mi></mrow><mo stretchy="false" form="prefix">(</mo><mover><mi>𝚯</mi><mo accent="true">̂</mo></mover><msub><mover><mi>𝐕</mi><mo accent="true">̂</mo></mover><mrow><msub><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>i</mi></msub><msub><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>j</mi></msub></mrow></msub><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\mathrm{tr}(\hat{\boldsymbol{\Theta}} \hat{\boldsymbol{V}}_{{\tilde{\boldsymbol{a}}_i}{\tilde{\boldsymbol{a}}_j}})</annotation></semantics></math>,
 with
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mover><mi>𝐕</mi><mo accent="true">̂</mo></mover><mrow><msub><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>i</mi></msub><msub><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>j</mi></msub></mrow></msub><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\hat{\boldsymbol{V}}_{{\tilde{\boldsymbol{a}}_i}{\tilde{\boldsymbol{a}}_j}})</annotation></semantics></math>
 obtained by</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝐉</mi><msub><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>i</mi></msub></msub><msup><mrow><mo stretchy="true" form="prefix">(</mo><mi>𝛉</mi><mo stretchy="true" form="postfix">)</mo></mrow><mi>⊤</mi></msup><msub><mover><mi>𝐕</mi><mo accent="true">̂</mo></mover><mover><mi>𝛉</mi><mo accent="true">̃</mo></mover></msub><msub><mi>𝐉</mi><msub><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>j</mi></msub></msub><mrow><mo stretchy="true" form="prefix">(</mo><mi>𝛉</mi><mo stretchy="true" form="postfix">)</mo></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">\boldsymbol{J}_{\tilde{\boldsymbol{a}}_i}(\boldsymbol{\theta})^\top \hat{\boldsymbol{V}}_{\tilde{\boldsymbol{\theta}}} \boldsymbol{J}_{\tilde{\boldsymbol{a}}_j}(\boldsymbol{\theta}),</annotation></semantics></math></p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝐉</mi><msub><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>i</mi></msub></msub><mo stretchy="false" form="prefix">(</mo><mi>𝛉</mi><msup><mo stretchy="false" form="postfix">)</mo><mi>⊤</mi></msup><msub><mover><mi>𝐕</mi><mo accent="true">̂</mo></mover><mover><mi>𝛉</mi><mo accent="true">̃</mo></mover></msub><msub><mi>𝐉</mi><msub><mover><mi>𝐚</mi><mo accent="true">̃</mo></mover><mi>j</mi></msub></msub><mo stretchy="false" form="prefix">(</mo><mi>𝛉</mi><mo stretchy="false" form="postfix">)</mo><mo>,</mo></mrow><annotation encoding="application/x-tex">\boldsymbol{J}_{\tilde{\boldsymbol{a}}_i}(\boldsymbol{\theta})^\top \hat{\boldsymbol{V}}_{\tilde{\boldsymbol{\theta}}} \boldsymbol{J}_{\tilde{\boldsymbol{a}}_j}(\boldsymbol{\theta}),</annotation></semantics></math></p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">y</span> <span class="op">&lt;-</span> <span class="fu">simy</span><span class="op">(</span>eta <span class="op">=</span> <span class="va">eta</span>, lambda <span class="op">=</span> <span class="va">lambda</span><span class="op">)</span></span>
 <span><span class="va">cfa_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/cfa.html" class="external-link">cfa</a></span><span class="op">(</span><span class="st">"f1 =~ y1 + y2 + y3 + y4\nf2 =~ y5 + y6 + y7"</span>,</span>
@@ -342,6 +357,7 @@ obtained by</p>
 <span>    model <span class="op">=</span> <span class="st">"f1 =~ y1 + y2 + y3 + y4\nf2 =~ y5 + y6 + y7"</span>,</span>
 <span>    std.lv <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fsy</span>, which <span class="op">=</span> <span class="st">"fsT"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [[1]]</span></span>
 <span><span class="co">#&gt;             fs_f1       fs_f2</span></span>
 <span><span class="co">#&gt; fs_f1  0.16691097 -0.05653148</span></span>
 <span><span class="co">#&gt; fs_f2 -0.05653148  0.19891917</span></span>
@@ -352,6 +368,7 @@ obtained by</p>
 <span>    std.lv <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>    corrected_fsT <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fsy2</span>, which <span class="op">=</span> <span class="st">"fsT"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [[1]]</span></span>
 <span><span class="co">#&gt;             fs_f1       fs_f2</span></span>
 <span><span class="co">#&gt; fs_f1  0.18242382 -0.06140484</span></span>
 <span><span class="co">#&gt; fs_f2 -0.06140484  0.22098955</span></span></code></pre></div>
@@ -367,7 +384,7 @@ obtained by</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

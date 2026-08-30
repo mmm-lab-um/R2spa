@@ -1,0 +1,46 @@
+# Convert Unified Factor Scores to Group List (or Vice Versa)
+
+`fs_to_group_list()` converts a unified factor-score data frame (single
+data frame with a `group` column and list-valued attributes) into the
+legacy list-of-data-frames shape with per-group attributes. It acts as
+its own inverse: if given a group list, it converts back to the unified
+shape.
+
+## Usage
+
+``` r
+fs_to_group_list(fs)
+```
+
+## Arguments
+
+- fs:
+
+  Object returned by
+  [`get_fs()`](https://mmm-lab-um.github.io/R2spa/reference/get_fs.md).
+  Either a unified data frame (with a `group` column and list-valued
+  attributes) or a named list of data frames (one per group) with
+  per-group attributes.
+
+## Value
+
+If `fs` is a unified data frame, returns a named list of data frames,
+one per group, with `fsT`, `fsL`, `fsb`, `scoring_matrix`, and
+`fs_pattern` attached as per-group attributes on each element and as
+list-valued attributes on the outer list. If `fs` is a group list,
+returns a single data frame with a `group` column and list-valued
+attributes. A single-group input returns a single data frame (not a
+list) in either direction.
+
+## Examples
+
+``` r
+library(lavaan)
+hs_model <- "visual =~ x1 + x2 + x3"
+fit <- cfa(hs_model, data = HolzingerSwineford1939, group = "school")
+fs_unified <- get_fs(fit)                     # unified df
+fs_list <- fs_to_group_list(fs_unified)       # list-of-df shape
+fs_back <- fs_to_group_list(fs_list)          # back to unified
+all.equal(fs_unified, fs_back, check.attributes = FALSE)
+#> [1] TRUE
+```

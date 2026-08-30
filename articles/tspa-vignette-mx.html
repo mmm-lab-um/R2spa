@@ -5,12 +5,12 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>Multi-Factor Measurement Model (OpenMx) • R2spa</title>
+<title>2S-PA with OpenMx and IRT (mirt) • R2spa</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.4.2/css/all.min.css" rel="stylesheet">
-<link href="../deps/font-awesome-6.4.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Multi-Factor Measurement Model (OpenMx)">
+<link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
+<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="2S-PA with OpenMx and IRT (mirt)">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -34,18 +34,17 @@
 <li class="active nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/categorical-interaction.html">Using Two-Stage Path Analysis with Definition Variables for Latent Interactions with Categorical Indicators</a></li>
-    <li><a class="dropdown-item" href="../articles/corrected-se.html">Corrected Standard Errors</a></li>
+<li><a class="dropdown-item" href="../articles/corrected-se.html">Corrected Standard Errors</a></li>
     <li><a class="dropdown-item" href="../articles/correction-error.html">Correction to Measurement Error</a></li>
     <li><a class="dropdown-item" href="../articles/efa-score.html">EFA Scores</a></li>
-    <li><a class="dropdown-item" href="../articles/get_fs_int-vignette.html">get_fs_int-example</a></li>
     <li><a class="dropdown-item" href="../articles/gr-std-coef.html">Grand Standardized Coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/missing-data.html">2S-PA with Missing Data</a></li>
+    <li><a class="dropdown-item" href="../articles/multilevel.html">2S-PA with Random Effects</a></li>
     <li><a class="dropdown-item" href="../articles/multiple-factors.html">Multi-Factor Measurement Model</a></li>
-    <li><a class="dropdown-item" href="../articles/reliability.html">Reliability of Factor Scores</a></li>
+    <li><a class="dropdown-item" href="../articles/product-factor-scores.html">Product factor-score indicators (latent interactions)</a></li>
+    <li><a class="dropdown-item" href="../articles/scoring-matrices.html">Scoring Matrices: lavaan CFA and lme4</a></li>
     <li><a class="dropdown-item" href="../articles/tspa-growth-vignette.html">Linear Growth Modeling with Two-Stage Path Analysis</a></li>
-    <li><a class="dropdown-item" href="../articles/tspa-plot-vignette.html">Diagnostic plots for `tspa` models</a></li>
-    <li><a class="dropdown-item" href="../articles/tspa-vignette-mx.html">Multi-Factor Measurement Model (OpenMx)</a></li>
+    <li><a class="dropdown-item" href="../articles/tspa-vignette-mx.html">2S-PA with OpenMx and IRT (mirt)</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -67,7 +66,7 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
 
-      <h1>Multi-Factor Measurement Model (OpenMx)</h1>
+      <h1>2S-PA with OpenMx and IRT (mirt)</h1>
             
       
 
@@ -78,10 +77,15 @@
     
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://lavaan.ugent.be" class="external-link">lavaan</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://gengrui-zhang.github.io/R2spa/">R2spa</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="http://openmx.ssri.psu.edu" class="external-link">OpenMx</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/tbates/umx#readme" class="external-link">umx</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/philchalmers/mirt" class="external-link">mirt</a></span><span class="op">)</span></span></code></pre></div>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://gengrui-zhang.github.io/R2spa/" class="external-link">R2spa</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://openmx.ssri.psu.edu/" class="external-link">OpenMx</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://philchalmers.github.io/mirt/" class="external-link">mirt</a></span><span class="op">)</span></span></code></pre></div>
+<p>Two-stage path analysis (2S-PA) can be fit with <code>OpenMx</code>
+as well as the default <code>lavaan</code> backend.
+<code><a href="../reference/tspa_mx_model.html">tspa_mx_model()</a></code> takes a <code>lavaan</code>-style
+structural model string plus the (per-row) factor-score loading / error
+information from <code><a href="../reference/get_fs.html">get_fs()</a></code> and returns a fitted
+<code>OpenMx</code> RAM model.</p>
 <div class="section level2">
 <h2 id="with-a-linear-factor-model">With a Linear Factor Model<a class="anchor" aria-label="anchor" href="#with-a-linear-factor-model"></a>
 </h2>
@@ -93,7 +97,8 @@
 <span><span class="st">    ind60 =~ x1 + x2 + x3</span></span>
 <span><span class="st">    dem60 =~ y1 + y2 + y3 + y4</span></span>
 <span><span class="st">"</span></span>
-<span><span class="op">(</span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">PoliticalDemocracy</span>, model <span class="op">=</span> <span class="va">my_cfa</span>, std.lv <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="op">(</span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">PoliticalDemocracy</span>, model <span class="op">=</span> <span class="va">my_cfa</span>, std.lv <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>                  format <span class="op">=</span> <span class="st">"list"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt;     fs_ind60   fs_dem60 fs_ind60_se fs_dem60_se ind60_by_fs_ind60</span></span>
 <span><span class="co">#&gt; 1 -0.8101568 -1.3119114   0.1859987   0.3012901         0.9553858</span></span>
 <span><span class="co">#&gt; 2  0.1888466 -1.3644831   0.1859987   0.3012901         0.9553858</span></span>
@@ -119,7 +124,7 @@
 <code class="sourceCode R"><span><span class="va">tspa_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60"</span>, data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
 <span>                 fsT <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsT"</span><span class="op">)</span>,</span>
 <span>                 fsL <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsL"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/parameterEstimates.html" class="external-link">parameterestimates</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/parameterEstimates.html" class="external-link">parameterEstimates</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt;         lhs op      rhs   est    se     z pvalue ci.lower ci.upper</span></span>
 <span><span class="co">#&gt; 1     ind60 =~ fs_ind60 0.955 0.000    NA     NA    0.955    0.955</span></span>
 <span><span class="co">#&gt; 2     ind60 =~ fs_dem60 0.058 0.000    NA     NA    0.058    0.058</span></span>
@@ -134,96 +139,64 @@
 <div class="section level3">
 <h3 id="using-openmx">Using OpenMx<a class="anchor" aria-label="anchor" href="#using-openmx"></a>
 </h3>
-<ol style="list-style-type: decimal">
-<li>Create OpenMx model without latent variables. Here we also use the
-<code>umx</code> package.</li>
-</ol>
+<p>The measurement information is read straight from the
+<code>fsL</code> / <code>fsT</code> attributes of the
+<code><a href="../reference/get_fs.html">get_fs()</a></code> output. The score columns (<code>fs_ind60</code>,
+<code>fs_dem60</code>) and the latent names (<code>ind60</code>,
+<code>dem60</code>) must already be present in <code>data</code> / the
+model string.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">fsreg_umx</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/umx/man/umxLav2RAM.html" class="external-link">umxLav2RAM</a></span><span class="op">(</span></span>
-<span>    <span class="st">"</span></span>
-<span><span class="st">    dem60 ~ ind60</span></span>
-<span><span class="st">    dem60 + ind60 ~ 1</span></span>
-<span><span class="st">    "</span>,</span>
-<span>    printTab <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; ?plot.MxModel options: std, means, digits, strip_zero, file, splines=T/F/ortho,..., min=, max =, same = , fixed, resid= 'circle|line|none'</span></span></code></pre></div>
-<ol start="2" style="list-style-type: decimal">
-<li>Create loading and error covariance matrices (need reordering)</li>
-</ol>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Loading</span></span>
-<span><span class="va">matL</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxMatrix.html" class="external-link">mxMatrix</a></span><span class="op">(</span></span>
-<span>    type <span class="op">=</span> <span class="st">"Full"</span>, nrow <span class="op">=</span> <span class="fl">2</span>, ncol <span class="op">=</span> <span class="fl">2</span>,</span>
-<span>    free <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>    values <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsL"</span><span class="op">)</span><span class="op">[</span><span class="fl">2</span><span class="op">:</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">:</span><span class="fl">1</span><span class="op">]</span>,</span>
-<span>    name <span class="op">=</span> <span class="st">"L"</span></span>
-<span><span class="op">)</span></span>
-<span><span class="co"># Error</span></span>
-<span><span class="va">matE</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxMatrix.html" class="external-link">mxMatrix</a></span><span class="op">(</span></span>
-<span>    type <span class="op">=</span> <span class="st">"Symm"</span>, nrow <span class="op">=</span> <span class="fl">2</span>, ncol <span class="op">=</span> <span class="fl">2</span>,</span>
-<span>    free <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>    values <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsT"</span><span class="op">)</span><span class="op">[</span><span class="fl">2</span><span class="op">:</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">:</span><span class="fl">1</span><span class="op">]</span>,</span>
-<span>    name <span class="op">=</span> <span class="st">"E"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-<ol start="3" style="list-style-type: decimal">
-<li>Run 2S-PA</li>
-</ol>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">tspa_mx</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span><span class="va">fsreg_umx</span>, data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
-<span>                         mat_ld <span class="op">=</span> <span class="va">matL</span>, mat_ev <span class="op">=</span> <span class="va">matE</span>,</span>
-<span>                         fs_lv_names <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>ind60 <span class="op">=</span> <span class="st">"fs_ind60"</span>,</span>
-<span>                                         dem60 <span class="op">=</span> <span class="st">"fs_dem60"</span><span class="op">)</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">tspa_mx</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60"</span>, data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
+<span>                         fsL <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsL"</span><span class="op">)</span>,</span>
+<span>                         fsT <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsT"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Running m1 with 7 parameters</span></span>
 <span><span class="co"># Run OpenMx</span></span>
 <span><span class="va">tspa_mx_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxRun.html" class="external-link">mxRun</a></span><span class="op">(</span><span class="va">tspa_mx</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Running 2SPAD with 5 parameters</span></span>
-<span><span class="co"># Summarize the results (takes 20 seconds or so)</span></span>
+<span><span class="co">#&gt; Running m1 with 7 parameters</span></span>
+<span><span class="co">#&gt; Warning: In model 'm1' Optimizer returned a non-zero status code 5. The Hessian</span></span>
+<span><span class="co">#&gt; at the solution does not appear to be convex. See ?mxCheckIdentification for</span></span>
+<span><span class="co">#&gt; possible diagnosis (Mx status RED).</span></span>
+<span><span class="co"># Summarize the results</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">tspa_mx_fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Summary of 2SPAD </span></span>
+<span><span class="co">#&gt; Summary of m1 </span></span>
+<span><span class="co">#&gt;  </span></span>
+<span><span class="co">#&gt; The Hessian at the solution does not appear to be convex. See ?mxCheckIdentification for possible diagnosis (Mx status RED). </span></span>
 <span><span class="co">#&gt;  </span></span>
 <span><span class="co">#&gt; free parameters:</span></span>
-<span><span class="co">#&gt;               name matrix   row   col      Estimate Std.Error A</span></span>
-<span><span class="co">#&gt; 1   ind60_to_dem60   m1.A dem60 ind60  4.604652e-01 0.1126087  </span></span>
-<span><span class="co">#&gt; 2 dem60_with_dem60   m1.S dem60 dem60  7.879711e-01 0.1495940  </span></span>
-<span><span class="co">#&gt; 3 ind60_with_ind60   m1.S ind60 ind60  1.000000e+00 0.1694829  </span></span>
-<span><span class="co">#&gt; 4     one_to_dem60   m1.M     1 dem60  1.083067e-07 0.1105181  </span></span>
-<span><span class="co">#&gt; 5     one_to_ind60   m1.M     1 ind60 -3.096769e-08 0.1176358  </span></span>
+<span><span class="co">#&gt;        name matrix   row      col    Estimate Std.Error A</span></span>
+<span><span class="co">#&gt; 1 m1.A[4,3]      A dem60    ind60  0.46046539 0.1126082  </span></span>
+<span><span class="co">#&gt; 2 m1.S[3,3]      S ind60    ind60  1.00000048 0.1694787  </span></span>
+<span><span class="co">#&gt; 3 m1.S[4,4]      S dem60    dem60  0.78797115 0.1495929  </span></span>
+<span><span class="co">#&gt; 4 m1.M[1,1]      M     1 fs_ind60 -0.07735089        NA  </span></span>
+<span><span class="co">#&gt; 5 m1.M[1,2]      M     1 fs_dem60 -0.02589978        NA  </span></span>
+<span><span class="co">#&gt; 6 m1.M[1,3]      M     1    ind60  0.08049424        NA  </span></span>
+<span><span class="co">#&gt; 7 m1.M[1,4]      M     1    dem60 -0.01264573        NA  </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Model Statistics: </span></span>
 <span><span class="co">#&gt;                |  Parameters  |  Degrees of Freedom  |  Fit (-2lnL units)</span></span>
-<span><span class="co">#&gt;        Model:              5                    295              393.7496</span></span>
-<span><span class="co">#&gt;    Saturated:             NA                     NA                    NA</span></span>
-<span><span class="co">#&gt; Independence:             NA                     NA                    NA</span></span>
-<span><span class="co">#&gt; Number of observations/statistics: 75/300</span></span>
+<span><span class="co">#&gt;        Model:              7                    143              393.7496</span></span>
+<span><span class="co">#&gt;    Saturated:              5                    145                    NA</span></span>
+<span><span class="co">#&gt; Independence:              4                    146                    NA</span></span>
+<span><span class="co">#&gt; Number of observations/statistics: 75/150</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; ** Information matrix is not positive definite (not at a candidate optimum).</span></span>
+<span><span class="co">#&gt;   Be suspicious of these results. At minimum, do not trust the standard errors.</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Information Criteria: </span></span>
 <span><span class="co">#&gt;       |  df Penalty  |  Parameters Penalty  |  Sample-Size Adjusted</span></span>
-<span><span class="co">#&gt; AIC:      -196.2504               403.7496                 404.6192</span></span>
-<span><span class="co">#&gt; BIC:      -879.9094               415.3370                 399.5784</span></span>
-<span><span class="co">#&gt; CFI: NA </span></span>
-<span><span class="co">#&gt; TLI: 1   (also known as NNFI) </span></span>
-<span><span class="co">#&gt; RMSEA:  0  [95% CI (NA, NA)]</span></span>
-<span><span class="co">#&gt; Prob(RMSEA &lt;= 0.05): NA</span></span>
+<span><span class="co">#&gt; AIC:       107.7496               407.7496                 409.4212</span></span>
+<span><span class="co">#&gt; BIC:      -223.6512               423.9720                 401.9099</span></span>
 <span><span class="co">#&gt; To get additional fit indices, see help(mxRefModels)</span></span>
-<span><span class="co">#&gt; timestamp: 2024-09-06 04:19:54 </span></span>
-<span><span class="co">#&gt; Wall clock time: 0.05677581 secs </span></span>
+<span><span class="co">#&gt; timestamp: 2026-08-30 11:03:24 </span></span>
+<span><span class="co">#&gt; Wall clock time: 0.02866054 secs </span></span>
 <span><span class="co">#&gt; optimizer:  SLSQP </span></span>
-<span><span class="co">#&gt; OpenMx version number: 2.21.12 </span></span>
-<span><span class="co">#&gt; Need help?  See help(mxSummary)</span></span>
-<span><span class="co"># Standardize coefficients</span></span>
-<span><span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxStandardizeRAMpaths.html" class="external-link">mxStandardizeRAMpaths</a></span><span class="op">(</span><span class="va">tspa_mx_fit</span>, SE <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">$</span><span class="va">m1</span><span class="op">[</span><span class="fl">1</span>, <span class="op">]</span></span>
-<span><span class="co">#&gt;        name          label matrix   row   col Raw.Value    Raw.SE Std.Value</span></span>
-<span><span class="co">#&gt; 1 m1.A[1,2] ind60_to_dem60      A dem60 ind60 0.4604652 0.1126087 0.4604654</span></span>
-<span><span class="co">#&gt;      Std.SE</span></span>
-<span><span class="co">#&gt; 1 0.1001049</span></span></code></pre></div>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Alternative specification</span></span>
-<span><span class="va">tspa_mx</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span><span class="va">fsreg_umx</span>, data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
-<span>                         mat_ld <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsL"</span><span class="op">)</span>,</span>
-<span>                         mat_ev <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsT"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<span><span class="co">#&gt; OpenMx version number: 2.22.11 </span></span>
+<span><span class="co">#&gt; Need help?  See help(mxSummary)</span></span></code></pre></div>
 <div class="section level4">
 <h4 id="with-mean-structure">With Mean Structure<a class="anchor" aria-label="anchor" href="#with-mean-structure"></a>
 </h4>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">my_cfa</span> <span class="op">&lt;-</span> <span class="st">"</span></span>
 <span><span class="st">  # latent variables</span></span>
 <span><span class="st">    ind60 =~ x1 + x2 + x3</span></span>
@@ -232,104 +205,104 @@
 <span><span class="st">    ind60 + dem60 ~ 1</span></span>
 <span><span class="st">"</span></span>
 <span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">PoliticalDemocracy</span>, model <span class="op">=</span> <span class="va">my_cfa</span>,</span>
-<span>                 meanstructure <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+<span>                 meanstructure <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>                 format <span class="op">=</span> <span class="st">"list"</span><span class="op">)</span></span></code></pre></div>
 <p>lavaan</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tspa_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa.html">tspa</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60\ndem60 + ind60 ~ 1"</span>, data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
 <span>                 fsT <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsT"</span><span class="op">)</span>,</span>
 <span>                 fsL <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsL"</span><span class="op">)</span>,</span>
 <span>                 fsb <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsb"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/parameterEstimates.html" class="external-link">parameterEstimates</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt;         lhs op      rhs    est    se      z pvalue ci.lower ci.upper</span></span>
-<span><span class="co">#&gt; 1     ind60 =~ fs_ind60  0.955 0.000     NA     NA    0.955    0.955</span></span>
-<span><span class="co">#&gt; 2     ind60 =~ fs_dem60  0.182 0.000     NA     NA    0.182    0.182</span></span>
-<span><span class="co">#&gt; 3     dem60 =~ fs_ind60  0.006 0.000     NA     NA    0.006    0.006</span></span>
-<span><span class="co">#&gt; 4     dem60 =~ fs_dem60  0.869 0.000     NA     NA    0.869    0.869</span></span>
-<span><span class="co">#&gt; 5  fs_ind60 ~~ fs_ind60  0.016 0.000     NA     NA    0.016    0.016</span></span>
-<span><span class="co">#&gt; 6  fs_ind60 ~~ fs_dem60  0.006 0.000     NA     NA    0.006    0.006</span></span>
-<span><span class="co">#&gt; 7  fs_dem60 ~~ fs_dem60  0.398 0.000     NA     NA    0.398    0.398</span></span>
-<span><span class="co">#&gt; 8  fs_ind60 ~1           0.193 0.000     NA     NA    0.193    0.193</span></span>
-<span><span class="co">#&gt; 9  fs_dem60 ~1          -0.203 0.000     NA     NA   -0.203   -0.203</span></span>
-<span><span class="co">#&gt; 10    dem60  ~    ind60  1.439 0.352  4.089  0.000    0.749    2.129</span></span>
-<span><span class="co">#&gt; 11    dem60 ~1          -1.810 1.794 -1.009  0.313   -5.327    1.706</span></span>
-<span><span class="co">#&gt; 12    ind60 ~1           5.054 0.079 64.155  0.000    4.900    5.209</span></span>
-<span><span class="co">#&gt; 13    ind60 ~~    ind60  0.449 0.076  5.900  0.000    0.300    0.598</span></span>
-<span><span class="co">#&gt; 14    dem60 ~~    dem60  3.453 0.656  5.267  0.000    2.168    4.738</span></span>
-<span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/standardizedSolution.html" class="external-link">standardizedSolution</a></span><span class="op">(</span><span class="va">tspa_fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt;         lhs op      rhs est.std    se       z pvalue ci.lower ci.upper</span></span>
-<span><span class="co">#&gt; 1     ind60 =~ fs_ind60   0.973 0.004 267.474   0.00    0.966    0.980</span></span>
-<span><span class="co">#&gt; 2     ind60 =~ fs_dem60   0.061 0.006   9.671   0.00    0.049    0.074</span></span>
-<span><span class="co">#&gt; 3     dem60 =~ fs_ind60   0.019 0.002   9.092   0.00    0.015    0.023</span></span>
-<span><span class="co">#&gt; 4     dem60 =~ fs_dem60   0.918 0.011  83.338   0.00    0.897    0.940</span></span>
-<span><span class="co">#&gt; 5  fs_ind60 ~~ fs_ind60   0.036 0.006   6.124   0.00    0.024    0.047</span></span>
-<span><span class="co">#&gt; 6  fs_ind60 ~~ fs_dem60   0.072 0.000      NA     NA    0.072    0.072</span></span>
-<span><span class="co">#&gt; 7  fs_dem60 ~~ fs_dem60   0.101 0.017   6.124   0.00    0.069    0.134</span></span>
-<span><span class="co">#&gt; 8  fs_ind60 ~1            0.294 0.024  12.247   0.00    0.247    0.341</span></span>
-<span><span class="co">#&gt; 9  fs_dem60 ~1           -0.102 0.008 -12.247   0.00   -0.119   -0.086</span></span>
-<span><span class="co">#&gt; 10    dem60  ~    ind60   0.460 0.100   4.600   0.00    0.264    0.657</span></span>
-<span><span class="co">#&gt; 11    dem60 ~1           -0.865 0.817  -1.058   0.29   -2.467    0.737</span></span>
-<span><span class="co">#&gt; 12    ind60 ~1            7.547 0.650  11.606   0.00    6.272    8.821</span></span>
-<span><span class="co">#&gt; 13    ind60 ~~    ind60   1.000 0.000      NA     NA    1.000    1.000</span></span>
-<span><span class="co">#&gt; 14    dem60 ~~    dem60   0.788 0.092   8.547   0.00    0.607    0.969</span></span></code></pre></div>
+<span><span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/parameterEstimates.html" class="external-link">parameterEstimates</a></span><span class="op">(</span><span class="va">tspa_fit</span>, standardized <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="co">#&gt;         lhs op      rhs    est    se      z pvalue ci.lower ci.upper std.lv</span></span>
+<span><span class="co">#&gt; 1     ind60 =~ fs_ind60  0.955 0.000     NA     NA    0.955    0.955  0.640</span></span>
+<span><span class="co">#&gt; 2     ind60 =~ fs_dem60  0.182 0.000     NA     NA    0.182    0.182  0.122</span></span>
+<span><span class="co">#&gt; 3     dem60 =~ fs_ind60  0.006 0.000     NA     NA    0.006    0.006  0.012</span></span>
+<span><span class="co">#&gt; 4     dem60 =~ fs_dem60  0.869 0.000     NA     NA    0.869    0.869  1.819</span></span>
+<span><span class="co">#&gt; 5  fs_ind60 ~~ fs_ind60  0.016 0.000     NA     NA    0.016    0.016  0.016</span></span>
+<span><span class="co">#&gt; 6  fs_ind60 ~~ fs_dem60  0.006 0.000     NA     NA    0.006    0.006  0.006</span></span>
+<span><span class="co">#&gt; 7  fs_dem60 ~~ fs_dem60  0.398 0.000     NA     NA    0.398    0.398  0.398</span></span>
+<span><span class="co">#&gt; 8  fs_ind60 ~1           0.193 0.000     NA     NA    0.193    0.193  0.193</span></span>
+<span><span class="co">#&gt; 9  fs_dem60 ~1          -0.203 0.000     NA     NA   -0.203   -0.203 -0.203</span></span>
+<span><span class="co">#&gt; 10    dem60  ~    ind60  1.439 0.352  4.089  0.000    0.749    2.129  0.460</span></span>
+<span><span class="co">#&gt; 11    dem60 ~1          -1.810 1.794 -1.009  0.313   -5.327    1.706 -0.865</span></span>
+<span><span class="co">#&gt; 12    ind60 ~1           5.054 0.079 64.155  0.000    4.900    5.209  7.547</span></span>
+<span><span class="co">#&gt; 13    ind60 ~~    ind60  0.449 0.076  5.900  0.000    0.300    0.598  1.000</span></span>
+<span><span class="co">#&gt; 14    dem60 ~~    dem60  3.453 0.656  5.267  0.000    2.168    4.738  0.788</span></span>
+<span><span class="co">#&gt;    std.all</span></span>
+<span><span class="co">#&gt; 1    0.973</span></span>
+<span><span class="co">#&gt; 2    0.061</span></span>
+<span><span class="co">#&gt; 3    0.019</span></span>
+<span><span class="co">#&gt; 4    0.918</span></span>
+<span><span class="co">#&gt; 5    0.036</span></span>
+<span><span class="co">#&gt; 6    0.072</span></span>
+<span><span class="co">#&gt; 7    0.101</span></span>
+<span><span class="co">#&gt; 8    0.294</span></span>
+<span><span class="co">#&gt; 9   -0.102</span></span>
+<span><span class="co">#&gt; 10   0.460</span></span>
+<span><span class="co">#&gt; 11  -0.865</span></span>
+<span><span class="co">#&gt; 12   7.547</span></span>
+<span><span class="co">#&gt; 13   1.000</span></span>
+<span><span class="co">#&gt; 14   0.788</span></span></code></pre></div>
 <p>OpenMx</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Force symmetric E</span></span>
-<span><span class="va">matE</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsT"</span><span class="op">)</span></span>
-<span><span class="va">matE</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="va">matE</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="va">matE</span><span class="op">)</span><span class="op">)</span> <span class="op">/</span> <span class="fl">2</span></span>
-<span><span class="va">matb</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsb"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">tspa_mx</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span><span class="va">fsreg_umx</span>, data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
-<span>                         mat_ld <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs_dat</span>, <span class="st">"fsL"</span><span class="op">)</span>,</span>
-<span>                         mat_ev <span class="op">=</span> <span class="va">matE</span>,</span>
-<span>                         mat_int <span class="op">=</span> <span class="va">matb</span><span class="op">)</span></span>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tspa_mx</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"dem60 ~ ind60\ndem60 + ind60 ~ 1"</span>,</span>
+<span>                         data <span class="op">=</span> <span class="va">fs_dat</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Running m1 with 5 parameters</span></span>
+<span><span class="co"># We recently supported dropping fsL, fsT, and fsb when they can</span></span>
+<span><span class="co"># be derived from the get_fs() result's attributes. So we skip</span></span>
+<span><span class="co"># tspa_mx_model(...,     fsL = attr(fs_dat, "fsL"),</span></span>
+<span><span class="co">#                        fsT = attr(fs_dat, "fsT"),</span></span>
+<span><span class="co">#                        fsb = attr(fs_dat, "fsb"))</span></span>
 <span><span class="co"># Run OpenMx</span></span>
 <span><span class="va">tspa_mx_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxRun.html" class="external-link">mxRun</a></span><span class="op">(</span><span class="va">tspa_mx</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Running 2SPAD with 5 parameters</span></span>
-<span><span class="co"># Summarize the results (takes 20 seconds or so)</span></span>
+<span><span class="co">#&gt; Running m1 with 5 parameters</span></span>
+<span><span class="co"># Summarize the results</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">tspa_mx_fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Summary of 2SPAD </span></span>
+<span><span class="co">#&gt; Summary of m1 </span></span>
 <span><span class="co">#&gt;  </span></span>
 <span><span class="co">#&gt; free parameters:</span></span>
-<span><span class="co">#&gt;               name matrix   row   col   Estimate  Std.Error A</span></span>
-<span><span class="co">#&gt; 1   ind60_to_dem60   m1.A dem60 ind60  1.4393156 0.35192047  </span></span>
-<span><span class="co">#&gt; 2 dem60_with_dem60   m1.S dem60 dem60  3.4532716 0.65558270  </span></span>
-<span><span class="co">#&gt; 3 ind60_with_ind60   m1.S ind60 ind60  0.4485416 0.07601934  </span></span>
-<span><span class="co">#&gt; 4     one_to_dem60   m1.M     1 dem60 -1.8101866 1.79371569  </span></span>
-<span><span class="co">#&gt; 5     one_to_ind60   m1.M     1 ind60  5.0543839 0.07878429  </span></span>
+<span><span class="co">#&gt;        name matrix   row   col   Estimate  Std.Error A</span></span>
+<span><span class="co">#&gt; 1 m1.A[4,3]      A dem60 ind60  1.4393156 0.35196271  </span></span>
+<span><span class="co">#&gt; 2 m1.S[3,3]      S ind60 ind60  0.4485415 0.07601938  </span></span>
+<span><span class="co">#&gt; 3 m1.S[4,4]      S dem60 dem60  3.4532713 0.65558361  </span></span>
+<span><span class="co">#&gt; 4 m1.M[1,3]      M     1 ind60  5.2585434 0.07878429  </span></span>
+<span><span class="co">#&gt; 5 m1.M[1,4]      M     1 dem60 -2.3798659 1.86521218  </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Model Statistics: </span></span>
 <span><span class="co">#&gt;                |  Parameters  |  Degrees of Freedom  |  Fit (-2lnL units)</span></span>
-<span><span class="co">#&gt;        Model:              5                    295              444.4392</span></span>
-<span><span class="co">#&gt;    Saturated:             NA                     NA                    NA</span></span>
-<span><span class="co">#&gt; Independence:             NA                     NA                    NA</span></span>
-<span><span class="co">#&gt; Number of observations/statistics: 75/300</span></span>
+<span><span class="co">#&gt;        Model:              5                    145              444.4392</span></span>
+<span><span class="co">#&gt;    Saturated:              5                    145                    NA</span></span>
+<span><span class="co">#&gt; Independence:              4                    146                    NA</span></span>
+<span><span class="co">#&gt; Number of observations/statistics: 75/150</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Information Criteria: </span></span>
 <span><span class="co">#&gt;       |  df Penalty  |  Parameters Penalty  |  Sample-Size Adjusted</span></span>
-<span><span class="co">#&gt; AIC:      -145.5608               454.4392                 455.3088</span></span>
-<span><span class="co">#&gt; BIC:      -829.2198               466.0266                 450.2680</span></span>
-<span><span class="co">#&gt; CFI: NA </span></span>
-<span><span class="co">#&gt; TLI: 1   (also known as NNFI) </span></span>
-<span><span class="co">#&gt; RMSEA:  0  [95% CI (NA, NA)]</span></span>
-<span><span class="co">#&gt; Prob(RMSEA &lt;= 0.05): NA</span></span>
+<span><span class="co">#&gt; AIC:       154.4392               454.4392                 455.3088</span></span>
+<span><span class="co">#&gt; BIC:      -181.5966               466.0266                 450.2680</span></span>
 <span><span class="co">#&gt; To get additional fit indices, see help(mxRefModels)</span></span>
-<span><span class="co">#&gt; timestamp: 2024-09-06 04:19:55 </span></span>
-<span><span class="co">#&gt; Wall clock time: 0.04486251 secs </span></span>
+<span><span class="co">#&gt; timestamp: 2026-08-30 11:03:24 </span></span>
+<span><span class="co">#&gt; Wall clock time: 0.01514888 secs </span></span>
 <span><span class="co">#&gt; optimizer:  SLSQP </span></span>
-<span><span class="co">#&gt; OpenMx version number: 2.21.12 </span></span>
-<span><span class="co">#&gt; Need help?  See help(mxSummary)</span></span>
-<span><span class="co"># Standardize coefficients</span></span>
-<span><span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxStandardizeRAMpaths.html" class="external-link">mxStandardizeRAMpaths</a></span><span class="op">(</span><span class="va">tspa_mx_fit</span>, SE <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">$</span><span class="va">m1</span><span class="op">[</span><span class="fl">1</span>, <span class="op">]</span></span>
-<span><span class="co">#&gt;        name          label matrix   row   col Raw.Value    Raw.SE Std.Value</span></span>
-<span><span class="co">#&gt; 1 m1.A[1,2] ind60_to_dem60      A dem60 ind60  1.439316 0.3519205 0.4604657</span></span>
-<span><span class="co">#&gt;      Std.SE</span></span>
-<span><span class="co">#&gt; 1 0.1000874</span></span></code></pre></div>
+<span><span class="co">#&gt; OpenMx version number: 2.22.11 </span></span>
+<span><span class="co">#&gt; Need help?  See help(mxSummary)</span></span></code></pre></div>
+<p>The two routes fit the same model, so the path, variance, and
+covariance estimates (and their SEs) agree. They differ only in the
+unidentifiable split of the mean structure between the corrected latents
+and their (observed) factor-score indicators: <code><a href="../reference/tspa.html">tspa()</a></code> fixes
+the exogenous latent mean at zero and lets the factor-score mean
+estimate the data value, whereas <code><a href="../reference/tspa_mx_model.html">tspa_mx_model()</a></code> fixes the
+score residual means at zero and estimates the latent means (the latent
+mean carries the data value). Read the means accordingly — compare the
+two routes on the covariance quantities, not on how the mean is
+split.</p>
 </div>
 </div>
 <div class="section level3">
-<h3 id="compare-to-joint-model-with-openmx">Compare to joint model with OpenMx<a class="anchor" aria-label="anchor" href="#compare-to-joint-model-with-openmx"></a>
+<h3 id="compare-to-joint-model">Compare to joint model<a class="anchor" aria-label="anchor" href="#compare-to-joint-model"></a>
 </h3>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">jreg_umx_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/umx/man/umxRAM.html" class="external-link">umxRAM</a></span><span class="op">(</span></span>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">jreg</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/sem.html" class="external-link">sem</a></span><span class="op">(</span></span>
 <span>    <span class="st">"</span></span>
 <span><span class="st">    # latent variables</span></span>
 <span><span class="st">    ind60 =~ x1 + x2 + x3</span></span>
@@ -337,62 +310,20 @@
 <span><span class="st">    # latent regression</span></span>
 <span><span class="st">    dem60 ~ ind60</span></span>
 <span><span class="st">    "</span>,</span>
-<span>    data <span class="op">=</span> <span class="va">PoliticalDemocracy</span><span class="op">)</span></span>
-<span><span class="co">#&gt; 2 latent variables were created:ind60, dem60.</span></span>
-<span><span class="co">#&gt; You have raw data, but no means model. I added</span></span>
-<span><span class="co">#&gt; mxPath('one', to = manifestVars)</span></span>
-<span><span class="co">#&gt; Running latent_variables with 22 parameters</span></span>
-<span><span class="co">#&gt; ?umxSummary options: std=T|F', digits=, report= 'html', filter= 'NS' &amp; more</span></span>
-<span><span class="co">#&gt; Running Saturated latent_variables with 35 parameters</span></span>
-<span><span class="co">#&gt; Running Independence latent_variables with 14 parameters</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Table: Parameter loadings for model 'latent_variables'</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; |   |name             | Estimate|SE    |type             |</span></span>
-<span><span class="co">#&gt; |:--|:----------------|--------:|:-----|:----------------|</span></span>
-<span><span class="co">#&gt; |1  |ind60_to_x1      |    1.000|0     |Factor loading   |</span></span>
-<span><span class="co">#&gt; |2  |ind60_to_x2      |    2.180|0.14  |Factor loading   |</span></span>
-<span><span class="co">#&gt; |3  |ind60_to_x3      |    1.818|0.152 |Factor loading   |</span></span>
-<span><span class="co">#&gt; |5  |dem60_to_y1      |    1.000|0     |Factor loading   |</span></span>
-<span><span class="co">#&gt; |6  |dem60_to_y2      |    1.419|0.212 |Factor loading   |</span></span>
-<span><span class="co">#&gt; |7  |dem60_to_y3      |    1.095|0.167 |Factor loading   |</span></span>
-<span><span class="co">#&gt; |8  |dem60_to_y4      |    1.428|0.191 |Factor loading   |</span></span>
-<span><span class="co">#&gt; |4  |ind60_to_dem60   |    1.439|0.377 |Factor to factor |</span></span>
-<span><span class="co">#&gt; |16 |ind60_with_ind60 |    0.449|0.087 |Factor Variance  |</span></span>
-<span><span class="co">#&gt; |17 |dem60_with_dem60 |    3.453|0.917 |Factor Variance  |</span></span>
-<span><span class="co">#&gt; |18 |one_to_y1        |    5.465|0.301 |Mean             |</span></span>
-<span><span class="co">#&gt; |19 |one_to_y2        |    4.256|0.453 |Mean             |</span></span>
-<span><span class="co">#&gt; |20 |one_to_y3        |    6.563|0.376 |Mean             |</span></span>
-<span><span class="co">#&gt; |21 |one_to_y4        |    4.453|0.384 |Mean             |</span></span>
-<span><span class="co">#&gt; |22 |one_to_x1        |    5.054|0.084 |Mean             |</span></span>
-<span><span class="co">#&gt; |23 |one_to_x2        |    4.792|0.173 |Mean             |</span></span>
-<span><span class="co">#&gt; |24 |one_to_x3        |    3.558|0.161 |Mean             |</span></span>
-<span><span class="co">#&gt; |9  |y1_with_y1       |    2.404|0.586 |Residual         |</span></span>
-<span><span class="co">#&gt; |10 |y2_with_y2       |    6.552|1.286 |Residual         |</span></span>
-<span><span class="co">#&gt; |11 |y3_with_y3       |    5.363|1.053 |Residual         |</span></span>
-<span><span class="co">#&gt; |12 |y4_with_y4       |    2.137|0.822 |Residual         |</span></span>
-<span><span class="co">#&gt; |13 |x1_with_x1       |    0.081|0.02  |Residual         |</span></span>
-<span><span class="co">#&gt; |14 |x2_with_x2       |    0.120|0.072 |Residual         |</span></span>
-<span><span class="co">#&gt; |15 |x3_with_x3       |    0.467|0.089 |Residual         |</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Model Fit: χ²(13) = 23.74, p = 0.034; CFI = 0.972; TLI = 0.955; RMSEA = 0.105</span></span>
-<span><span class="co">#&gt; RMSEA is worse than desired (&lt;.06)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxStandardizeRAMpaths.html" class="external-link">mxStandardizeRAMpaths</a></span><span class="op">(</span><span class="va">jreg_umx_fit</span>, SE <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">[</span><span class="fl">4</span>, <span class="op">]</span></span>
-<span><span class="co">#&gt;                      name          label matrix   row   col Raw.Value    Raw.SE</span></span>
-<span><span class="co">#&gt; 4 latent_variables.A[9,8] ind60_to_dem60      A dem60 ind60  1.439314 0.3769464</span></span>
-<span><span class="co">#&gt;   Std.Value    Std.SE</span></span>
-<span><span class="co">#&gt; 4 0.4604654 0.1010676</span></span></code></pre></div>
+<span>    data <span class="op">=</span> <span class="va">PoliticalDemocracy</span>, std.lv <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">jreg</span><span class="op">)</span><span class="op">[</span><span class="st">"dem60~ind60"</span><span class="op">]</span></span>
+<span><span class="co">#&gt; dem60~ind60 </span></span>
+<span><span class="co">#&gt;   0.5187309</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
 <h2 id="combined-with-irt">Combined with IRT<a class="anchor" aria-label="anchor" href="#combined-with-irt"></a>
 </h2>
-<p>Example from Lai &amp; Hsiao (2021, Psychological Methods)</p>
+<p>Example from Lai &amp; Hsiao (2022, Psychological Methods)</p>
 <div class="section level3">
 <h3 id="not-accounting-for-error">Not accounting for error<a class="anchor" aria-label="anchor" href="#not-accounting-for-error"></a>
 </h3>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Simulate data with mirt</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">1235</span><span class="op">)</span></span>
 <span><span class="va">num_obs</span> <span class="op">&lt;-</span> <span class="fl">1000</span></span>
@@ -406,13 +337,13 @@
 <span><span class="va">d1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">10</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">a2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Uniform.html" class="external-link">runif</a></span><span class="op">(</span><span class="fl">10</span>, min <span class="op">=</span> <span class="fl">0.5</span>, max <span class="op">=</span> <span class="fl">1.5</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">d2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">10</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">dat1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/mirt/man/simdata.html" class="external-link">simdata</a></span><span class="op">(</span>a <span class="op">=</span> <span class="va">a1</span>, d <span class="op">=</span> <span class="va">d1</span>, N <span class="op">=</span> <span class="va">num_obs</span>, itemtype <span class="op">=</span> <span class="st">"2PL"</span>, Theta <span class="op">=</span> <span class="va">th1</span><span class="op">)</span></span>
-<span><span class="va">dat2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/mirt/man/simdata.html" class="external-link">simdata</a></span><span class="op">(</span>a <span class="op">=</span> <span class="va">a2</span>, d <span class="op">=</span> <span class="va">d2</span>, N <span class="op">=</span> <span class="va">num_obs</span>, itemtype <span class="op">=</span> <span class="st">"2PL"</span>, Theta <span class="op">=</span> <span class="va">th2</span><span class="op">)</span></span>
+<span><span class="va">dat1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://philchalmers.github.io/mirt/reference/simdata.html" class="external-link">simdata</a></span><span class="op">(</span>a <span class="op">=</span> <span class="va">a1</span>, d <span class="op">=</span> <span class="va">d1</span>, N <span class="op">=</span> <span class="va">num_obs</span>, itemtype <span class="op">=</span> <span class="st">"2PL"</span>, Theta <span class="op">=</span> <span class="va">th1</span><span class="op">)</span></span>
+<span><span class="va">dat2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://philchalmers.github.io/mirt/reference/simdata.html" class="external-link">simdata</a></span><span class="op">(</span>a <span class="op">=</span> <span class="va">a2</span>, d <span class="op">=</span> <span class="va">d2</span>, N <span class="op">=</span> <span class="va">num_obs</span>, itemtype <span class="op">=</span> <span class="st">"2PL"</span>, Theta <span class="op">=</span> <span class="va">th2</span><span class="op">)</span></span>
 <span><span class="co"># Factor scores</span></span>
-<span><span class="va">mod1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/mirt/man/mirt.html" class="external-link">mirt</a></span><span class="op">(</span><span class="va">dat1</span>, model <span class="op">=</span> <span class="fl">1</span>, itemtype <span class="op">=</span> <span class="st">"Rasch"</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span><span class="va">mod2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/mirt/man/mirt.html" class="external-link">mirt</a></span><span class="op">(</span><span class="va">dat2</span>, model <span class="op">=</span> <span class="fl">1</span>, itemtype <span class="op">=</span> <span class="st">"2PL"</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span><span class="va">fs1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/mirt/man/fscores.html" class="external-link">fscores</a></span><span class="op">(</span><span class="va">mod1</span>, full.scores.SE <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="va">fs2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/mirt/man/fscores.html" class="external-link">fscores</a></span><span class="op">(</span><span class="va">mod2</span>, full.scores.SE <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">mod1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://philchalmers.github.io/mirt/reference/mirt.html" class="external-link">mirt</a></span><span class="op">(</span><span class="va">dat1</span>, model <span class="op">=</span> <span class="fl">1</span>, itemtype <span class="op">=</span> <span class="st">"Rasch"</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="va">mod2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://philchalmers.github.io/mirt/reference/mirt.html" class="external-link">mirt</a></span><span class="op">(</span><span class="va">dat2</span>, model <span class="op">=</span> <span class="fl">1</span>, itemtype <span class="op">=</span> <span class="st">"2PL"</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="va">fs1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://philchalmers.github.io/mirt/reference/fscores.html" class="external-link">fscores</a></span><span class="op">(</span><span class="va">mod1</span>, full.scores.SE <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">fs2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://philchalmers.github.io/mirt/reference/fscores.html" class="external-link">fscores</a></span><span class="op">(</span><span class="va">mod2</span>, full.scores.SE <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/lm.html" class="external-link">lm</a></span><span class="op">(</span><span class="va">fs2</span><span class="op">[</span>, <span class="fl">1</span><span class="op">]</span> <span class="op">~</span> <span class="va">fs1</span><span class="op">[</span>, <span class="fl">1</span><span class="op">]</span><span class="op">)</span>  <span class="co"># attenuated coefficient</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Call:</span></span>
@@ -423,30 +354,124 @@
 <span><span class="co">#&gt;  -3.730e-06    2.812e-01</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="joint-model">Joint model<a class="anchor" aria-label="anchor" href="#joint-model"></a>
+<h3 id="factor-score-intercepts-via-get_fs">Factor-score intercepts via get_fs()<a class="anchor" aria-label="anchor" href="#factor-score-intercepts-via-get_fs"></a>
 </h3>
-<ul>
-<li>With WLS</li>
-</ul>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">dat1</span>, <span class="va">dat2</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">dat</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"i"</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">20</span><span class="op">)</span></span>
-<span><span class="va">wls_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/sem.html" class="external-link">sem</a></span><span class="op">(</span><span class="st">"</span></span>
-<span><span class="st">f1 =~ i1 + i2 + i3 + i4 + i5 + i6 + i7 + i8 + i9 + i10</span></span>
-<span><span class="st">f2 =~ i11 + i12 + i13 + i14 + i15 + i16 + i17 + i18 + i19 + i20</span></span>
-<span><span class="st">f2 ~ f1</span></span>
-<span><span class="st">"</span>, data <span class="op">=</span> <span class="va">dat</span>, ordered <span class="op">=</span> <span class="cn">TRUE</span>, std.lv <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">wls_fit</span><span class="op">)</span><span class="op">[</span><span class="st">"f2~f1"</span><span class="op">]</span></span>
-<span><span class="co">#&gt;     f2~f1 </span></span>
-<span><span class="co">#&gt; 0.5490816</span></span></code></pre></div>
+<p>The <code>mirt</code> fit above is also scored directly by
+<code><a href="../reference/get_fs.html">get_fs()</a></code>, which returns the EAP scores together with their
+per-row standard errors, implied loadings and error variances (and, via
+<code><a href="../reference/fs_indiv.html">fs_indiv()</a></code>, the definition variables) — so the hand-rolled
+<code>fs_eap</code> frame in the next section is optional. A factor
+prior mean can be given with <code>prior_mean</code> (mirt’s default is
+a zero-mean factor). When the mean is not zero, the per-row factor-score
+intercepts stored in the <code>fsb</code> attribute are non-zero: each
+<code>fsb_i</code> is the prior mean scaled by that row’s shrinkage
+factor (the posterior variance <code>Vpost_i</code>), so the intercepts
+— and the score means — track the prior mean, and vary from row to
+row.</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fs</span>  <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">mod1</span><span class="op">)</span></span>
+<span><span class="va">fse</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">mod1</span>, prior_mean <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>F1 <span class="op">=</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">fs</span>, <span class="fl">3</span><span class="op">)</span>                                   <span class="co"># score / SE / loading / error variance</span></span>
+<span><span class="co">#&gt;        fs_F1  fs_F1_se F1_by_fs_F1  ev_fs_F1</span></span>
+<span><span class="co">#&gt; 1  0.4717843 0.4708481   0.6414382 0.2216979</span></span>
+<span><span class="co">#&gt; 2  0.8269502 0.4766043   0.6197787 0.2271516</span></span>
+<span><span class="co">#&gt; 3 -0.8717728 0.4707905   0.6416367 0.2216437</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>fsb.r1.default <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs</span>, <span class="st">"fsb"</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span>,</span>
+<span>        fsb.r2.default <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fs</span>, <span class="st">"fsb"</span><span class="op">)</span><span class="op">[[</span><span class="fl">2</span><span class="op">]</span><span class="op">]</span><span class="op">)</span>,</span>
+<span>        fsb.r1.prior2  <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fse</span>, <span class="st">"fsb"</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span>,</span>
+<span>        fsb.r2.prior2  <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fse</span>, <span class="st">"fsb"</span><span class="op">)</span><span class="op">[[</span><span class="fl">2</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">)</span>, <span class="fl">4</span><span class="op">)</span></span>
+<span><span class="co">#&gt; fsb.r1.default fsb.r2.default  fsb.r1.prior2  fsb.r2.prior2 </span></span>
+<span><span class="co">#&gt;         0.0000         0.0000         0.8356         0.9396</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>score.mean.default <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">fs</span><span class="op">$</span><span class="va">fs_F1</span><span class="op">)</span>,</span>
+<span>        score.mean.prior2  <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">fse</span><span class="op">$</span><span class="va">fs_F1</span><span class="op">)</span><span class="op">)</span>, <span class="fl">4</span><span class="op">)</span></span>
+<span><span class="co">#&gt; score.mean.default  score.mean.prior2 </span></span>
+<span><span class="co">#&gt;             0.0000             0.7596</span></span></code></pre></div>
+<p>Under mirt’s default zero-mean prior every <code>fsb</code> is zero
+(the scores are mean zero); with <code>prior_mean = c(F1 = 2)</code>
+they are non-zero and differ by row. These <code>fsb</code> values are
+exactly what <code><a href="../reference/tspa_mx_model.html">tspa_mx_model()</a></code> reads as its score-intercept
+row (“With Mean Structure” above).</p>
+<p><code><a href="../reference/get_fs.html">get_fs()</a></code> results can now also be passed to
+<code><a href="../reference/tspa_mx_model.html">tspa_mx_model()</a></code> directly: with all of
+<code>se_fs</code>/<code>fsL</code>/<code>fsT</code>/<code>fsb</code>
+omitted, the measurement inputs are derived from the result’s attributes
+— the per-row loadings and error variances become definition variables
+referencing the result’s own
+<code>*_by_*</code>/<code>ev_*</code>/<code>ecov_*</code> columns, and
+the <code>int_fs_*</code> score-intercept columns are appended from the
+<code>fsb</code> attribute (the <code><a href="../reference/fs_indiv.html">fs_indiv()</a></code> round-trip, now
+automatic). The minimal model that exercises the score-intercept row, on
+the nonzero-prior and the zero-mean results:</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># All measurement inputs (per-row loadings, error variances, and the</span></span>
+<span><span class="co"># int_fs_* intercept columns) are derived from the get_fs() result:</span></span>
+<span><span class="va">tspa_mx_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span><span class="st">"F1 ~ 1"</span>, data <span class="op">=</span> <span class="va">fse</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Running m1 with 2 parameters</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">tspa_mx_fit</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Summary of m1 </span></span>
+<span><span class="co">#&gt;  </span></span>
+<span><span class="co">#&gt; free parameters:</span></span>
+<span><span class="co">#&gt;        name matrix row col    Estimate  Std.Error A</span></span>
+<span><span class="co">#&gt; 1 m1.S[2,2]      S  F1  F1  0.80251349 0.06993011  </span></span>
+<span><span class="co">#&gt; 2 m1.M[1,2]      M   1  F1 -0.08697211 0.03855771  </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Model Statistics: </span></span>
+<span><span class="co">#&gt;                |  Parameters  |  Degrees of Freedom  |  Fit (-2lnL units)</span></span>
+<span><span class="co">#&gt;        Model:              2                    998              2276.339</span></span>
+<span><span class="co">#&gt;    Saturated:              2                    998                    NA</span></span>
+<span><span class="co">#&gt; Independence:              2                    998                    NA</span></span>
+<span><span class="co">#&gt; Number of observations/statistics: 1000/1000</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Information Criteria: </span></span>
+<span><span class="co">#&gt;       |  df Penalty  |  Parameters Penalty  |  Sample-Size Adjusted</span></span>
+<span><span class="co">#&gt; AIC:        280.339               2280.339                 2280.351</span></span>
+<span><span class="co">#&gt; BIC:      -4617.601               2290.155                 2283.802</span></span>
+<span><span class="co">#&gt; To get additional fit indices, see help(mxRefModels)</span></span>
+<span><span class="co">#&gt; timestamp: 2026-08-30 11:03:25 </span></span>
+<span><span class="co">#&gt; Wall clock time: 0.02362299 secs </span></span>
+<span><span class="co">#&gt; optimizer:  SLSQP </span></span>
+<span><span class="co">#&gt; OpenMx version number: 2.22.11 </span></span>
+<span><span class="co">#&gt; Need help?  See help(mxSummary)</span></span>
+<span><span class="co"># The zero-mean result derives the same way (its fsb attribute is all-zero,</span></span>
+<span><span class="co"># so the appended int_fs_F1 column is all-zero):</span></span>
+<span><span class="va">tspa_mx_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span><span class="st">"F1 ~ 1"</span>, data <span class="op">=</span> <span class="va">fs</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Running m1 with 2 parameters</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">tspa_mx_fit</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Summary of m1 </span></span>
+<span><span class="co">#&gt;  </span></span>
+<span><span class="co">#&gt; free parameters:</span></span>
+<span><span class="co">#&gt;        name matrix row col      Estimate  Std.Error A</span></span>
+<span><span class="co">#&gt; 1 m1.S[2,2]      S  F1  F1  9.637746e-01 0.07128714  </span></span>
+<span><span class="co">#&gt; 2 m1.M[1,2]      M   1  F1 -8.414985e-06 0.03899255  </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Model Statistics: </span></span>
+<span><span class="co">#&gt;                |  Parameters  |  Degrees of Freedom  |  Fit (-2lnL units)</span></span>
+<span><span class="co">#&gt;        Model:              2                    998              2395.021</span></span>
+<span><span class="co">#&gt;    Saturated:              2                    998                    NA</span></span>
+<span><span class="co">#&gt; Independence:              2                    998                    NA</span></span>
+<span><span class="co">#&gt; Number of observations/statistics: 1000/1000</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Information Criteria: </span></span>
+<span><span class="co">#&gt;       |  df Penalty  |  Parameters Penalty  |  Sample-Size Adjusted</span></span>
+<span><span class="co">#&gt; AIC:       399.0212               2399.021                 2399.033</span></span>
+<span><span class="co">#&gt; BIC:     -4498.9185               2408.837                 2402.485</span></span>
+<span><span class="co">#&gt; To get additional fit indices, see help(mxRefModels)</span></span>
+<span><span class="co">#&gt; timestamp: 2026-08-30 11:03:26 </span></span>
+<span><span class="co">#&gt; Wall clock time: 0.02225065 secs </span></span>
+<span><span class="co">#&gt; optimizer:  SLSQP </span></span>
+<span><span class="co">#&gt; OpenMx version number: 2.22.11 </span></span>
+<span><span class="co">#&gt; Need help?  See help(mxSummary)</span></span></code></pre></div>
+<p>Under <code>prior_mean = c(F1 = 2)</code> the appended
+<code>int_fs_F1</code> column is nonzero and row-varying; for the
+zero-mean result it is all-zero. For a <code><a href="../reference/get_fs.html">get_fs()</a></code> result,
+then, the <code><a href="../reference/fs_indiv.html">fs_indiv()</a></code> + hand-rolled character matrices of
+the next section — and the explicit <code>attr(..., "fsL")</code>-style
+arguments used elsewhere in this vignette — are optional sugar, not a
+requirement; they remain the route when the per-row quantities come from
+outside <code><a href="../reference/get_fs.html">get_fs()</a></code>.</p>
 </div>
 <div class="section level3">
-<h3 id="with-maximum-likelihood">With Maximum Likelihood<a class="anchor" aria-label="anchor" href="#with-maximum-likelihood"></a>
-</h3>
-<p>Note: This is extremely computational intensive</p>
-</div>
-<div class="section level3">
-<h3 id="using-tspa_mx_model">Using <code>tspa_mx_model()</code><a class="anchor" aria-label="anchor" href="#using-tspa_mx_model"></a>
+<h3 id="s-pa-with-eap-shrinkage-scores">2S-PA with EAP (shrinkage) scores<a class="anchor" aria-label="anchor" href="#s-pa-with-eap-shrinkage-scores"></a>
 </h3>
 <p>Because EAP (shrinkage) scores are used, we use the following
 properties for these scores
@@ -455,7 +480,7 @@ for person
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math>):</p>
 <ul>
 <li>Standard error (SE, from software output) =
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msqrt><mrow><mi>V</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>η</mi><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mo stretchy="true" form="prefix">(</mo><mn>1</mn><mo>−</mo><msub><mi>ρ</mi><mrow><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>,</mo><mi>i</mi></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow></mrow></msqrt><annotation encoding="application/x-tex">\sqrt{V(\eta) (1 - \rho_{\tilde \eta, i})}</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msqrt><mrow><mi>V</mi><mo stretchy="false" form="prefix">(</mo><mi>η</mi><mo stretchy="false" form="postfix">)</mo><mo stretchy="false" form="prefix">(</mo><mn>1</mn><mo>−</mo><msub><mi>ρ</mi><mrow><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>,</mo><mi>i</mi></mrow></msub><mo stretchy="false" form="postfix">)</mo></mrow></msqrt><annotation encoding="application/x-tex">\sqrt{V(\eta) (1 - \rho_{\tilde \eta, i})}</annotation></semantics></math>,
 where
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>ρ</mi><mrow><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>,</mo><mi>i</mi></mrow></msub><annotation encoding="application/x-tex">\rho_{\tilde \eta, i}</annotation></semantics></math>
 is the reliability of
@@ -468,7 +493,7 @@ on
 is equal to
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>ρ</mi><mrow><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>,</mo><mi>i</mi></mrow></msub><annotation encoding="application/x-tex">\rho_{\tilde \eta, i}</annotation></semantics></math>
 =
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>−</mo><msup><mtext mathvariant="normal">SE</mtext><mn>2</mn></msup><mi>/</mi><mi>V</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>η</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">1 - \text{SE}^2 / V(\eta)</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>−</mo><msup><mtext mathvariant="normal">SE</mtext><mn>2</mn></msup><mi>/</mi><mi>V</mi><mo stretchy="false" form="prefix">(</mo><mi>η</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">1 - \text{SE}^2 / V(\eta)</annotation></semantics></math>
 </li>
 <li>Standard error of measurement for
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mover><mi>η</mi><mo accent="true">̃</mo></mover><mi>i</mi></msub><annotation encoding="application/x-tex">\tilde \eta_i</annotation></semantics></math>
@@ -480,9 +505,9 @@ is equal to
 is also
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>ρ</mi><mrow><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>,</mo><mi>i</mi></mrow></msub><annotation encoding="application/x-tex">\rho_{\tilde \eta, i}</annotation></semantics></math>.</li>
 </ul>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Combine into data set</span></span>
-<span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">fs1</span>, <span class="va">fs2</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span><span class="va">fs_eap</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">fs1</span>, <span class="va">fs2</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>    <span class="fu"><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>    <span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"fs1"</span>, <span class="st">"se_fs1"</span>, <span class="st">"fs2"</span>, <span class="st">"se_fs2"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>    <span class="co"># Compute reliability and error variances</span></span>
@@ -492,223 +517,89 @@ is also
 <span>        <span class="va">ev_fs1</span> <span class="op">&lt;-</span> <span class="va">se_fs1</span><span class="op">^</span><span class="fl">2</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1</span> <span class="op">-</span> <span class="va">se_fs1</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span></span>
 <span>        <span class="va">ev_fs2</span> <span class="op">&lt;-</span> <span class="va">se_fs2</span><span class="op">^</span><span class="fl">2</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1</span> <span class="op">-</span> <span class="va">se_fs2</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span></span>
 <span>    <span class="op">}</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Loading</span></span>
-<span><span class="va">matL</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxMatrix.html" class="external-link">mxMatrix</a></span><span class="op">(</span></span>
-<span>    type <span class="op">=</span> <span class="st">"Diag"</span>, nrow <span class="op">=</span> <span class="fl">2</span>, ncol <span class="op">=</span> <span class="fl">2</span>,</span>
-<span>    free <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>    labels <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"data.rel_fs2"</span>, <span class="st">"data.rel_fs1"</span><span class="op">)</span>,</span>
-<span>    name <span class="op">=</span> <span class="st">"L"</span></span>
-<span><span class="op">)</span></span>
-<span><span class="co"># Error</span></span>
-<span><span class="va">matE</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxMatrix.html" class="external-link">mxMatrix</a></span><span class="op">(</span></span>
-<span>    type <span class="op">=</span> <span class="st">"Diag"</span>, nrow <span class="op">=</span> <span class="fl">2</span>, ncol <span class="op">=</span> <span class="fl">2</span>,</span>
-<span>    free <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>    labels <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"data.ev_fs2"</span>, <span class="st">"data.ev_fs1"</span><span class="op">)</span>,</span>
-<span>    name <span class="op">=</span> <span class="st">"E"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">fsreg_umx</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/umx/man/umxLav2RAM.html" class="external-link">umxLav2RAM</a></span><span class="op">(</span></span>
-<span>    <span class="st">"</span></span>
-<span><span class="st">      fs2 ~ fs1</span></span>
-<span><span class="st">      fs2 + fs1 ~ 1</span></span>
-<span><span class="st">    "</span>,</span>
-<span>    printTab <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; ?plot.MxModel options: std, means, digits, strip_zero, file, splines=T/F/ortho,..., min=, max =, same = , fixed, resid= 'circle|line|none'</span></span></code></pre></div>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">tspa_mx</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span><span class="va">fsreg_umx</span>, data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
-<span>                         mat_ld <span class="op">=</span> <span class="va">matL</span>, mat_ev <span class="op">=</span> <span class="va">matE</span><span class="op">)</span></span>
+<p>The per-person reliability and error variance are supplied as
+<em>definition variables</em>: each <code>fsL</code> / <code>fsT</code>
+cell holds the name of the <code>data</code> column that carries that
+person’s value. The structural latent names (<code>f1</code>,
+<code>f2</code>) are kept distinct from the score columns
+(<code>fs1</code>, <code>fs2</code>).</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">cross_load</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"rel_fs1"</span>, <span class="cn">NA</span>, <span class="cn">NA</span>, <span class="st">"rel_fs2"</span><span class="op">)</span>, nrow <span class="op">=</span> <span class="fl">2</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>    <span class="fu">`dimnames&lt;-`</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"fs1"</span>, <span class="st">"fs2"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"f1"</span>, <span class="st">"f2"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">err_cov</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ev_fs1"</span>, <span class="cn">NA</span>, <span class="cn">NA</span>, <span class="st">"ev_fs2"</span><span class="op">)</span>, nrow <span class="op">=</span> <span class="fl">2</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>    <span class="fu">`dimnames&lt;-`</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"fs1"</span>, <span class="st">"fs2"</span><span class="op">)</span><span class="op">)</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">tspa_mx</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"f2 ~ f1\nf2 + f1 ~ 1"</span>,</span>
+<span>                         data <span class="op">=</span> <span class="va">fs_eap</span>, fsL <span class="op">=</span> <span class="va">cross_load</span>, fsT <span class="op">=</span> <span class="va">err_cov</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Running m1 with 5 parameters</span></span>
 <span><span class="co"># Run OpenMx</span></span>
 <span><span class="va">tspa_mx_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxRun.html" class="external-link">mxRun</a></span><span class="op">(</span><span class="va">tspa_mx</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Running 2SPAD with 5 parameters</span></span>
+<span><span class="co">#&gt; Running m1 with 5 parameters</span></span>
 <span><span class="co"># Summarize the results</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">tspa_mx_fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Summary of 2SPAD </span></span>
+<span><span class="co">#&gt; Summary of m1 </span></span>
 <span><span class="co">#&gt;  </span></span>
 <span><span class="co">#&gt; free parameters:</span></span>
-<span><span class="co">#&gt;           name matrix row col     Estimate  Std.Error A</span></span>
-<span><span class="co">#&gt; 1   fs1_to_fs2   m1.A fs2 fs1  0.500417224 0.05514849  </span></span>
-<span><span class="co">#&gt; 2 fs2_with_fs2   m1.S fs2 fs2  0.778233329 0.07526000  </span></span>
-<span><span class="co">#&gt; 3 fs1_with_fs1   m1.S fs1 fs1  0.905084857 0.06795953  </span></span>
-<span><span class="co">#&gt; 4   one_to_fs2   m1.M   1 fs2 -0.000463287 0.04094454  </span></span>
-<span><span class="co">#&gt; 5   one_to_fs1   m1.M   1 fs1 -0.001261722 0.03807646  </span></span>
+<span><span class="co">#&gt;        name matrix row col      Estimate  Std.Error A</span></span>
+<span><span class="co">#&gt; 1 m1.A[4,3]      A  f2  f1  0.5004173870 0.05514387  </span></span>
+<span><span class="co">#&gt; 2 m1.S[3,3]      S  f1  f1  0.9050845033 0.06795171  </span></span>
+<span><span class="co">#&gt; 3 m1.S[4,4]      S  f2  f2  0.7782328697 0.07524372  </span></span>
+<span><span class="co">#&gt; 4 m1.M[1,3]      M   1  f1 -0.0012615895 0.03807609  </span></span>
+<span><span class="co">#&gt; 5 m1.M[1,4]      M   1  f2 -0.0004635611 0.04094092  </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Model Statistics: </span></span>
 <span><span class="co">#&gt;                |  Parameters  |  Degrees of Freedom  |  Fit (-2lnL units)</span></span>
-<span><span class="co">#&gt;        Model:              5                   3995              4644.151</span></span>
-<span><span class="co">#&gt;    Saturated:             NA                     NA                    NA</span></span>
-<span><span class="co">#&gt; Independence:             NA                     NA                    NA</span></span>
-<span><span class="co">#&gt; Number of observations/statistics: 1000/4000</span></span>
+<span><span class="co">#&gt;        Model:              5                   1995              4644.151</span></span>
+<span><span class="co">#&gt;    Saturated:              5                   1995                    NA</span></span>
+<span><span class="co">#&gt; Independence:              4                   1996                    NA</span></span>
+<span><span class="co">#&gt; Number of observations/statistics: 1000/2000</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Information Criteria: </span></span>
 <span><span class="co">#&gt;       |  df Penalty  |  Parameters Penalty  |  Sample-Size Adjusted</span></span>
-<span><span class="co">#&gt; AIC:      -3345.849               4654.151                 4654.212</span></span>
-<span><span class="co">#&gt; BIC:     -22952.331               4678.690                 4662.810</span></span>
-<span><span class="co">#&gt; CFI: NA </span></span>
-<span><span class="co">#&gt; TLI: 1   (also known as NNFI) </span></span>
-<span><span class="co">#&gt; RMSEA:  0  [95% CI (NA, NA)]</span></span>
-<span><span class="co">#&gt; Prob(RMSEA &lt;= 0.05): NA</span></span>
+<span><span class="co">#&gt; AIC:       654.1514               4654.151                 4654.212</span></span>
+<span><span class="co">#&gt; BIC:     -9136.8204               4678.690                 4662.810</span></span>
 <span><span class="co">#&gt; To get additional fit indices, see help(mxRefModels)</span></span>
-<span><span class="co">#&gt; timestamp: 2024-09-06 04:19:59 </span></span>
-<span><span class="co">#&gt; Wall clock time: 0.7556674 secs </span></span>
+<span><span class="co">#&gt; timestamp: 2026-08-30 11:03:26 </span></span>
+<span><span class="co">#&gt; Wall clock time: 0.172914 secs </span></span>
 <span><span class="co">#&gt; optimizer:  SLSQP </span></span>
-<span><span class="co">#&gt; OpenMx version number: 2.21.12 </span></span>
+<span><span class="co">#&gt; OpenMx version number: 2.22.11 </span></span>
 <span><span class="co">#&gt; Need help?  See help(mxSummary)</span></span></code></pre></div>
-<p>Alternatively, one can use named matrices (<code>mat_ld</code> and
-<code>mat_ev</code>) to specify the names of the columns for the loading
-and error covariance matrices.</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">cross_load</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"rel_fs2"</span>, <span class="cn">NA</span>, <span class="cn">NA</span>, <span class="st">"rel_fs1"</span><span class="op">)</span>, nrow <span class="op">=</span> <span class="fl">2</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu">`dimnames&lt;-`</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"fs2"</span>, <span class="st">"fs1"</span><span class="op">)</span><span class="op">)</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">err_cov</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ev_fs2"</span>, <span class="cn">NA</span>, <span class="cn">NA</span>, <span class="st">"ev_fs1"</span><span class="op">)</span>, nrow <span class="op">=</span> <span class="fl">2</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu">`dimnames&lt;-`</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"fs2"</span>, <span class="st">"fs1"</span><span class="op">)</span><span class="op">)</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">tspa_mx</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span><span class="va">fsreg_umx</span>, data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
-<span>                         mat_ld <span class="op">=</span> <span class="va">cross_load</span>, mat_ev <span class="op">=</span> <span class="va">err_cov</span><span class="op">)</span></span>
-<span><span class="co"># Run OpenMx</span></span>
-<span><span class="va">tspa_mx_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxRun.html" class="external-link">mxRun</a></span><span class="op">(</span><span class="va">tspa_mx</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Running 2SPAD with 5 parameters</span></span>
-<span><span class="co"># Summarize the results</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">tspa_mx_fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Summary of 2SPAD </span></span>
-<span><span class="co">#&gt;  </span></span>
-<span><span class="co">#&gt; free parameters:</span></span>
-<span><span class="co">#&gt;           name matrix row col     Estimate  Std.Error A</span></span>
-<span><span class="co">#&gt; 1   fs1_to_fs2   m1.A fs2 fs1  0.500417224 0.05514849  </span></span>
-<span><span class="co">#&gt; 2 fs2_with_fs2   m1.S fs2 fs2  0.778233329 0.07526000  </span></span>
-<span><span class="co">#&gt; 3 fs1_with_fs1   m1.S fs1 fs1  0.905084857 0.06795953  </span></span>
-<span><span class="co">#&gt; 4   one_to_fs2   m1.M   1 fs2 -0.000463287 0.04094454  </span></span>
-<span><span class="co">#&gt; 5   one_to_fs1   m1.M   1 fs1 -0.001261722 0.03807646  </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Model Statistics: </span></span>
-<span><span class="co">#&gt;                |  Parameters  |  Degrees of Freedom  |  Fit (-2lnL units)</span></span>
-<span><span class="co">#&gt;        Model:              5                   3995              4644.151</span></span>
-<span><span class="co">#&gt;    Saturated:             NA                     NA                    NA</span></span>
-<span><span class="co">#&gt; Independence:             NA                     NA                    NA</span></span>
-<span><span class="co">#&gt; Number of observations/statistics: 1000/4000</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Information Criteria: </span></span>
-<span><span class="co">#&gt;       |  df Penalty  |  Parameters Penalty  |  Sample-Size Adjusted</span></span>
-<span><span class="co">#&gt; AIC:      -3345.849               4654.151                 4654.212</span></span>
-<span><span class="co">#&gt; BIC:     -22952.331               4678.690                 4662.810</span></span>
-<span><span class="co">#&gt; CFI: NA </span></span>
-<span><span class="co">#&gt; TLI: 1   (also known as NNFI) </span></span>
-<span><span class="co">#&gt; RMSEA:  0  [95% CI (NA, NA)]</span></span>
-<span><span class="co">#&gt; Prob(RMSEA &lt;= 0.05): NA</span></span>
-<span><span class="co">#&gt; To get additional fit indices, see help(mxRefModels)</span></span>
-<span><span class="co">#&gt; timestamp: 2024-09-06 04:20:00 </span></span>
-<span><span class="co">#&gt; Wall clock time: 0.7746925 secs </span></span>
-<span><span class="co">#&gt; optimizer:  SLSQP </span></span>
-<span><span class="co">#&gt; OpenMx version number: 2.21.12 </span></span>
-<span><span class="co">#&gt; Need help?  See help(mxSummary)</span></span></code></pre></div>
-<ul>
-<li>Compare to joint model with OpenMx</li>
-</ul>
-<p>Note: FIML couldn’t finish within 12 hours</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">jreg_umx_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/umx/man/umxRAM.html" class="external-link">umxRAM</a></span><span class="op">(</span></span>
-<span>    <span class="st">"</span></span>
-<span><span class="st">    f1 =~ a * i1 + a * i2 + a * i3 + a * i4 + a * i5 +</span></span>
-<span><span class="st">          a * i6 + a * i7 + a * i8 + a* i9 + a * i10</span></span>
-<span><span class="st">    f2 =~ i11 + i12 + i13 + i14 + i15 + i16 + i17 + i18 + i19 + i20</span></span>
-<span><span class="st">    f2 ~ f1</span></span>
-<span><span class="st">    i1 + i2 + i3 + i4 + i5 + i6 + i7 + i8 + i9 + i10 ~ 0</span></span>
-<span><span class="st">    i11 + i12 + i13 + i14 + i15 + i16 + i17 + i18 + i19 + i20 ~ 0</span></span>
-<span><span class="st">    i1 ~~ 1 * i1</span></span>
-<span><span class="st">    i2 ~~ 1 * i2</span></span>
-<span><span class="st">    i3 ~~ 1 * i3</span></span>
-<span><span class="st">    i4 ~~ 1 * i4</span></span>
-<span><span class="st">    i5 ~~ 1 * i5</span></span>
-<span><span class="st">    i6 ~~ 1 * i6</span></span>
-<span><span class="st">    i7 ~~ 1 * i7</span></span>
-<span><span class="st">    i8 ~~ 1 * i8</span></span>
-<span><span class="st">    i9 ~~ 1 * i9</span></span>
-<span><span class="st">    i10 ~~ 1 * i10</span></span>
-<span><span class="st">    i11 ~~ 1 * i11</span></span>
-<span><span class="st">    i12 ~~ 1 * i12</span></span>
-<span><span class="st">    i13 ~~ 1 * i13</span></span>
-<span><span class="st">    i14 ~~ 1 * i14</span></span>
-<span><span class="st">    i15 ~~ 1 * i15</span></span>
-<span><span class="st">    i16 ~~ 1 * i16</span></span>
-<span><span class="st">    i17 ~~ 1 * i17</span></span>
-<span><span class="st">    i18 ~~ 1 * i18</span></span>
-<span><span class="st">    i19 ~~ 1 * i19</span></span>
-<span><span class="st">    i20 ~~ 1 * i20</span></span>
-<span><span class="st">    "</span>,</span>
-<span>    data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame</a></span><span class="op">(</span><span class="va">dat</span><span class="op">)</span>, FUN <span class="op">=</span> <span class="va">mxFactor</span>,</span>
-<span>                 levels <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>               <span class="fu"><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span>    type <span class="op">=</span> <span class="st">"DWLS"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; 2 latent variables were created:f1, f2.</span></span>
-<span><span class="co">#&gt; object 'threshMat' created to handle: 20 binary variables:'i1', 'i2', 'i3', 'i4', 'i5', 'i6', 'i7', 'i8', 'i9', 'i10', 'i11', 'i12', 'i13', 'i14', 'i15', 'i16', 'i17', 'i18', 'i19', and 'i20'</span></span>
-<span><span class="co">#&gt; 20 trait(s) are binary: 'i1', 'i2', 'i3', 'i4', 'i5', 'i6', 'i7', 'i8', 'i9', 'i10', 'i11', 'i12', 'i13', 'i14', 'i15', 'i16', 'i17', 'i18', 'i19', and 'i20'</span></span>
-<span><span class="co">#&gt; For these, you you MUST fix the mean and variance of the latent traits driving each variable (usually 0 &amp; 1 respectively) .</span></span>
-<span><span class="co">#&gt; See ?umxThresholdMatrix</span></span>
-<span><span class="co">#&gt; Using deviation-based model: Thresholds will be in'threshMat' based on deviations in 'deviations_for_thresh'</span></span>
-<span><span class="co">#&gt; Running m1 with 32 parameters</span></span>
-<span><span class="co">#&gt; ?umxSummary options: std=T|F', digits=, report= 'html', filter= 'NS' &amp; more</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Table: Parameter loadings for model 'm1'</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; |   |name         | Estimate|SE    |type             |</span></span>
-<span><span class="co">#&gt; |:--|:------------|--------:|:-----|:----------------|</span></span>
-<span><span class="co">#&gt; |1  |a            |    1.000|0     |Factor loading   |</span></span>
-<span><span class="co">#&gt; |12 |f2_to_i11    |    1.000|0     |Factor loading   |</span></span>
-<span><span class="co">#&gt; |13 |f2_to_i12    |    0.784|0.254 |Factor loading   |</span></span>
-<span><span class="co">#&gt; |14 |f2_to_i13    |    1.805|0.4   |Factor loading   |</span></span>
-<span><span class="co">#&gt; |15 |f2_to_i14    |    1.268|0.277 |Factor loading   |</span></span>
-<span><span class="co">#&gt; |16 |f2_to_i15    |    1.935|0.42  |Factor loading   |</span></span>
-<span><span class="co">#&gt; |17 |f2_to_i16    |    2.137|0.453 |Factor loading   |</span></span>
-<span><span class="co">#&gt; |18 |f2_to_i17    |    1.279|0.289 |Factor loading   |</span></span>
-<span><span class="co">#&gt; |19 |f2_to_i18    |    0.824|0.198 |Factor loading   |</span></span>
-<span><span class="co">#&gt; |20 |f2_to_i19    |    0.730|0.194 |Factor loading   |</span></span>
-<span><span class="co">#&gt; |21 |f2_to_i20    |    0.941|0.238 |Factor loading   |</span></span>
-<span><span class="co">#&gt; |11 |f1_to_f2     |    0.335|0.068 |Factor to factor |</span></span>
-<span><span class="co">#&gt; |42 |f1_with_f1   |    0.346|0.026 |Factor Variance  |</span></span>
-<span><span class="co">#&gt; |43 |f2_with_f2   |    0.131|0.048 |Factor Variance  |</span></span>
-<span><span class="co">#&gt; |22 |i1_with_i1   |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |23 |i2_with_i2   |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |24 |i3_with_i3   |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |25 |i4_with_i4   |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |26 |i5_with_i5   |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |27 |i6_with_i6   |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |28 |i7_with_i7   |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |29 |i8_with_i8   |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |30 |i9_with_i9   |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |31 |i10_with_i10 |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |32 |i11_with_i11 |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |33 |i12_with_i12 |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |34 |i13_with_i13 |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |35 |i14_with_i14 |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |36 |i15_with_i15 |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |37 |i16_with_i16 |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |38 |i17_with_i17 |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |39 |i18_with_i18 |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |40 |i19_with_i19 |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; |41 |i20_with_i20 |    1.000|0     |Residual         |</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Model Fit: χ²(178) = 264.48, p &lt; 0.001; CFI = NA; TLI = NA; RMSEA = 0.022</span></span>
-<span><span class="co">#&gt; Algebra'threshMat':</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; |     |    i1|     i2|     i3|    i4|     i5|    i6|     i7|     i8|    i9|   i10|  i11|   i12|   i13|    i14|   i15|   i16|   i17|    i18|    i19|   i20|</span></span>
-<span><span class="co">#&gt; |:----|-----:|------:|------:|-----:|------:|-----:|------:|------:|-----:|-----:|----:|-----:|-----:|------:|-----:|-----:|-----:|------:|------:|-----:|</span></span>
-<span><span class="co">#&gt; |th_1 | 0.193| -0.801| -0.231| 0.134| -1.027| 0.336| -1.159| -0.058| 0.469| 0.149| 1.13| 1.484| 0.643| -0.082| 0.953| 0.702| 0.689| -0.026| -0.065| 0.581|</span></span>
-<span><span class="va">jreg_std</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxStandardizeRAMpaths.html" class="external-link">mxStandardizeRAMpaths</a></span><span class="op">(</span><span class="va">jreg_umx_fit</span>, SE <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="va">jreg_std</span><span class="op">[</span><span class="va">jreg_std</span><span class="op">$</span><span class="va">label</span> <span class="op">==</span> <span class="st">"f1_to_f2"</span>, <span class="op">]</span></span>
-<span><span class="co">#&gt;           name    label matrix row col Raw.Value     Raw.SE Std.Value</span></span>
-<span><span class="co">#&gt; 11 m1.A[22,21] f1_to_f2      A  f2  f1 0.3349439 0.06796137  0.478655</span></span>
-<span><span class="co">#&gt;        Std.SE</span></span>
-<span><span class="co">#&gt; 11 0.04374742</span></span></code></pre></div>
+<p>The same model fits in one call from a <code><a href="../reference/get_fs.html">get_fs()</a></code> result:
+with the measurement arguments omitted, <code><a href="../reference/tspa_mx_model.html">tspa_mx_model()</a></code>
+derives the definition-variable matrices (and the <code>int_fs_*</code>
+intercept columns) from the result’s own
+<code>*_by_*</code>/<code>ev_*</code>/<code>ecov_*</code> columns and
+<code>fsb</code> attribute, as in the previous section. The hand-rolled
+route stays when the per-person quantities come from outside
+<code><a href="../reference/get_fs.html">get_fs()</a></code> — as here, where the per-person reliabilities and
+error variances are the hand-computed EAP formulas above, not a
+<code><a href="../reference/get_fs.html">get_fs()</a></code> result’s implied-loadings / error-covariance
+columns.</p>
+</div>
+<div class="section level3">
+<h3 id="joint-model-reference">Joint model reference<a class="anchor" aria-label="anchor" href="#joint-model-reference"></a>
+</h3>
+<p>The gold-standard comparison is a joint (one-step) MIMIC/SEM fit.
+With 2PL items this uses the polychoric-WLS approximation here; a full
+FIML fit is computationally prohibitive at this scale.</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">dat1</span>, <span class="va">dat2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">dat</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"i"</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">20</span><span class="op">)</span></span>
+<span><span class="va">wls_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/lavaan/man/sem.html" class="external-link">sem</a></span><span class="op">(</span><span class="st">"</span></span>
+<span><span class="st">f1 =~ i1 + i2 + i3 + i4 + i5 + i6 + i7 + i8 + i9 + i10</span></span>
+<span><span class="st">f2 =~ i11 + i12 + i13 + i14 + i15 + i16 + i17 + i18 + i19 + i20</span></span>
+<span><span class="st">f2 ~ f1</span></span>
+<span><span class="st">"</span>, data <span class="op">=</span> <span class="va">dat</span>, ordered <span class="op">=</span> <span class="cn">TRUE</span>, std.lv <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">wls_fit</span><span class="op">)</span><span class="op">[</span><span class="st">"f2~f1"</span><span class="op">]</span></span>
+<span><span class="co">#&gt;     f2~f1 </span></span>
+<span><span class="co">#&gt; 0.5490816</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="multidimensional-measurement-model">Multidimensional Measurement Model<a class="anchor" aria-label="anchor" href="#multidimensional-measurement-model"></a>
 </h3>
-<p>When a multidimensional model is used, for EAP scores, we use the
+<p>When a multidimensional model is used, for EAP scores we use the
 following properties generalized from the unidimensional case.
 Specifically, let
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>V</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>𝛈</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">V(\boldsymbol \eta)</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>V</mi><mo stretchy="false" form="prefix">(</mo><mi>𝛈</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">V(\boldsymbol \eta)</annotation></semantics></math>
 =
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>𝛙</mi><annotation encoding="application/x-tex">\boldsymbol{\psi}</annotation></semantics></math>.</p>
 <ul>
@@ -726,37 +617,15 @@ and
 <li>Error matrix
 (<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>𝐄</mi><annotation encoding="application/x-tex">\mathbf{E}</annotation></semantics></math>,
 from software output) =
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mo stretchy="true" form="prefix">(</mo><mi>𝐈</mi><mo>−</mo><msub><mi>𝚲</mi><mrow><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>,</mo><mi>i</mi></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow><mi>𝛙</mi></mrow><annotation encoding="application/x-tex">(\mathbf{I} - \boldsymbol{\Lambda}_{\tilde \eta, i})\boldsymbol{\psi}</annotation></semantics></math>.
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">(</mo><mi>𝐈</mi><mo>−</mo><msub><mi>𝚲</mi><mrow><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>,</mo><mi>i</mi></mrow></msub><mo stretchy="false" form="postfix">)</mo><mi>𝛙</mi></mrow><annotation encoding="application/x-tex">(\mathbf{I} - \boldsymbol{\Lambda}_{\tilde \eta, i})\boldsymbol{\psi}</annotation></semantics></math>.
 Therefore,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝚲</mi><mrow><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>,</mo><mi>i</mi></mrow></msub><mo>=</mo><mi>𝐈</mi><mo>−</mo><mi>𝐄</mi><msup><mi>𝛙</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\boldsymbol{\Lambda}_{\tilde \eta, i} = \mathbf{I} - \mathbf{E} \boldsymbol{\psi}^{-1}</annotation></semantics></math>.</li>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝚲</mi><mrow><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>,</mo><mi>i</mi></mrow></msub><mo>=</mo><mi>𝐈</mi><mo>−</mo><mi>𝐄</mi><msup><mi>𝛙</mi><mrow><mi>−</mi><mn>1</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\boldsymbol{\Lambda}_{\tilde \eta, i} = \mathbf{I} - \mathbf{E} \boldsymbol{\psi}^{-1}</annotation></semantics></math>.</li>
 <li>Error variance of
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mover><mi>η</mi><mo accent="true">̃</mo></mover><mi>i</mi></msub><annotation encoding="application/x-tex">\tilde \eta_i</annotation></semantics></math>
 is
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝚲</mi><mrow><mover><mi>η</mi><mo accent="true">̃</mo></mover><mo>,</mo><mi>i</mi></mrow></msub><mi>𝐄</mi></mrow><annotation encoding="application/x-tex">\boldsymbol{\Lambda}_{\tilde \eta, i} \mathbf{E}</annotation></semantics></math>.</li>
 </ul>
-<!-- 
-
-
-``` r
-# Simulate data with mirt
-set.seed(1234)
-num_obs <- 1000
-true_b <- .4
-# Simulate theta
-eta <- MASS::mvrnorm(num_obs, mu = c(0, 0), Sigma = diag(c(1, 1 - true_b^2)),
-                     empirical = TRUE)
-th1 <- eta[, 1]
-th2 <- -1 + true_b * th1 + eta[, 2]
-# items and response data
-a1 <- matrix(1, 10)
-d1 <- matrix(rnorm(10))
-a2 <- matrix(runif(10, min = 0.5, max = 1.5))
-d2 <- matrix(rnorm(10))
-dat <- simdata(a = cbind(c(a1, rep(0, 10)), c(rep(0, 10), a2)), d = c(d1, d2),
-               N = num_obs, itemtype = "2PL", Theta = cbind(th1, th2))
-```
-
- --><div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">dat1</span>, <span class="va">dat2</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">dat</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"Item_"</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">20</span><span class="op">)</span></span>
 <span><span class="co"># Multidimensional IRT</span></span>
@@ -766,92 +635,54 @@ dat <- simdata(a = cbind(c(a1, rep(0, 10)), c(rep(0, 10), a2)), d = c(d1, d2),
 <span><span class="st">COV = F1*F2</span></span>
 <span><span class="st">CONSTRAIN = (1-10, a1)</span></span>
 <span><span class="st">"</span></span>
-<span><span class="va">mfit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/mirt/man/mirt.html" class="external-link">mirt</a></span><span class="op">(</span><span class="va">dat</span>, model <span class="op">=</span> <span class="va">mod</span>, itemtype <span class="op">=</span> <span class="st">"2PL"</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Factor scores</span></span>
-<span><span class="va">fs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/mirt/man/fscores.html" class="external-link">fscores</a></span><span class="op">(</span><span class="va">mfit</span><span class="op">)</span></span>
-<span><span class="co"># Error portion of factor scores</span></span>
-<span><span class="va">fs_ecov</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/mirt/man/fscores.html" class="external-link">fscores</a></span><span class="op">(</span><span class="va">mfit</span>, return.acov <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co"># Latent variable covariance</span></span>
-<span><span class="va">psi</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/diag.html" class="external-link">diag</a></span><span class="op">(</span><span class="fl">2</span><span class="op">)</span></span>
-<span><span class="va">psi</span><span class="op">[</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">psi</span><span class="op">[</span><span class="fl">2</span>, <span class="fl">1</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">mfit</span><span class="op">)</span><span class="op">$</span><span class="va">GroupPars</span><span class="op">[</span><span class="fl">1</span>, <span class="st">"COV_21"</span><span class="op">]</span></span>
-<span><span class="va">inv_psi</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/solve.html" class="external-link">solve</a></span><span class="op">(</span><span class="va">psi</span><span class="op">)</span></span>
-<span><span class="va">load</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">fs_ecov</span>, FUN <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">err</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/diag.html" class="external-link">diag</a></span><span class="op">(</span><span class="fl">2</span><span class="op">)</span> <span class="op">-</span> <span class="va">err</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">inv_psi</span></span>
-<span><span class="op">}</span><span class="op">)</span></span>
-<span><span class="va">fs_err</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/funprog.html" class="external-link">Map</a></span><span class="op">(</span><span class="va">`%*%`</span>, <span class="va">load</span>, <span class="va">fs_ecov</span><span class="op">)</span></span>
-<span><span class="co"># Convert to data frame</span></span>
-<span><span class="va">load_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">load</span>, FUN <span class="op">=</span> <span class="va">c</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span>what <span class="op">=</span> <span class="va">rbind</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"F1_by_fs1"</span>, <span class="st">"F1_by_fs2"</span>, <span class="st">"F2_by_fs1"</span>, <span class="st">"F2_by_fs2"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">fs_err_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">fs_err</span>, FUN <span class="op">=</span> <span class="va">`[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span>, <span class="fl">4</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span>what <span class="op">=</span> <span class="va">rbind</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ev_fs1"</span>, <span class="st">"ecov_fs1_fs2"</span>, <span class="st">"ev_fs2"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Combine into data set</span></span>
-<span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">fs</span>, <span class="va">load_dat</span>, <span class="va">fs_err_dat</span><span class="op">)</span></span>
-<span><span class="co"># Build OpenMx model</span></span>
-<span><span class="va">fsreg_umx</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/umx/man/umxLav2RAM.html" class="external-link">umxLav2RAM</a></span><span class="op">(</span></span>
-<span>    <span class="st">"</span></span>
-<span><span class="st">      F2 ~ F1</span></span>
-<span><span class="st">      F2 + F1 ~ 1</span></span>
-<span><span class="st">    "</span>,</span>
-<span>    printTab <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; ?plot.MxModel options: std, means, digits, strip_zero, file, splines=T/F/ortho,..., min=, max =, same = , fixed, resid= 'circle|line|none'</span></span>
-<span><span class="va">cross_load</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"F1_by_fs1"</span>, <span class="st">"F1_by_fs2"</span>,</span>
-<span>                       <span class="st">"F2_by_fs1"</span>, <span class="st">"F2_by_fs2"</span><span class="op">)</span>, nrow <span class="op">=</span> <span class="fl">2</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu">`dimnames&lt;-`</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"F1"</span>, <span class="st">"F2"</span><span class="op">)</span><span class="op">)</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">err_cov</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ev_fs1"</span>, <span class="st">"ecov_fs1_fs2"</span>,</span>
-<span>                    <span class="st">"ecov_fs1_fs2"</span>, <span class="st">"ev_fs2"</span><span class="op">)</span>, nrow <span class="op">=</span> <span class="fl">2</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>    <span class="fu">`dimnames&lt;-`</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"F1"</span>, <span class="st">"F2"</span><span class="op">)</span><span class="op">)</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">tspa_mx2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span><span class="va">fsreg_umx</span>, data <span class="op">=</span> <span class="va">fs_dat</span>,</span>
-<span>                          mat_ld <span class="op">=</span> <span class="va">cross_load</span>, mat_ev <span class="op">=</span> <span class="va">err_cov</span><span class="op">)</span></span>
+<span><span class="va">mfit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://philchalmers.github.io/mirt/reference/mirt.html" class="external-link">mirt</a></span><span class="op">(</span><span class="va">dat</span>, model <span class="op">=</span> <span class="va">mod</span>, itemtype <span class="op">=</span> <span class="st">"2PL"</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Factor scores, plus the per-row loadings and error covariances and</span></span>
+<span><span class="co"># score intercepts get_fs() attaches (the same full-factor-covariance</span></span>
+<span><span class="co"># correction the EAP section above derives from the hand-computed</span></span>
+<span><span class="co"># reliabilities and error variances).</span></span>
+<span><span class="va">fs_dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_fs.html">get_fs</a></span><span class="op">(</span><span class="va">mfit</span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Structural model on the two latent dimensions (the mirt factor names, kept</span></span>
+<span><span class="co"># distinct from the score columns). All measurement inputs are derived from</span></span>
+<span><span class="co"># the get_fs() result's attributes: the per-row loadings and error</span></span>
+<span><span class="co"># covariances become definition variables referencing its own</span></span>
+<span><span class="co"># *_by_*/ev_*/ecov_* columns, and the int_fs_* score-intercept columns are</span></span>
+<span><span class="co"># appended from the fsb attribute (the fs_indiv() round-trip, now automatic):</span></span>
+<span><span class="va">tspa_mx2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tspa_mx_model.html">tspa_mx_model</a></span><span class="op">(</span>model <span class="op">=</span> <span class="st">"F2 ~ F1\nF2 + F1 ~ 1"</span>, data <span class="op">=</span> <span class="va">fs_dat</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Running m1 with 5 parameters</span></span>
 <span><span class="co"># Run OpenMx</span></span>
 <span><span class="va">tspa_mx2_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxRun.html" class="external-link">mxRun</a></span><span class="op">(</span><span class="va">tspa_mx2</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Running 2SPAD with 5 parameters</span></span>
+<span><span class="co">#&gt; Running m1 with 5 parameters</span></span>
 <span><span class="co"># Summarize the results</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">tspa_mx2_fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Summary of 2SPAD </span></span>
+<span><span class="co">#&gt; Summary of m1 </span></span>
 <span><span class="co">#&gt;  </span></span>
 <span><span class="co">#&gt; free parameters:</span></span>
-<span><span class="co">#&gt;         name matrix row col      Estimate  Std.Error A</span></span>
-<span><span class="co">#&gt; 1   F1_to_F2   m1.A  F2  F1  4.753222e-01 0.05207370  </span></span>
-<span><span class="co">#&gt; 2 F2_with_F2   m1.S  F2  F2  7.740976e-01 0.07360716  </span></span>
-<span><span class="co">#&gt; 3 F1_with_F1   m1.S  F1  F1  1.000064e+00 0.07398508  </span></span>
-<span><span class="co">#&gt; 4  one_to_F2   m1.M   1  F2  5.438812e-05 0.04081612  </span></span>
-<span><span class="co">#&gt; 5  one_to_F1   m1.M   1  F1 -1.312738e-06 0.03972658  </span></span>
+<span><span class="co">#&gt;        name matrix row col      Estimate  Std.Error A</span></span>
+<span><span class="co">#&gt; 1 m1.A[4,3]      A  F2  F1  4.753223e-01 0.05204783  </span></span>
+<span><span class="co">#&gt; 2 m1.S[3,3]      S  F1  F1  1.000064e+00 0.07394681  </span></span>
+<span><span class="co">#&gt; 3 m1.S[4,4]      S  F2  F2  7.740987e-01 0.07359209  </span></span>
+<span><span class="co">#&gt; 4 m1.M[1,3]      M   1  F1 -9.402292e-07 0.03972034  </span></span>
+<span><span class="co">#&gt; 5 m1.M[1,4]      M   1  F2  5.419113e-05 0.04081000  </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Model Statistics: </span></span>
 <span><span class="co">#&gt;                |  Parameters  |  Degrees of Freedom  |  Fit (-2lnL units)</span></span>
-<span><span class="co">#&gt;        Model:              5                   3995              4327.057</span></span>
-<span><span class="co">#&gt;    Saturated:             NA                     NA                    NA</span></span>
-<span><span class="co">#&gt; Independence:             NA                     NA                    NA</span></span>
-<span><span class="co">#&gt; Number of observations/statistics: 1000/4000</span></span>
+<span><span class="co">#&gt;        Model:              5                   1995              4327.057</span></span>
+<span><span class="co">#&gt;    Saturated:              5                   1995                    NA</span></span>
+<span><span class="co">#&gt; Independence:              4                   1996                    NA</span></span>
+<span><span class="co">#&gt; Number of observations/statistics: 1000/2000</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Information Criteria: </span></span>
 <span><span class="co">#&gt;       |  df Penalty  |  Parameters Penalty  |  Sample-Size Adjusted</span></span>
-<span><span class="co">#&gt; AIC:      -3662.943               4337.057                 4337.117</span></span>
-<span><span class="co">#&gt; BIC:     -23269.425               4361.596                 4345.716</span></span>
-<span><span class="co">#&gt; CFI: NA </span></span>
-<span><span class="co">#&gt; TLI: 1   (also known as NNFI) </span></span>
-<span><span class="co">#&gt; RMSEA:  0  [95% CI (NA, NA)]</span></span>
-<span><span class="co">#&gt; Prob(RMSEA &lt;= 0.05): NA</span></span>
+<span><span class="co">#&gt; AIC:        337.057               4337.057                 4337.117</span></span>
+<span><span class="co">#&gt; BIC:      -9453.915               4361.596                 4345.716</span></span>
 <span><span class="co">#&gt; To get additional fit indices, see help(mxRefModels)</span></span>
-<span><span class="co">#&gt; timestamp: 2024-09-06 04:20:11 </span></span>
-<span><span class="co">#&gt; Wall clock time: 0.9092374 secs </span></span>
+<span><span class="co">#&gt; timestamp: 2026-08-30 11:03:32 </span></span>
+<span><span class="co">#&gt; Wall clock time: 0.2066798 secs </span></span>
 <span><span class="co">#&gt; optimizer:  SLSQP </span></span>
-<span><span class="co">#&gt; OpenMx version number: 2.21.12 </span></span>
-<span><span class="co">#&gt; Need help?  See help(mxSummary)</span></span>
-<span><span class="co"># Standardize coefficients</span></span>
-<span><span class="fu"><a href="https://rdrr.io/pkg/OpenMx/man/mxStandardizeRAMpaths.html" class="external-link">mxStandardizeRAMpaths</a></span><span class="op">(</span><span class="va">tspa_mx2_fit</span>, SE <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">$</span><span class="va">m1</span><span class="op">[</span><span class="fl">1</span>, <span class="op">]</span></span>
-<span><span class="co">#&gt; Warning in mxStandardizeRAMpaths(tspa_mx2_fit, SE = TRUE): 'model' (or one of</span></span>
-<span><span class="co">#&gt; its submodels) contains definition variables; interpret results of</span></span>
-<span><span class="co">#&gt; mxStandardizeRAMpaths() cautiously</span></span>
-<span><span class="co">#&gt;        name    label matrix row col Raw.Value    Raw.SE Std.Value     Std.SE</span></span>
-<span><span class="co">#&gt; 1 m1.A[1,2] F1_to_F2      A  F2  F1 0.4753222 0.0520737 0.4753271 0.04563049</span></span></code></pre></div>
+<span><span class="co">#&gt; OpenMx version number: 2.22.11 </span></span>
+<span><span class="co">#&gt; Need help?  See help(mxSummary)</span></span></code></pre></div>
 </div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
@@ -865,7 +696,7 @@ dat <- simdata(a = cbind(c(a1, rep(0, 10)), c(rep(0, 10), a2)), d = c(d1, d2),
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>
