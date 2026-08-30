@@ -1,6 +1,10 @@
 # R2spa Package Dependency Analysis
 
-## Exported Functions — Dependency Map
+> **Structure:** The first section (below) is the **pre-quarantine** state
+> (2026-08-17), preserved for historical reference. The current state
+> (2026-08-30) is in the "Current Dependency Map" section at the end.
+
+## Exported Functions — Dependency Map (Pre-Quarantine, Historical)
 
 ### 1. `get_fs()`  (get_fscore.R:58)
 **Purpose:** Main entry point for factor-score extraction from raw data.
@@ -44,11 +48,11 @@
 - **Internal calls:** `update_tspa()`
 - **Central:** NO — post-hoc correction, depends on `tspa()` output
 
-### 8. `tspa_mx_model()`  (tspa_mx.R:152)
-**Purpose:** Build an OpenMx definition-variable 2S-PA model (a single-level RAM assembled from `lavaan::lavaanify`).
-- **External deps:** `OpenMx::mxModel`, `OpenMx::mxData`, `OpenMx::mxPath`, `OpenMx::mxFitFunctionML`, `OpenMx::mxRun` — all guarded by `require_openmx()`. `OpenMx` is a `Suggests` (optional), **not** an `Import`; the `lavaan`-based `tspa()` route does not need it.
-- **Internal calls:** `tspa_mx_spec()`, `tspa_mx_derive_measurement()`, `tspa_mx_model_string()`, `lav_to_mx_ram()`, `tspa_mx_paths()`, `tspa_mx_defvar_col()`, `require_openmx()`
-- **Central:** NO — alternative (optional) OpenMx pathway
+### 8. `tspa_mx_model()`  (tspa_mx.R:100)
+**Purpose:** Build OpenMx definition-variable 2S-PA model.
+- **External deps:** `OpenMx::mxModel`, `OpenMx::mxData`, `OpenMx::mxMatrix`, `OpenMx::mxAlgebraFromString`, `OpenMx::mxExpectationNormal`, `OpenMx::mxFitFunctionML`
+- **Internal calls:** `make_mx_ld()`, `make_mx_vc()`, `make_mx_int()`
+- **Central:** NO — alternative OpenMx pathway
 
 ### 9. `tspa_plot()`  (tspa_plot.R:55)
 **Purpose:** Diagnostic scatterplots and residual plots.
@@ -205,9 +209,9 @@ flowchart TD
                         External Packages
        ┌──────────┬──────────┬───────────┬──────────┬─────────┐
        │  lavaan  │   lme4   │   MASS    │  Matrix  │ OpenMx  │
-       └────┬─────┴────┬─────┴─────┬─────┴────┬─────┴───┬─────┘
-            │           │           │         │         │
-            ▼           ▼           ▼         ▼         ▼
+        └────┬─────┴────┬─────┴─────┬─────┴────┬─────┴───┬─────┘
+             │          │           │          │         │
+             ▼          ▼           ▼          ▼         ▼
     ┌─────────────────────────────────────────────────────────┐
     │              STAGE 1 — Factor Score Extraction           │
     │                                                         │
@@ -240,54 +244,133 @@ flowchart TD
 
 ---
 
-## Post-Quarantine Dependency Map (2026-08-17)
+## Current Dependency Map (2026-08-30)
 
 > Everything above this line is the **pre-quarantine** state, preserved for
 > historical reference. Since 2026-08-17 (plan: `archive/PLAN_QUARANTINE.md`),
-> all in-package code that **consumes** `get_fs()` / `tspa()` has been moved to
-> `.quarantine/{R,tests,vignettes}/` while the `get_fs()`/`tspa()` contracts are
-> under revision. The quarantined files remain functional and self-contained;
-> restore by `git mv`-ing them back, then `document()` → `test()` → `check()`.
+> the package went through quarantine → re-integration (2026-08) → new feature
+> work (PLANs 06–16). `get_fs_int()` was **deleted** and replaced by
+> `compute_fs_prod()` / `get_fs(product = )`.
 
-### What left the package
+### What changed since quarantine (2026-08 re-integration + new work)
 
-- **Exports removed from `NAMESPACE`:** `get_fs_int`, `tspa_mx_model`,
-  `vcov_corrected`, `grand_standardized_solution`,
-  `grandStandardizedSolution`.
-- **`.quarantine/R/`:** `get_fs_int.R`, `tspa_mx.R`, `tspa_corrected_se.R`,
-  `grandStandardizedSolution.R`.
-- **`.quarantine/tests/`:** `test-get_fs_int.R`, `test-grandStandardizedSolution.R`
-  (each with the sections extracted from other test files appended, provenance
-  headers included) + 2 new self-contained files `test-tspa_mx.R` and
-  `test-vcov_corrected.R` (extracted Mx / corrected-SE blocks + copied setups).
-- **`.quarantine/vignettes/`:** `get_fs_int-vignette.Rmd`,
-  `categorical-interaction.Rmd`, `reliability.Rmd`, `corrected-se.Rmd`,
-  `tspa-vignette-mx.Rmd`, `missing-data.Rmd`, `multilevel.rmd`,
-  `gr-std-coef.Rmd` + fixtures `sim_results_reliability.RDS`, `boo_joint.RDS`,
-  `boo_separate.RDS` (+ their untracked `.html` builds).
-- **Imports that left `NAMESPACE`:** `OpenMx` (6 fns; `tspa_mx.R` was the only
-  consumer), `stats::pnorm`/`qnorm`, `utils::combn`/`tail`,
-  `lavaan::lav_func_jacobian_complex` (bare calls in staying code are covered by
-  the re-declared `importFrom(lavaan, vcov)` plus namespaced calls). `OpenMx`
-  **stays in `DESCRIPTION: Imports`** until re-integration — hence exactly one
-  check NOTE (`'OpenMx' in Imports but not imported from`), expected and
-  accepted.
-- **`R/lavaan_compat.R`** (`tsp_*` lavaan-drift canary) **stays** but is now
-  unconsumed by package code (its only consumers were `tspa_corrected_se.R` and
-  `grandStandardizedSolution.R`, both quarantined) — it is exercised solely by
-  its canary tests, `tests/testthat/test-lavaan_compat.R`. Kept by user decision.
+- **Re-integrated into `R/`:** `tspa_corrected_se.R` (`vcov_corrected()`),
+  `grandStandardizedSolution.R` (`grand_standardized_solution()` /
+  `grandStandardizedSolution()`), `tspa_mx.R` (`tspa_mx_model()`).
+- **Deleted:** `get_fs_int.R` (replaced by `compute_fs_prod.R`).
+- **New files:** `compute_fs_prod.R` (product factor-score indicators),
+  `fs_indiv.R` (individual-specific column re-derivation).
+- **New exports:** `compute_fs_prod`, `fs_indiv`.
+- **Removed export:** `get_fs_int`.
+- **`OpenMx`** is an optional dependency (a `Suggests`): only `tspa_mx_model()`
+  in `R/tspa_mx.R` needs it, via `OpenMx::`-namespaced calls guarded by
+  `require_openmx()`; it is no longer in `Imports`/`NAMESPACE` (the former
+  `'OpenMx' in Imports but not imported from` NOTE is obsolete).
+- **`R/lavaan_compat.R`** (`tsp_*` wrappers) is consumed again by
+  `tspa_corrected_se.R` (`tsp_set_vcov()`, `tsp_ngroups()`, `tsp_nobs()`,
+  `tsp_converged()`) and `grandStandardizedSolution.R` (`tsp_model_matrices()`,
+  `tsp_free_matrices()`, `tsp_partable_read()`, `tsp_partable_positions()`,
+  `tsp_beta_names()`, `tsp_nobs()`), in addition to its own canary tests.
+- **New S3 methods:** `get_fs.SingleGroupClass`, `get_fs.MultipleGroupClass`
+  (mirt, `Suggests`-only, guarded by `require_mirt()`).
 
-### Surviving exports (8 + 4 S3 methods)
+### Current exports (14 + 6 S3 methods)
 
-`get_fs()` (+ `.data.frame`, `.lavaan`, `.merMod`, `.default`),
-`get_fs_lavaan()`, `get_fs_lmer()` (legacy wrappers), `compute_fscore()`,
-`augment_lav_predict()`, `fs_to_group_list()`, `block_diag()`, `tspa()`.
+**Exported functions (14):**
+`get_fs()`, `get_fs_lavaan()`, `get_fs_lmer()`, `compute_fscore()`,
+`compute_fs_prod()`, `augment_lav_predict()`, `fs_indiv()`,
+`fs_to_group_list()`, `block_diag()`, `tspa()`, `tspa_mx_model()`,
+`vcov_corrected()`, `grand_standardized_solution()`,
+`grandStandardizedSolution()` (legacy CamelCase alias).
 
-`R/` now holds 7 files (~2,500 lines): `get_fscore.R`, `get_fs_methods.R`,
-`get_fscore_math.R`, `tspa.R`, `lavaan_compat.R`, `helper.R`, `globals.R`;
-9 test files in `tests/testthat/`; 6 vignettes in `vignettes/`.
+**S3 methods on `get_fs()` (6):**
+`.data.frame`, `.default`, `.lavaan`, `.merMod`,
+`.SingleGroupClass`, `.MultipleGroupClass` (mirt).
 
-### Post-quarantine dependency diagram (Mermaid)
+`R/` holds 12 files (~8,843 lines): `get_fscore.R`, `get_fs_methods.R`,
+`get_fscore_math.R`, `compute_fs_prod.R`, `fs_indiv.R`, `tspa.R`,
+`tspa_corrected_se.R`, `tspa_mx.R`, `grandStandardizedSolution.R`,
+`lavaan_compat.R`, `helper.R`, `globals.R`; 27 test files in
+`tests/testthat/`; 11 vignettes in `vignettes/`.
+
+### Internal (Unexported) Functions
+
+| Function | File | Called By |
+|---|---|---|
+| `assemble_fs_blocks()` | get_fscore.R | `get_fs.lavaan()`, `get_fs.merMod()` |
+| `augment_fs()` | get_fscore.R | `assemble_fs_blocks()` |
+| `augment_fs2()` | get_fscore_math.R | `augment_lav_predict()` |
+| `compute_a()` | get_fscore_math.R | `compute_fspars()`, `compute_fsrel()` |
+| `compute_a_bartlett()` | get_fscore_math.R | `compute_a_from_mat()` |
+| `compute_a_from_mat()` | get_fscore_math.R | `compute_fscore()`, `compute_fspars()` |
+| `compute_a_mean()` | get_fscore_math.R | `compute_fscore()` (mean-scoring) |
+| `compute_a_reg()` | get_fscore_math.R | `compute_a_from_mat()` |
+| `compute_evfs()` | get_fscore_math.R | `compute_fspars()` |
+| `compute_fsrel()` | get_fscore_math.R | `get_fs.lavaan()` |
+| `compute_fspars()` | get_fscore_math.R | `correct_evfs()`, `vcov_ld_evfs()` |
+| `compute_grad_ld_evfs()` | get_fscore_math.R | `vcov_ld_evfs()` |
+| `compute_ldfs()` | get_fscore_math.R | `compute_fspars()` |
+| `compute_lav_fs_matrices()` | get_fscore_math.R | `augment_lav_predict()` |
+| `correct_evfs()` | get_fscore_math.R | `get_fs.lavaan()` |
+| `create_fsL_names()` | get_fscore_math.R | `get_fs_mat_names()` |
+| `create_fsT_names()` | get_fscore_math.R | `get_fs_mat_names()` |
+| `eeta()` | grandStandardizedSolution.R | `veta_grand()` |
+| `fs_psi_matrix()` | compute_fs_prod.R | `compute_fs_prod()`, `tspa()` |
+| `fs_prod_ecov()` | compute_fs_prod.R | `tspa_prod_ecov()`, `tspa()` (mf path) |
+| `fs_prod_gamma()` | compute_fs_prod.R | `compute_fs_prod()`, `tspa()` (mf path) |
+| `fs_prod_se2()` | compute_fs_prod.R | `compute_fs_prod()`, `tspa()` (mf path) |
+| `fs_row_cols()` | fs_indiv.R | `fs_indiv()`, `augment_fs2()` |
+| `get_D()` | get_fs_methods.R | `get_fs.merMod()` |
+| `get_fs_blocks.lavaan()` | get_fs_methods.R | `get_fs.lavaan()` |
+| `get_fs_blocks.merMod()` | get_fs_methods.R | `get_fs.merMod()` |
+| `get_fs_local()` | get_fs_methods.R | `get_fs.data.frame()` (`local = TRUE`) |
+| `merge_local_fs()` | get_fs_methods.R | `get_fs_local()` |
+| `mirt_group_pars()` | get_fs_methods.R | `get_fs.MultipleGroupClass()` |
+| `require_mirt()` | get_fs_methods.R | mirt S3 methods (guard) |
+| `grand_std_beta_est()` | grandStandardizedSolution.R | `grand_standardized_solution()` |
+| `is_per_unit_fs()` | tspa.R | `tspa()` |
+| `parse_product_spec()` | compute_fs_prod.R | `compute_fs_prod()` |
+| `pool_per_unit()` | tspa.R | `tspa()` |
+| `pool_se_fs()` | tspa.R | `tspa()`, `derive_sf_se_fs()` |
+| `resolve_fs_per_row()` | fs_indiv.R | `fs_indiv()` |
+| `resolve_per_obs()` | fs_indiv.R | `resolve_fs_per_row()` |
+| `resolve_lavaan_unified()` | fs_indiv.R | `resolve_fs_per_row()` |
+| `resolve_lavaan_list()` | fs_indiv.R | `resolve_fs_per_row()` |
+| `resolve_mer_mod()` | fs_indiv.R | `resolve_fs_per_row()` |
+| `resolve_group_blocks()` | fs_indiv.R | `resolve_lavaan_*()`, `resolve_mer_mod()` |
+| `std_beta_est()` | grandStandardizedSolution.R | `grand_standardized_solution()` |
+| `tspa_ensure_product_cols()` | tspa.R | `tspa()` |
+| `tspa_mf()` | tspa.R | `tspa()` |
+| `tspa_mx_align_scores()` | tspa_mx.R | `tspa_mx_spec()` |
+| `tspa_mx_cells()` | tspa_mx.R | `tspa_mx_spec()` |
+| `tspa_mx_cellval()` | tspa_mx.R | `tspa_mx_model_string()` |
+| `tspa_mx_defvar_col()` | tspa_mx.R | `tspa_mx_paths()` |
+| `tspa_mx_derive_measurement()` | tspa_mx.R | `tspa_mx_model()` |
+| `tspa_mx_model_string()` | tspa_mx.R | `tspa_mx_model()` |
+| `tspa_mx_op_map()` | tspa_mx.R | `tspa_mx_paths()` |
+| `tspa_mx_paths()` | tspa_mx.R | `lav_to_mx_ram()` |
+| `tspa_mx_spec()` | tspa_mx.R | `tspa_mx_model()` |
+| `tspa_mx_unwrap()` | tspa_mx.R | `tspa_mx_spec()` |
+| `lav_to_mx_ram()` | tspa_mx.R | `tspa_mx_model()` |
+| `tspa_prod_ecov()` | tspa.R | `tspa()` |
+| `tspa_product_latents()` | tspa.R | `tspa()` |
+| `tspa_render()` | tspa.R | `tspa_sf()`, `tspa_mf()` |
+| `derive_sf_se_fs()` | tspa.R | `tspa()` (auto-derive se_fs) |
+| `tspa_rewrite_product_toks()` | tspa.R | `tspa()` |
+| `tspa_schema_mf()` | tspa.R | `tspa_mf()` |
+| `tspa_schema_sf()` | tspa.R | `tspa_sf()` |
+| `tspa_sf()` | tspa.R | `tspa()` |
+| `tspa_sf_alias()` | tspa.R | `tspa()` |
+| `vcov_jacobian_analytic()` | tspa_corrected_se.R | `vcov_corrected()` |
+| `check_refit_convergence()` | tspa_corrected_se.R | `vcov_corrected()` (FD path) |
+| `tsp_tri2full_colmajor()` | tspa_corrected_se.R | `vcov_corrected()` |
+| `veta()` | grandStandardizedSolution.R | `std_beta_est()`, `veta_grand()` |
+| `veta_grand()` | grandStandardizedSolution.R | `grand_std_beta_est()` |
+| `vcov_ld_evfs()` | get_fscore_math.R | `get_fs.lavaan()` |
+| `.combine_est()` | grandStandardizedSolution.R | `grand_standardized_solution()` |
+| `.fill_matrix_list()` | grandStandardizedSolution.R | `std_beta_est()`, `grand_std_beta_est()` |
+
+### Current dependency diagram (Mermaid)
 
 ```mermaid
 flowchart TD
@@ -296,19 +379,21 @@ flowchart TD
 
         get_fs["<b>get_fs()</b><br/>(S3 generic, entry)"]
 
-        get_fs -->|data.frame input| gfdf["<b>get_fs.data.frame()</b><br/>lavaan::cfa() then re-dispatch"]
-        get_fs -->|lavaan object| gflm["<b>get_fs.lavaan()</b><br/>(hub)"]
-        get_fs -->|merMod object| gfm["<b>get_fs.merMod()</b>"]
-        get_fs -->|anything else| gfd["get_fs.default()<br/>(clear error)"]
+        get_fs -->|data.frame| gfdf["<b>get_fs.data.frame()</b><br/>lavaan::cfa() then re-dispatch"]
+        get_fs -->|lavaan| gflm["<b>get_fs.lavaan()</b><br/>(hub)"]
+        get_fs -->|merMod| gfm["<b>get_fs.merMod()</b>"]
+        get_fs -->|mirt SG| gfs["get_fs.SingleGroupClass()"]
+        get_fs -->|mirt MG| gfm2["get_fs.MultipleGroupClass()"]
+        get_fs -->|default| gfd["get_fs.default()<br/>(clear error)"]
 
-        gflm --> gfbl["get_fs_blocks.lavaan()<br/>(prepare_fs per group)"]
+        gflm --> gfbl["get_fs_blocks.lavaan()<br/>(per-group scoring)"]
         gfbl --> compute_fscore["<b>compute_fscore()</b><br/>(core math)"]
         gflm --> correct_evfs["correct_evfs()"]
-        gflm --> compute_fsrel["compute_fsrel()<br/>coef() / lavInspect()"]
+        gflm --> compute_fsrel["compute_fsrel()"]
         gflm --> assemble["assemble_fs_blocks()"]
+        gflm --> vcov_ld["vcov_ld_evfs()<br/>(vfsLT attr)"]
 
         assemble --> augment_fs["augment_fs()"]
-        assemble --> cbi["check_blocks_identical()"]
 
         correct_evfs --> cfsp["compute_fspars()"]
         compute_fsrel --> compa["compute_a()"]
@@ -326,93 +411,132 @@ flowchart TD
         gfm --> gfbbm["get_fs_blocks.merMod()<br/>lme4::getME('Z','b')"]
         gfbbm --> augment_fs
 
-        aul["<b>augment_lav_predict()</b><br/>(exported; lavaan::lavPredict /<br/>lavInspect)"] --> clfm["compute_lav_fs_matrices()"]
+        aul["<b>augment_lav_predict()</b><br/>lavaan::lavPredict"] --> clfm["compute_lav_fs_matrices()"]
         aul --> augs2["augment_fs2()"]
         aul --> gfmn["get_fs_mat_names()"]
+        augs2 --> fsrc["fs_row_cols()<br/>(shared with fs_indiv)"]
+
+        fsind["<b>fs_indiv()</b><br/>(re-derive per-row cols)"] --> rfsr["resolve_fs_per_row()"]
+        rfsr --> fsrc
+
+        cfp["<b>compute_fs_prod()</b><br/>(product indicators)"] --> pps["parse_product_spec()"]
+        cfp --> fps2["fs_prod_se2()"]
+        cfp --> fpg["fs_prod_gamma()"]
+        cfp --> fppm["fs_psi_matrix()"]
 
         glav["get_fs_lavaan()<br/>(legacy wrapper)"] -->|delegates| get_fs
         glmer["get_fs_lmer()<br/>(legacy wrapper)"] -->|delegates| get_fs
-        fsgl["<b>fs_to_group_list()</b><br/>(unified df → list)"]
+        fsgl["<b>fs_to_group_list()</b>"]
     end
 
-    subgraph STAGE_2["STAGE 2: Path Analysis (lavaan only)"]
+    subgraph STAGE_2["STAGE 2: Path Analysis"]
         direction TB
-        tspa["<b>tspa()</b><br/>(entry)"] --> sfalias["tspa_sf_alias()<br/>(product-score auto-alias)"]
+        tspa["<b>tspa()</b><br/>(entry)"] --> sfalias["tspa_sf_alias()"]
+        tspa --> tsl["tspa_product_latents()<br/>(product detection)"]
+        tspa --> teq["tspa_ensure_product_cols()<br/>(auto compute_fs_prod)"]
+        tspa --> tpec["tspa_prod_ecov()<br/>(product error cov)"]
         tspa --> tssf["tspa_schema_sf()"]
-        tspa --> tsmf["tspa_schema_mf()<br/>(consumes fsT / fsL / fsb attrs)"]
-        tssf --> rend["tspa_render()<br/>(frozen partable schema)"]
+        tspa --> tsmf["tspa_schema_mf()"]
+        tssf --> rend["tspa_render()"]
         tsmf --> rend
         tspa --> sem["lavaan::sem()"]
+
+        tpec --> fpec["fs_prod_ecov()"]
+
+        tspa_mx["<b>tspa_mx_model()</b><br/>(OpenMx path)"] --> mxder["tspa_mx_derive_measurement()"]
+        tspa_mx --> mxspec["tspa_mx_spec()"]
+        tspa_mx --> mxms["tspa_mx_model_string()"]
+        tspa_mx --> ltmr["lav_to_mx_ram()<br/>OpenMx::mxModel"]
+        mxspec --> mxcells["tspa_mx_cells()"]
+        mxms --> mxcv["tspa_mx_cellval()"]
+        ltmr --> mxpaths["tspa_mx_paths()"]
+        mxpaths --> mxdv["tspa_mx_defvar_col()"]
     end
 
-    subgraph COMPAT["Lavaan Drift Canary (R/lavaan_compat.R)"]
-        compat["tsp_* wrappers<br/>(lavaan::lavTech + slots)<br/>currently consumed only by<br/>test-lavaan_compat.R"]
-    end
-
-    subgraph QUAR["QUARANTINED — .quarantine/ (excluded from build/tests)"]
+    subgraph POSTHOC["Post-Hoc Correction & Standardization"]
         direction TB
-        q1["get_fs_int()"]
-        q2["tspa_mx_model()<br/>(OpenMx path)"]
-        q3["vcov_corrected()<br/>(delta-method SE)"]
-        q4["grand_standardized_<br/>solution()"]
+        vcovc["<b>vcov_corrected()</b><br/>(delta-method SE)"] --> vja["vcov_jacobian_analytic()<br/>(refit-free analytic)"]
+        vcovc --> tsp_set["tsp_set_vcov()<br/>(in-place overwrite)"]
+
+        gss["<b>grand_standardized_<br/>solution()</b>"] --> stbe["std_beta_est()"]
+        gss --> gsb["grand_std_beta_est()"]
+        stbe --> vetaF["veta()"]
+        gsb --> vg["veta_grand()"] --> vetaF
+        gsb --> eetaF["eeta()"]
     end
 
-    STAGE_1 -->|scores + fsT/fsL/fsb attrs| STAGE_2
-    aul -.->|feeds ld/ev matrices| q2
-    fsgl -.->|list attrs consumed by| STAGE_2
-    compat -.->|wrappers used by| q3
-    compat -.->|wrappers used by| q4
+    subgraph COMPAT["Lavaan Compat (R/lavaan_compat.R)"]
+        compat["tsp_* wrappers<br/>(lavTech + slots)"]
+    end
+
+    STAGE_1 -->|scores + fsT/fsL/fsb| STAGE_2
+    cfp -.->|product cols| tspa
+    compat -.->|tsp_set_vcov, tsp_nobs| POSTHOC
+    compat -.->|tsp_model_matrices, tsp_beta_names| gss
 
     classDef exported fill:#d4f1ff,stroke:#1890ff,stroke-width:2px
     classDef core fill:#fff1d0,stroke:#fa8c16,stroke-width:2px
     classDef internal fill:#f6ffed,stroke:#52c41a,stroke-width:1px,stroke-dasharray: 3 3
-    classDef quarantined fill:#f5f5f5,stroke:#999,stroke-width:1px,stroke-dasharray: 5 5,color:#666
 
-    class get_fs,gfdf,gflm,gfm,gfd,compute_fscore,aul,fsgl,tspa,glav,glmer exported
-    class compute_fscore,rend core
-    class gfbl,correct_evfs,compute_fsrel,assemble,augment_fs,cbi,cfsp,ce,cl,compa,caf,car,cab,gfbbm,clfm,augs2,gfmn,sfalias,tssf,tsmf,gfd internal
+    class get_fs,gfdf,gflm,gfm,gfm2,gfs,gfd,compute_fscore,aul,fsind,cfp,fsgl,tspa,tspa_mx,vcovc,gss,glav,glmer exported
+    class compute_fscore,rend,tspa core
+    class gfbl,correct_evfs,compute_fsrel,assemble,augment_fs,vcov_ld,cfsp,ce,cl,compa,caf,car,cab,gfbbm,clfm,augs2,gfmn,fsrc,pps,fps2,fpg,fppm,rfsr,sfalias,tsl,teq,tpec,tssf,tsmf,sem,fpec,mxder,mxspec,mxms,ltmr,mxcells,mxcv,mxpaths,mxdv,vja,tsp_set,stbe,gsb,vetaF,vg,eetaF internal
     class compat internal
-    class q1,q2,q3,q4 quarantined
 ```
 
-### Post-quarantine architecture summary
+### Current architecture summary
 
 ```
                      External Packages
-    ┌──────────┬──────────┬───────────┬──────────────┐
-    │  lavaan  │   lme4   │   MASS    │   OpenMx     │
-    │(cfa, sem,│(getME Z, │  (ginv)   │(Imports-only,│
-    │ lavPredict,│  b)    │           │ unimported — │
-    │ lavInspect)│        │           │ NOTE until   │
-    │          │          │           │ re-integration)│
-    └────┬─────┴────┬─────┴─────┬─────┴──────┬───────┘
-         │          │           │            │
-         ▼          ▼           ▼            ▼ (only .quarantine/R/tspa_mx.R)
- ┌─────────────────────────────────────────────────────┐
- │        STAGE 1 — Factor Score Extraction            │
- │                                                     │
- │  get_fs ─┬─► get_fs.data.frame ─► get_fs.lavaan     │
- │          ├─► get_fs.lavaan ─► get_fs_blocks.lavaan  │
- │          └─► get_fs.merMod ─► get_fs_blocks.merMod  │
- │                       │                             │
- │                       ▼                             │
- │             compute_fscore (core math)              │
- │             + correct_evfs / compute_fsrel          │
- │                                                     │
- │  augment_lav_predict (OpenMx-workflow helper)       │
- └──────────────────────────┬──────────────────────────┘
-                            │ scores + fsT / fsL / fsb
+     ┌───────────┬──────────┬───────────┬──────────┬─────────┐
+     │   lavaan  │   lme4   │   MASS    │  Matrix  │ OpenMx  │
+     │(cfa, sem, │(getME Z, │  (ginv)   │(Suggests │(Suggests│
+     │ lavPredict│  b)      │           │ merMod)  │ mxRun)  │
+     │ lavInspect│          │           │          │         │
+     └─────┬─────┴────┬─────┴─────┬─────┴────┬─────┴───┬─────┘
+           │          │           │          │         │
+           ▼          ▼           ▼          ▼         ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │        STAGE 1 — Factor Score Extraction                │
+  │                                                         │
+  │  get_fs ─┬─► get_fs.data.frame ─► get_fs.lavaan         │
+  │          ├─► get_fs.lavaan ─► get_fs_blocks.lavaan      │
+  │          ├─► get_fs.merMod ─► get_fs_blocks.merMod      │
+  │          └─► get_fs.SingleGroupClass / MultipleGroupClass│
+  │                       │                                 │
+  │                       ▼                                 │
+  │             compute_fscore (core math)                  │
+  │             + correct_evfs / compute_fsrel              │
+  │                                                         │
+  │  augment_lav_predict (alternative scoring path)         │
+  │  fs_indiv (per-row column re-derivation)                │
+  │  compute_fs_prod (product factor-score indicators)      │
+  └──────────────────────────┬──────────────────────────────┘
+                             │ scores + fsT / fsL / fsb
+                             ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │        STAGE 2 — Path Analysis                          │
+  │                                                         │
+  │  tspa ─► tspa_schema_sf/mf ─► tspa_render ─► lavaan::sem│
+  │         (+ product auto-detect, auto-compute, ecov)     │
+  │                                                         │
+  │  tspa_mx_model ─► OpenMx (exact, no pooling)            │
+  └─────────────────────────┬───────────────────────────────┘
+                            │ fitted model
                             ▼
- ┌─────────────────────────────────────────────────────┐
- │        STAGE 2 — Path Analysis (lavaan::sem)        │
- │                                                     │
- │  tspa ─► tspa_schema_sf/mf ─► tspa_render ─► sem   │
- │                                                     │
- │  (vcov_corrected / tspa_mx_model quarantined)       │
- └─────────────────────────────────────────────────────┘
+  ┌─────────────────────────────────────────────────────────┐
+  │        POST-HOC CORRECTION & STANDARDIZATION            │
+  │                                                         │
+  │  vcov_corrected (delta-method SE, analytic/FD engines)  │
+  │  grand_standardized_solution (multigroup grand std)     │
+  │                                                         │
+  │  block_diag (utility)                                   │
+  └─────────────────────────────────────────────────────────┘
 ```
 
-**Central functions (unchanged):** `get_fs.lavaan()` (stage-1 orchestration),
-`compute_fscore()` (mathematical core), `tspa()` (stage-2 entry). The delta-method
-SE correction and grand-standardization utilities moved to `.quarantine/` with
-everything else that consumes the stage-1/stage-2 output contracts.
+**Central functions:** `get_fs.lavaan()` (stage-1 orchestration),
+`compute_fscore()` (mathematical core), `tspa()` (stage-2 entry).
+The delta-method SE correction (`vcov_corrected()`), grand-standardization
+(`grand_standardized_solution()`), and OpenMx path (`tspa_mx_model()`) are
+re-integrated and fully functional. Product factor-score indicators
+(`compute_fs_prod()`) replace the removed `get_fs_int()`.
