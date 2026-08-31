@@ -66,9 +66,9 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
    `@param`, new/removed function). Regenerates `NAMESPACE` and `man/*.Rd`.
 3. `devtools::test()` — after every functional change, always after step 2 if exports changed.
 4. `devtools::check()` — before marking a change complete. Expect slowness (vignettes pull
-   all `Suggests`). Expected finding: 0 errors / 0 warnings / 0 NOTEs (`R/tspa_mx.R` was
-   re-integrated 2026-08, so `OpenMx` is imported in `NAMESPACE`; the former
-   `'OpenMx' in Imports but not imported from` NOTE is obsolete).
+   all `Suggests`). Expected finding: 0 errors / 0 warnings / 0 NOTEs (`OpenMx` is a
+   `Suggests`-only dependency, consumed via `OpenMx::` in `R/tspa_mx.R` and guarded by
+   `requireNamespace`, so it is not in `Imports`/`NAMESPACE` and raises no NOTE).
 
 **Hard rules, no exceptions:**
 - **Never hand-edit `NAMESPACE` or `man/*.Rd`** — they are machine-generated. Edit roxygen in
@@ -89,15 +89,16 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
   back specific vignette narratives.
   - `DESCRIPTION` — `Imports:` `lavaan`, `lme4`, `MASS`. `Suggests:` `boot`, `knitr`,
      `Matrix`, `mirt`, `OpenMx`, `numDeriv`, `rmarkdown`, `psych`, `testthat (>= 3.0.0)`.
-     `OpenMx` is consumed by `R/tspa_mx.R` (re-integrated 2026-08) and imported in
-     `NAMESPACE`.
+     `OpenMx` is a `Suggests`-only dependency, consumed via `OpenMx::` in `R/tspa_mx.R`
+     (re-integrated 2026-08) and guarded by `requireNamespace` — not in `NAMESPACE`.
 - `.github/workflows/` — `R-CMD-check.yaml` and `pkgdown.yaml`. Catch failures locally first.
 
 ## Dependency Rules
 - **No heavyweight frameworks** (`tidyverse`, `dplyr`, `purrr`) when base R or existing imports
-   (`MASS`; `Matrix` (Suggests) for merMod ops) suffice. `Imports` is deliberately minimal (4:
-   `lavaan`, `lme4`, `MASS`, `OpenMx`) — keep it. `OpenMx` is consumed by `R/tspa_mx.R`
-   (re-integrated 2026-08); dropping it needs that OpenMx path settled first.
+   (`MASS`; `Matrix` (Suggests) for merMod ops) suffice. `Imports` is deliberately minimal (3:
+   `lavaan`, `lme4`, `MASS`) — keep it. `OpenMx` is a `Suggests`-only dependency consumed by
+   `R/tspa_mx.R` (re-integrated 2026-08, via `OpenMx::` + `requireNamespace` guard); the
+   `tspa_mx_model()` OpenMx path must stay settled before it is ever dropped.
 - No `%>%` in `R/` — `magrittr` is `Suggests`-only. Use base-R `|>` if piping is needed.
 - Any new `Suggests`/`Imports` requires a `DESCRIPTION` edit and justification. Prefer existing deps.
 
