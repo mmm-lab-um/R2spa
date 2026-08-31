@@ -20,13 +20,6 @@ export(grand_standardized_solution)
 export(tspa)
 export(tspa_mx_model)
 export(vcov_corrected)
-importFrom(OpenMx,
-  mxData,
-  mxFitFunctionML,
-  mxModel,
-  mxPath,
-  mxRun
-)
 importFrom(lavaan,
   cfa,
   coef,

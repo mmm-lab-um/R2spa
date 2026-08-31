@@ -1160,8 +1160,9 @@ get_fs.lavaan <- function(
   }
   if (method == "mean") {
     # "mean" scores are raw item means: they bypass the corrected-FS-T /
-    # vfsLT / reliability / prior machinery, which only supports
-    # regression and Bartlett scores.
+    # reliability / prior machinery, which only supports regression and
+    # Bartlett scores. vfsLT is supported for mean as well, so the
+    # downstream tspa(corrected_se = TRUE) works with mean scores too.
     # A FIML-style fit carries @Data@Mp even for complete data (a single
     # all-TRUE pattern), so missingness is read from the patterns, not from
     # the slot's presence.
@@ -1176,7 +1177,6 @@ get_fs.lavaan <- function(
     }
     incompatible <- c(
       if (corrected_fsT) "corrected_fsT",
-      if (vfsLT) "vfsLT",
       if (reliability) "reliability",
       if (!is.null(prior_mean)) "prior_mean",
       if (!is.null(prior_cov)) "prior_cov"
@@ -1339,7 +1339,8 @@ get_fs.lavaan <- function(
     attr(out, "vfsLT") <- vcov_ld_evfs(
       object,
       method = method,
-      psi_override = priors$cov
+      psi_override = priors$cov,
+      sum_items = sum_items
     )
   }
   if (reliability) {

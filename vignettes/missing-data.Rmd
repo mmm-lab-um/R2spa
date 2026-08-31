@@ -14,6 +14,9 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
+# OpenMx is an optional Suggests; guard the stage-2 OpenMx chunks so the
+# vignette builds whether or not it is installed.
+have_openmx <- requireNamespace("OpenMx", quietly = TRUE)
 ```
 
 With missing data, two things change in two-stage path analysis. Stage 1
@@ -39,7 +42,7 @@ four `dem65` indicators — a factor with no observed indicator at all.
 set.seed(2225)
 library(lavaan)
 library(R2spa)
-library(OpenMx)
+if (have_openmx) library(OpenMx)
 data(PoliticalDemocracy)
 pd2 <- PoliticalDemocracy
 # Add MCAR missing data to x1 (about 30% of the 75 cases)
@@ -118,7 +121,7 @@ score carries no information about `dem65`, so measurement-error correction
 is impossible. We therefore drop those `dem65` scores; OpenMx's raw-data FIML
 then fits those rows from the structural model alone.
 
-```{r}
+```{r, eval = have_openmx}
 # Obtain tidy-ed factor scores data
 fs_dat <- R2spa::augment_lav_predict(fit2)
 # Per-row definition-variable matrices: each cell names the `fs_dat` column
@@ -163,7 +166,7 @@ rows with no observed `dem65` indicator the score is `NA` by convention — in
 contrast to the EBM case above, where the score was defined but
 non-correctable and had to be dropped.
 
-```{r}
+```{r, eval = have_openmx}
 # Obtain tidy-ed factor scores data (Bartlett weights)
 fsb_dat <- augment_lav_predict(fit2, method = "Bartlett")
 # fsb_dat[66:75, "fs_dem65"] is already NA (no observed indicator);
@@ -199,7 +202,7 @@ jfit <- sem("
 summary(jfit)
 ```
 
-```{r}
+```{r, eval = have_openmx}
 # The three estimates of the dem65 ~ dem60 path:
 c(EBM.mx = coef(tspa_mx_fit)["m1.A[4,3]"],
   Bartlett.mx = coef(tspab_mx_fit)["m1.A[4,3]"],

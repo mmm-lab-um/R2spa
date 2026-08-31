@@ -2,10 +2,6 @@
 
 # Loading packages and functions
 library(lavaan)
-library(OpenMx)
-if (requireNamespace("umx", quietly = TRUE)) {
-  library(umx)
-}
 
 ########## Single-group example ##########
 

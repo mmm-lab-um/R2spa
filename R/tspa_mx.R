@@ -117,7 +117,10 @@
 #' @return A fitted `OpenMx` `MxModel`. `coef()`, `vcov()`, and `summary()`
 #'   work as usual.
 #'
-#' @importFrom OpenMx mxModel mxData mxPath mxFitFunctionML mxRun
+#' @note `OpenMx` is an optional dependency (a `Suggests`). `tspa_mx_model()`
+#'   requires it at run time and stops with a message pointing at
+#'   `install.packages("OpenMx")` if it is not installed. The `lavaan`-based
+#'   [tspa()] route does not need `OpenMx`.
 #'
 #' @seealso
 #' - `vignette("2S-PA with OpenMx and IRT (mirt)", package = "R2spa")` for the OpenMx route and IRT stage 1.
@@ -151,6 +154,7 @@
 
 tspa_mx_model <- function(model, data, se_fs = NULL, fsL = NULL,
                           fsT = NULL, fsb = NULL, ...) {
+  require_openmx()
   # PLAN 15 (D1): capture before any coercion (mirrors tspa(), R/tspa.R) so
   # NULL-ness is the "the user supplied this argument" signal the
   # measurement-input derivation gates on.
@@ -242,7 +246,20 @@ tspa_mx_model <- function(model, data, se_fs = NULL, fsL = NULL,
   }
 
   full <- lav_to_mx_ram(tspa_mx_model_string(model, spec), spec, data)
-  mxRun(full, ...)
+  OpenMx::mxRun(full, ...)
+}
+
+# OpenMx is a Suggests-only dependency; guard the public entry point with a
+# clear, actionable message (never library()/require() in a function body).
+require_openmx <- function() {
+  if (!requireNamespace("OpenMx", quietly = TRUE)) {
+    stop(
+      "'OpenMx' is required for the OpenMx stage-2 route ",
+      "(tspa_mx_model()). Install it with install.packages('OpenMx') and ",
+      "retry.",
+      call. = FALSE
+    )
+  }
 }
 
 # --- Measurement specification ------------------------------------------------
@@ -626,8 +643,9 @@ tspa_mx_paths <- function(pt, spec) {
     mm <- tspa_mx_op_map(r)
     dv <- tspa_mx_defvar_col(spec, r$lhs, r$op, r$rhs)
     if (!is.na(dv) && nzchar(dv)) {
-      return(mxPath(from = mm$f, to = mm$t, arrows = mm$ar, free = FALSE,
-                    values = 0, labels = paste0("data.", dv)))
+      return(OpenMx::mxPath(from = mm$f, to = mm$t, arrows = mm$ar,
+                            free = FALSE, values = 0,
+                            labels = paste0("data.", dv)))
     }
     # lavaanify() auto-seeds structural-latent variances (and means, when a mean
     # structure is present) as user == 0, free == 0, ustart == 0; release them.
@@ -635,8 +653,8 @@ tspa_mx_paths <- function(pt, spec) {
     # lavaan syntax) from being silently re-freed.
     if (r$user == 0L && r$free == 0L && is.numeric(r$ustart) && r$ustart == 0L &&
         r$lhs %in% spec$latents && (mm$ar == 2L && mm$f == mm$t || mm$f == "one")) {
-      return(mxPath(from = mm$f, to = mm$t, arrows = mm$ar, free = TRUE,
-                    values = if (mm$ar == 2L) 1 else 0))
+      return(OpenMx::mxPath(from = mm$f, to = mm$t, arrows = mm$ar, free = TRUE,
+                            values = if (mm$ar == 2L) 1 else 0))
     }
     free <- r$free > 0L
     args <- list(from = mm$f, to = mm$t, arrows = mm$ar, free = free,
@@ -644,7 +662,7 @@ tspa_mx_paths <- function(pt, spec) {
                           else r$ustart)
     lab <- r$label
     if (is.character(lab) && !is.na(lab) && nzchar(lab)) args$labels <- lab
-    do.call(mxPath, args)
+    do.call(OpenMx::mxPath, args)
   })
 }
 
@@ -662,10 +680,10 @@ lav_to_mx_ram <- function(model_str, spec, data) {
   need_mean <- setdiff(c(manifests, latents), pt$lhs[pt$op == "~1"])
   if (length(need_mean)) {
     paths <- c(paths, lapply(need_mean, function(v)
-      mxPath(from = "one", to = v, free = TRUE, values = 0)))
+      OpenMx::mxPath(from = "one", to = v, free = TRUE, values = 0)))
   }
-  mxModel("m1", type = "RAM", manifestVars = manifests, latentVars = latents,
-          unlist(paths, recursive = FALSE),
-          mxData(observed = data, type = "raw"),
-          mxFitFunctionML())
+  OpenMx::mxModel("m1", type = "RAM", manifestVars = manifests, latentVars = latents,
+                  unlist(paths, recursive = FALSE),
+                  OpenMx::mxData(observed = data, type = "raw"),
+                  OpenMx::mxFitFunctionML())
 }

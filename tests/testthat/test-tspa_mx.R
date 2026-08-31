@@ -10,6 +10,7 @@
 # =====================================================================
 
 library(lavaan)
+skip_if_not_installed("OpenMx")
 library(OpenMx)
 
 # --- coefficient extraction by (from -> to), robust to RAM var ordering ----

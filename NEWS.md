@@ -1,4 +1,4 @@
-# R2spa 0.0.4
+# R2spa 0.0.5
 
 ## New Features
 - `vcov_corrected()` and `tspa(corrected_se = TRUE)` gain an `engine`
@@ -205,6 +205,11 @@
       `faRotations()` bug
 
 ## Other
+- `OpenMx` is now an optional dependency (moved from `Imports` to `Suggests`).
+  Only the OpenMx stage-2 route, `tspa_mx_model()`, requires it at run time;
+  the `lavaan`-based `tspa()` route and all of `get_fs()` do not. When `OpenMx`
+  is not installed, `tspa_mx_model()` stops with a message pointing at
+  `install.packages("OpenMx")`.
 - General code clean-up (#82).
 
 # R2spa 0.0.3

@@ -142,6 +142,12 @@ difference is flat: the split is arbitrary and only the total is
 identifiable.)
 }
 }
+\note{
+\code{OpenMx} is an optional dependency (a \code{Suggests}). \code{tspa_mx_model()}
+requires it at run time and stops with a message pointing at
+\code{install.packages("OpenMx")} if it is not installed. The \code{lavaan}-based
+\code{\link[=tspa]{tspa()}} route does not need \code{OpenMx}.
+}
 \examples{
 \dontrun{
 ## Measurement inputs derived from a get_fs() result:

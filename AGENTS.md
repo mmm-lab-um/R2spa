@@ -49,11 +49,11 @@ measurement-error covariances in the stage-2 model.
    branches deleted 2026-08-27 (`marklhc/issue83`, `marklhc/issue87`, `openmx`,
    `vignette`; provenance: `archive/BRANCH_SALVAGE_2026-08-27.md`). Both directories
    are ignored for development.
-- **Actively developed** — intensive 2026-08 re-integration + plan work (PLAN 06–16; see
-   `STATUS.md` for the full issue log). Version 0.0.4 is still "developmental". Suite
-   ~4,230 expectations passing, 0 fail; `R CMD check` (as-cran, `--no-manual` on this
-   LaTeX-less machine) 0/0/1 NOTE (title case + CRAN-incoming URL 404, both pre-existing)
-   as of 2026-08-30.
+  - **Actively developed** — intensive 2026-08 re-integration + plan work (PLAN 06–16).
+     Version 0.0.5 is "developmental". Suite
+    ~4,464 expectations passing, 0 fail; `R CMD check` (as-cran, `--no-manual` on this
+    LaTeX-less machine) **0/0/0** (the URL-404 NOTE was cleared by removing the stale
+    pre-rename URL; no title-case NOTE fires) as of 2026-08-30.
 - Target dev environment: Linux (WSL/Ubuntu-like), R 4.6.1.
 - No `TODO`/`FIXME`/`HACK` markers in the codebase.
 - No `library()`/`require()` in function bodies — only in roxygen `@examples` blocks.
@@ -66,9 +66,9 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
    `@param`, new/removed function). Regenerates `NAMESPACE` and `man/*.Rd`.
 3. `devtools::test()` — after every functional change, always after step 2 if exports changed.
 4. `devtools::check()` — before marking a change complete. Expect slowness (vignettes pull
-   all `Suggests`). Expected finding: 0 errors / 0 warnings / 0 NOTEs (`R/tspa_mx.R` was
-   re-integrated 2026-08, so `OpenMx` is imported in `NAMESPACE`; the former
-   `'OpenMx' in Imports but not imported from` NOTE is obsolete).
+   all `Suggests`). Expected finding: 0 errors / 0 warnings / 0 NOTEs (`OpenMx` is a
+   `Suggests`-only dependency, consumed via `OpenMx::` in `R/tspa_mx.R` and guarded by
+   `requireNamespace`, so it is not in `Imports`/`NAMESPACE` and raises no NOTE).
 
 **Hard rules, no exceptions:**
 - **Never hand-edit `NAMESPACE` or `man/*.Rd`** — they are machine-generated. Edit roxygen in
@@ -87,17 +87,18 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
   intentional — don't "fix" them without verifying.
 - `vignettes/` — many `.Rmd` with cached `.RDS`/`.csv` fixtures. Don't regenerate casually; they
   back specific vignette narratives.
-- `DESCRIPTION` — `Imports:` `lavaan`, `lme4`, `MASS`, `OpenMx`. `Suggests:` `boot`,
-   `DiagrammeR`, `ggplot2`, `knitr`, `lintr`, `magrittr`, `Matrix`, `mirt`, `numDeriv`,
-   `psych`, `rmarkdown`, `testthat (>= 3.0.0)`, `tidyr`, `umx`. `OpenMx` is consumed by
-   `R/tspa_mx.R` (re-integrated 2026-08) and imported in `NAMESPACE`.
+  - `DESCRIPTION` — `Imports:` `lavaan`, `lme4`, `MASS`. `Suggests:` `boot`, `knitr`,
+     `Matrix`, `mirt`, `OpenMx`, `numDeriv`, `rmarkdown`, `psych`, `testthat (>= 3.0.0)`.
+     `OpenMx` is a `Suggests`-only dependency, consumed via `OpenMx::` in `R/tspa_mx.R`
+     (re-integrated 2026-08) and guarded by `requireNamespace` — not in `NAMESPACE`.
 - `.github/workflows/` — `R-CMD-check.yaml` and `pkgdown.yaml`. Catch failures locally first.
 
 ## Dependency Rules
 - **No heavyweight frameworks** (`tidyverse`, `dplyr`, `purrr`) when base R or existing imports
-   (`MASS`; `Matrix` (Suggests) for merMod ops) suffice. `Imports` is deliberately minimal (4:
-   `lavaan`, `lme4`, `MASS`, `OpenMx`) — keep it. `OpenMx` is consumed by `R/tspa_mx.R`
-   (re-integrated 2026-08); dropping it needs that OpenMx path settled first.
+   (`MASS`; `Matrix` (Suggests) for merMod ops) suffice. `Imports` is deliberately minimal (3:
+   `lavaan`, `lme4`, `MASS`) — keep it. `OpenMx` is a `Suggests`-only dependency consumed by
+   `R/tspa_mx.R` (re-integrated 2026-08, via `OpenMx::` + `requireNamespace` guard); the
+   `tspa_mx_model()` OpenMx path must stay settled before it is ever dropped.
 - No `%>%` in `R/` — `magrittr` is `Suggests`-only. Use base-R `|>` if piping is needed.
 - Any new `Suggests`/`Imports` requires a `DESCRIPTION` edit and justification. Prefer existing deps.
 
