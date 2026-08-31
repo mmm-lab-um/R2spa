@@ -29,13 +29,15 @@ effect, a *random sigma*. A random sigma makes the measurement error
 have noisier scores. `get_fs()` recovers each subject's score *and* its
 person-specific standard error.
 
-To make the comparison concrete, we simulate data with a **known** structural
-coefficient, fit the brms location-scale model (and a small CFA for a distal
-construct), and regress the distal construct on the trait in three ways at stage
-2: a naive regression that ignores the measurement error, the standard `tspa()`
-(a `lavaan` model that pools the person-specific error into one value), and
-`tspa_mx_model()` (an `OpenMx` model that uses the error **per subject**, via
-definition variables — the exact, non-pooled route).
+To make the comparison concrete, we simulate data with **known** structural
+coefficients — the distal construct is driven by both the latent trait and the
+noise level (the random sigma) — fit the brms location-scale model (and a small
+CFA for the distal construct), and regress the distal construct on the trait
+*and* the noise level in three ways at stage 2: a naive regression that ignores
+the measurement error, the standard `tspa()` (a `lavaan` model that pools the
+person-specific error into one value), and `tspa_mx_model()` (an `OpenMx` model
+that uses the error **per subject**, via definition variables — the exact,
+non-pooled route).
 
 ## The data
 
@@ -43,24 +45,27 @@ We simulate `n` subjects, each nested within one of `n_sites` sites, with `m`
 noisy measurements per subject. Each subject has a latent trait (the random
 intercept) and a person-specific noise level (the random sigma); the measured
 values are the trait plus person-specific noise. A **distal construct** (one per
-subject) is generated from the subject's *true* trait with a known coefficient
-`beta1` and is measured by three noisy indicators, so it is itself scored as a
-latent.
+subject) is generated from *both* the subject's true trait (coefficient `beta1`)
+and its noise level (coefficient `beta2`, on the log-sigma scale that the sigma
+score recovers), and is measured by three noisy indicators, so it is itself
+scored as a latent.
 
 ```{r dgp, eval = FALSE}
 suppressMessages({ library(brms); library(R2spa) })
 set.seed(33)
 
 n_sites <- 20; per_site <- 10; n <- n_sites * per_site; m <- 5
-beta1 <- 1.0
+beta1 <- 1.0   # effect of the trait on the distal
+beta2 <- 1.0   # effect of the noise level (the random sigma) on the distal
 p      <- factor(rep(1:n_sites, each = per_site))  # site (higher level)
 b0     <- rnorm(n, 0, 0.5)                         # true latent trait
 sig    <- exp(rnorm(n, -1.0, 0.5))                 # person-specific noise SD
 sid    <- factor(rep(1:n, each = m))
 y      <- b0[as.integer(sid)] + sig[as.integer(sid)] * rnorm(n * m)
 d      <- data.frame(y = y, Subject = sid, p = p[as.integer(sid)])
-# distal construct, measured by three noisy indicators
-d0     <- beta1 * b0 + rnorm(n, 0, 0.5)
+# distal construct, driven by BOTH the trait and the noise level, measured by
+# three noisy indicators (log(sig) is the scale RE that the sigma score recovers)
+d0     <- beta1 * b0 + beta2 * log(sig) + rnorm(n, 0, 0.5)
 dj     <- data.frame(d1 = d0 + rnorm(n, 0, 0.5),
                      d2 = d0 + rnorm(n, 0, 0.5),
                      d3 = d0 + rnorm(n, 0, 0.5))
@@ -90,8 +95,11 @@ scale (the noise level, `u1`) — so it contributes two scores, `fs_u0` and
 are cached; the analysis below loads them:
 
 ```{r load, echo = FALSE, include = FALSE}
+library(lavaan)
+library(R2spa)
 x <- readRDS("sim_brms_ls_vignette.rds")
-fs <- x$fs; fs_d <- x$fs_d; beta1 <- x$beta1; re_summary <- x$re_summary
+fs <- x$fs; fs_d <- x$fs_d; beta1 <- x$beta1; beta2 <- x$beta2
+re_summary <- x$re_summary
 ```
 
 The random sigma shows up directly in the stage-1 output: the standard error of
@@ -116,26 +124,50 @@ re_summary
 
 ## Stage 2a: the standard route — `tspa()` (pooled error)
 
-We relate the distal construct to the latent trait (`u0`, the location score).
-Both are scored latents, so the naive regression plugs the two *noisy scores*
-into a regression, ignoring their measurement error:
+We now relate the distal construct to **both** the trait (`u0`, the location
+score) and the noise level (`u1`, the random-sigma score). All three are scored
+latents, so the naive regression plugs the three *noisy scores* into a
+regression, ignoring their measurement error.
+
+The two brms scores come from the same location-scale model, so their
+measurement errors are **correlated** (the location and scale random effects are
+estimated jointly); the distal score, from a separate CFA, has no error
+covariance with them. `tspa()` expresses this with a **block-diagonal** error
+matrix `fsT` — the two predictor scores share one error (co)variance block, the
+distal its own — and a **non-diagonal** loading matrix `fsL` (the two scores
+cross-load on each other's latent, so the loadings are not unit and not
+diagonal). The per-subject quantities are pooled to one representative matrix
+(the mean):
 
 ```{r stage2}
-df <- data.frame(fs_u0 = fs$fs_u0, fs_u0_se = fs$fs_u0_se,
-                 fs_distal = fs_d$fs_distal, fs_distal_se = fs_d$fs_distal_se)
+L_b <- apply(attr(fs, "fsL"), c(1, 2), mean)   # 2 x 2, the brms loading block
+T_b <- apply(attr(fs, "fsT"), c(1, 2), mean)   # 2 x 2, error block incl. the error covariance
+L_d <- attr(fs_d, "fsL")[[1]]                  # 1 x 1, the CFA loading
+T_d <- attr(fs_d, "fsT")[[1]]                  # 1 x 1, the CFA error variance
+scores  <- c("fs_u0", "fs_u1", "fs_distal")
+latents <- c("u0", "u1", "distal")
+# block-diagonal: the predictor block shares its loadings and its error
+# (co)variance; the distal is its own block (zero error covariance with the
+# predictors)
+fsL <- matrix(0, 3, 3, dimnames = list(scores, latents))
+fsL[1:2, 1:2] <- L_b; fsL[3, 3] <- L_d
+fsT <- matrix(0, 3, 3, dimnames = list(scores, scores))
+fsT[1:2, 1:2] <- T_b; fsT[3, 3] <- T_d
+comb <- cbind(fs, fs_d)
 
 ## (a) Naive: plug the scores into a regression, ignoring their measurement error
-naive_fit <- lm(fs_distal ~ fs_u0, data = df)
+naive_fit <- lm(fs_distal ~ fs_u0 + fs_u1, data = comb)
 coef(naive_fit)
 
-## (b) 2S-PA (standard): correct for the measurement error
-tspa_fit <- tspa("distal ~ u0", data = df)
+## (b) 2S-PA (standard): correct for the (correlated) measurement error
+tspa_fit <- tspa("distal ~ u0 + u1", data = comb, fsT = fsT, fsL = fsL)
 coef(tspa_fit)
 ```
 
-`R2spa`'s standard stage 2 is a `lavaan` model, which represents each
-construct's measurement error with a **single** variance. Given person-specific
-standard errors, it pools them into one value:
+The rendered model fixes the (pooled) loadings, the per-block error variances,
+and — the key point once the sigma is a predictor — the error covariance between
+the two predictor scores (`fs_u1 ~~ <cov> * fs_u0`), while the (true) latent
+variances and covariances stay free:
 
 ```{r model}
 cat(attributes(tspa_fit)$tspaModel)
@@ -143,72 +175,86 @@ cat(attributes(tspa_fit)$tspaModel)
 
 ## Stage 2b: the exact route — `tspa_mx_model()` (per-subject error)
 
-`lavaan` cannot hold a different error variance per observation, so the standard
-`tspa()` pools the person-specific standard errors. `tspa_mx_model()` (an
-`OpenMx` model) can: it takes each subject's measurement-error variance as a
-**definition variable**, a per-observation quantity that varies by row. This is
-the exact, non-pooled correction (Lai & Hsiao, 2022):
+`lavaan` cannot hold a different error (co)variance per observation, so the
+standard `tspa()` pools the person-specific error to one value. `tspa_mx_model()`
+(an `OpenMx` model) can: it takes each subject's measurement-error variance
+**and** the error covariance between the two predictor scores as **definition
+variables**, per-observation quantities that vary by row. This is the exact,
+non-pooled correction (Lai & Hsiao, 2022):
 
 ```{r mx, warning = FALSE}
 library(OpenMx)
-comb <- cbind(fs, fs_d)
-# unit loadings; the error variances are per-subject definition variables
-# (columns of `comb` that tspa_mx_model() reads row by row):
-fsL <- matrix(c(1, NA, NA, 1), nrow = 2,
-              dimnames = list(c("fs_u0", "fs_distal"), c("u0", "distal")))
-fsT <- matrix(c("ev_fs_u0", NA, NA, "ev_fs_distal"), nrow = 2,
-              dimnames = list(c("fs_u0", "fs_distal"), c("fs_u0", "fs_distal")))
-mx_fit <- tspa_mx_model("distal ~ u0", data = comb, fsL = fsL, fsT = fsT)
-# read the structural path (OpenMx reports it in the A matrix)
+# the loadings are fixed at the pooled values (above); each subject's error
+# (co)variances are per-row definition variables — the predictor block's error
+# covariance (ecov_fs_u1_fs_u0) included, the distal's block separate
+fsT <- matrix(NA_character_, 3, 3, dimnames = list(scores, scores))
+fsT[1, 1] <- "ev_fs_u0"
+fsT[2, 1] <- "ecov_fs_u1_fs_u0"
+fsT[2, 2] <- "ev_fs_u1"
+fsT[3, 3] <- "ev_fs_distal"
+mx_fit <- tspa_mx_model("distal ~ u0 + u1", data = comb, fsL = fsL, fsT = fsT)
+# read the structural paths (OpenMx reports them in the A matrix)
 pp <- summary(mx_fit)$parameters
-p2 <- pp[pp$matrix == "A" & pp$row == "distal" & pp$col == "u0",
+p2 <- pp[pp$matrix == "A" & pp$row == "distal" & pp$col %in% c("u0", "u1"),
          c("row", "col", "Estimate", "Std.Error")]
 print(p2)
 ```
 
 The `fsT` above is a character matrix: each cell names a column of `comb` that
-carries that subject's error variance. `ev_fs_u0` **varies from subject to
-subject** (the random-sigma signature); `ev_fs_distal` is constant (the CFA is
-homoskedastic). A `lavaan` model would fix `fs_u0`'s error to a single pooled
-value; the `OpenMx` model applies each subject's value.
+carries that subject's error quantity. `ev_fs_u0`, `ev_fs_u1`, and
+`ecov_fs_u1_fs_u0` **vary from subject to subject** (the random-sigma
+signature); `ev_fs_distal` is constant (the CFA is homoskedastic). A `lavaan`
+model would fix the predictor error block to a single pooled value; the `OpenMx`
+model applies each subject's value.
 
 ## Comparison
 
 ```{r compare}
 pt <- lavaan::parameterTable(tspa_fit)
-i  <- pt$lhs == "distal" & pt$op == "~" & pt$rhs == "u0"
-est <- c(true    = beta1,
-         naive   = unname(coef(naive_fit)["fs_u0"]),
-         "tspa"  = unname(pt$est[i]),
-         "tspa_mx" = unname(p2$Estimate[1]))
-se  <- c(true    = NA,
-         naive   = summary(naive_fit)$coefficients["fs_u0", "Std. Error"],
-         "tspa"  = unname(pt$se[i]),
-         "tspa_mx" = unname(p2$Std.Error[1]))
-print(round(data.frame(estimate = est, SE = se), 3), row.names = TRUE)
+i0 <- pt$lhs == "distal" & pt$op == "~" & pt$rhs == "u0"
+i1 <- pt$lhs == "distal" & pt$op == "~" & pt$rhs == "u1"
+out <- data.frame(
+  method  = c("true", "naive", "tspa", "tspa_mx"),
+  est_u0  = c(beta1, coef(naive_fit)["fs_u0"], pt$est[i0], p2$Estimate[p2$col == "u0"]),
+  se_u0   = c(NA, summary(naive_fit)$coefficients["fs_u0", "Std. Error"],
+              pt$se[i0], p2$Std.Error[p2$col == "u0"]),
+  est_u1  = c(beta2, coef(naive_fit)["fs_u1"], pt$est[i1], p2$Estimate[p2$col == "u1"]),
+  se_u1   = c(NA, summary(naive_fit)$coefficients["fs_u1", "Std. Error"],
+              pt$se[i1], p2$Std.Error[p2$col == "u1"]))
+out[, -1] <- round(out[, -1], 3)
+print(out, row.names = FALSE)
 ```
 
-The naive regression is **attenuated toward zero** (0.928 versus the true 1.0):
-because the score `fs_u0` is a noisy estimate of the trait, regressing on it
-dilutes the slope (errors-in-variables bias; Cole & Preacher, 2014). Both 2S-PA
-routes correct for the measurement error and recover the true coefficient
-(`tspa` 1.039, `tspa_mx_model` 1.020). Here the difference between the pooled
-(`tspa`) and per-subject (`tspa_mx_model`) corrections is small — each subject
-has several measurements, so the pooled average is a good stand-in for the
-person-specific value — but the per-subject route is the exact one and is the
-right choice as the error becomes more heteroskedastic (fewer measurements per
-subject, or a wider spread of residual variances).
+Both predictors have a true coefficient of 1. The naive regression, which treats
+the noisy scores as error-free, is biased — here **inflated** (1.09 and 1.22),
+because the two predictors' measurement errors are correlated, so part of the
+shared error is misattributed to the slopes. The standard `tspa()` route, which
+pools the person-specific error to a single average block, is biased here too,
+and more so for the sigma (1.29): with a strongly person-specific error, one
+average block is a poor stand-in for the subject-specific one. The per-subject
+`tspa_mx_model()` route, which applies each subject's error variances *and* the
+error covariance, recovers both true coefficients (1.01 and 1.05).
+
+This is the regime where the per-subject route is essential: the random sigma
+makes the measurement error strongly person-specific, and once two correlated
+scores share that error, the pooled correction (a single average block) no
+longer approximates it well. With a single predictor the pooled route is a good
+approximation (as in the single-factor case), but the correlated two-predictor
+case stresses it.
 
 ## Why the random sigma matters
 
 A random sigma is what makes the measurement error *person-specific*: `get_fs()`
-returns a different `fs_u0_se` for each subject. The standard `tspa()` (a
-`lavaan` model) represents the error with a single variance per construct, so it
-pools these person-specific standard errors into one value — a reasonable
-approximation when the scores come from a common measurement process, but a
-simplification when the error is strongly heteroskedastic. `tspa_mx_model()`
-(stage 2b above) is the exact, per-subject alternative: it supplies each
-subject's error variance as a definition variable, so no pooling is needed.
+returns a different `fs_u0_se` (and `fs_u1_se`) for each subject, and — because
+the location and scale random effects are estimated jointly — a person-specific
+error *covariance* between the two scores (`ecov_fs_u1_fs_u0`). The standard
+`tspa()` (a `lavaan` model) represents the error with a single (pooled) variance
+per construct and a single (pooled) covariance, so it pools these person-specific
+quantities into one block — a reasonable approximation when the error is only
+mildly heteroskedastic, but a poor one when the random sigma makes it strongly
+person-specific, as here. `tspa_mx_model()` (stage 2b above) is the exact,
+per-subject alternative: it supplies each subject's error variances and the
+error covariance as definition variables, so no pooling is needed.
 
 ## Scope and notes
 
@@ -226,6 +272,10 @@ subject's error variance as a definition variable, so no pooling is needed.
   to a corrected latent (one with a factor score), which is why the distal
   outcome here is scored as a latent rather than entered as a single observed
   variable.
+- The standard `tspa()` route corrects for the error **covariance** between the
+  two predictor scores through the off-diagonal of the (block-diagonal) `fsT`
+  matrix; the single-factor `se_fs` form of `tspa()` expresses only a single
+  variance per construct and cannot represent that covariance.
 
 ## References
 
