@@ -49,9 +49,8 @@ measurement-error covariances in the stage-2 model.
    branches deleted 2026-08-27 (`marklhc/issue83`, `marklhc/issue87`, `openmx`,
    `vignette`; provenance: `archive/BRANCH_SALVAGE_2026-08-27.md`). Both directories
    are ignored for development.
- - **Actively developed** — intensive 2026-08 re-integration + plan work (PLAN 06–16) plus
-    the `brms` stage-1 backend (Gaussian + location-scale / random-`sigma` mixed models; see
-    `STATUS.md` for the full issue log). Version 0.0.5 is "developmental". Suite
+  - **Actively developed** — intensive 2026-08 re-integration + plan work (PLAN 06–16).
+     Version 0.0.5 is "developmental". Suite
     ~4,464 expectations passing, 0 fail; `R CMD check` (as-cran, `--no-manual` on this
     LaTeX-less machine) **0/0/0** (the URL-404 NOTE was cleared by removing the stale
     pre-rename URL; no title-case NOTE fires) as of 2026-08-30.
@@ -88,12 +87,10 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
   intentional — don't "fix" them without verifying.
 - `vignettes/` — many `.Rmd` with cached `.RDS`/`.csv` fixtures. Don't regenerate casually; they
   back specific vignette narratives.
- - `DESCRIPTION` — `Imports:` `lavaan`, `lme4`, `MASS`, `OpenMx`. `Suggests:` `boot`,
-    `brms`, `DiagrammeR`, `ggplot2`, `knitr`, `lintr`, `magrittr`, `Matrix`, `mirt`,
-    `numDeriv`, `posterior`, `reformulas`, `rmarkdown`, `psych`, `testthat (>= 3.0.0)`,
-    `tidyr`, `umx`. `OpenMx` is consumed by `R/tspa_mx.R` (re-integrated 2026-08) and
-    imported in `NAMESPACE`; `brms`/`posterior`/`reformulas` back the `get_fs.brmsfit()`
-    backend (Suggests-only, `require_brms()`-guarded).
+  - `DESCRIPTION` — `Imports:` `lavaan`, `lme4`, `MASS`. `Suggests:` `boot`, `knitr`,
+     `Matrix`, `mirt`, `OpenMx`, `numDeriv`, `rmarkdown`, `psych`, `testthat (>= 3.0.0)`.
+     `OpenMx` is consumed by `R/tspa_mx.R` (re-integrated 2026-08) and imported in
+     `NAMESPACE`.
 - `.github/workflows/` — `R-CMD-check.yaml` and `pkgdown.yaml`. Catch failures locally first.
 
 ## Dependency Rules
