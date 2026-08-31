@@ -357,11 +357,12 @@ compute_fscore <- function(
 compute_fspars <- function(
   par,
   lavobj,
-  method = c("regression", "Bartlett"),
+  method = c("regression", "Bartlett", "mean"),
   what = c("a", "evfs", "ldfs"),
   psi_override = NULL,
   frees = NULL,
-  mats = NULL
+  mats = NULL,
+  sum_items = NULL
 ) {
   method <- match.arg(method)
   what <- match.arg(what)
@@ -409,7 +410,12 @@ compute_fspars <- function(
       # their element names below -- do not drop the names from the list.
       a <- do.call(
         compute_a_from_mat,
-        args = c(method, mat[c("lambda", "psi", "theta")], idx = list(idx))
+        args = c(
+          method,
+          mat[c("lambda", "psi", "theta")],
+          idx = list(idx),
+          sum_items = list(sum_items)
+        )
       )
       if (what == "a") {
         out[[g]][[m]] <- a
@@ -434,6 +440,11 @@ compute_a <- function(
   frees = NULL,
   mats = NULL
 ) {
+  # Resolve to a single value before forwarding: compute_fspars() runs
+  # match.arg() against its own (longer) method choices, which only accepts a
+  # multi-element default when it equals that default verbatim -- this keeps
+  # compute_a()'s shorter default working when callers omit `method`.
+  method <- match.arg(method)
   compute_fspars(
     par,
     lavobj = lavobj,
@@ -672,67 +683,79 @@ correct_evfs <- function(
 compute_evfs <- function(
   par,
   lavobj,
-  method = c("regression", "Bartlett"),
-  psi_override = NULL
+  method = c("regression", "Bartlett", "mean"),
+  psi_override = NULL,
+  sum_items = NULL
 ) {
+  method <- match.arg(method)
   compute_fspars(
     par,
     lavobj = lavobj,
     method = method,
     what = "evfs",
-    psi_override = psi_override
+    psi_override = psi_override,
+    sum_items = sum_items
   )
 }
 
 compute_ldfs <- function(
   par,
   lavobj,
-  method = c("regression", "Bartlett"),
-  psi_override = NULL
+  method = c("regression", "Bartlett", "mean"),
+  psi_override = NULL,
+  sum_items = NULL
 ) {
+  method <- match.arg(method)
   compute_fspars(
     par,
     lavobj = lavobj,
     method = method,
     what = "ldfs",
-    psi_override = psi_override
+    psi_override = psi_override,
+    sum_items = sum_items
   )
 }
 
 compute_grad_ld_evfs <- function(
   fit,
-  method = c("regression", "Bartlett"),
-  psi_override = NULL
+  method = c("regression", "Bartlett", "mean"),
+  psi_override = NULL,
+  sum_items = NULL
 ) {
   method <- match.arg(method)
   lavaan::lav_func_jacobian_complex(
-    function(x, fit, method, psi_override) {
+    function(x, fit, method, psi_override, sum_items) {
       evfs <- compute_evfs(x, lavobj = fit, method = method,
-                           psi_override = psi_override)
+                           psi_override = psi_override,
+                           sum_items = sum_items)
       evfs_lower <- lapply(evfs, function(x) {
         x[lower.tri(x, diag = TRUE)]
       })
       c(
         unlist(compute_ldfs(x, lavobj = fit, method = method,
-                            psi_override = psi_override)),
+                            psi_override = psi_override,
+                            sum_items = sum_items)),
         unlist(evfs_lower)
       )
     },
     coef(fit),
     fit = fit,
     method = method,
-    psi_override = psi_override
+    psi_override = psi_override,
+    sum_items = sum_items
   )
 }
 
 vcov_ld_evfs <- function(
   fit,
-  method = c("regression", "Bartlett"),
-  psi_override = NULL
+  method = c("regression", "Bartlett", "mean"),
+  psi_override = NULL,
+  sum_items = NULL
 ) {
   method <- match.arg(method)
   jac <- compute_grad_ld_evfs(fit, method = method,
-                              psi_override = psi_override)
+                              psi_override = psi_override,
+                              sum_items = sum_items)
   jac %*% vcov(fit) %*% t(jac)
 }
 
