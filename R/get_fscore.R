@@ -3,9 +3,7 @@
 #' @description
 #' `get_fs()` is an S3 generic that extracts factor scores from fitted models.
 #' Methods are available for `data.frame` (fits a CFA internally), `lavaan`
-#' objects, `lmerMod` objects, `brmsfit` objects (Gaussian mixed models,
-#' including location-scale models with a random scale coefficient; `brms` is
-#' a `Suggests` dependency), and fitted `mirt` models (single-group
+#' objects, `lmerMod` objects, and fitted `mirt` models (single-group
 #' `SingleGroupClass` and multi-group `MultipleGroupClass`; `mirt` is a
 #' `Suggests` dependency). Multi-group mirt results carry a trailing `group`
 #' column and a per-group (`list`) `psi` attribute.
@@ -86,10 +84,8 @@
 #' [compute_fs_prod()] for the derivation. Single-group lavaan models only
 #' (v1); not supported with `local = TRUE`.
 #'
-#' @param object A data frame, a fitted [lavaan] model object, a fitted
-#'        [lme4::lmer] model object (`merMod`), or a fitted [brms::brm] model
-#'        object (`brmsfit`, Gaussian, including location-scale models with a
-#'        random `sigma` coefficient).
+#' @param object A data frame, a fitted [lavaan] model object, or a fitted
+#'        [lme4::lmer] model object (`merMod`).
 #' @param model An optional string specifying the measurement model
 #'              in \code{lavaan} syntax. Only used when `object` is a data frame.
 #'              See \code{\link[lavaan]{model.syntax}} for more information.
@@ -124,21 +120,7 @@
 #'               random-effects prior, analogous to Bartlett scores for
 #'               `lavaan` objects). The `"ML"`/`"EB"` aliases apply to the
 #'               lavaan path only; for `merMod` objects the two strings are
-#'               distinct methods. For `brmsfit` objects the semantics mirror
-#'               `merMod`: `"EB"` (default) returns the posterior-mean random
-#'               effects of the single random-effects term and `"ML"` a
-#'               prior-free per-cluster OLS estimate; the term's random-effects
-#'               covariance is reconstructed from the posterior of its
-#'               `sd_`/`cor_` hyperparameters (Gaussian family, one grouping
-#'               factor; `corrected_fsT`, `vfsLT`, and `prior_*` are not
-#'               supported). For brms location-scale models (a random effect
-#'               on the scale, e.g. `sigma ~ (1|Subject)`) only `"EB"` is
-#'               supported: the scores are the posterior means of the random
-#'               coefficients (their posterior covariance enters via `psi`),
-#'               and `"ML"` is rejected, because the prior-free OLS scoring
-#'               presumes a constant residual variance, which does not hold
-#'               when the residual scale has its own random effect. Bartlett
-#'               scores have more desirable
+#'               distinct methods. Bartlett scores have more desirable
 #'               properties than regression scores and may be preferred for
 #'               2S-PA. `method = "mean"` takes the item-to-factor
 #'               assignment from `sum_items` (auto-derived from the
@@ -252,10 +234,7 @@
 #'           `S_j %*% (y_j - X_j %*% beta)` with `y_j`/`X_j` the cluster's
 #'           rows of the model response and the fixed-effects design
 #'           reproduces the cluster's EB scores for method `"EB"` and the
-#'           per-cluster OLS (ML) scores for method `"ML"`. The same holds for
-#'           `brmsfit` models (one `p` x `n_j` matrix per level of the
-#'           random-effects term); for brms location-scale models it is
-#'           `NULL` (no linear scoring map exists).
+#'           per-cluster OLS (ML) scores for method `"ML"`.
 #'         * `psi`: effective (prior-adjusted) covariance matrix of the
 #'           latent variables (`q x q`), group-level (not per-pattern), and
 #'           a point estimate only (no sampling SEs of the latents are
@@ -267,20 +246,14 @@
 #'           groups), otherwise the per-group lavaan estimate. For `merMod`
 #'           objects the matrix is the first random-effects term's
 #'           `VarCorr`, with dimnames renamed to match the `fsL` column
-#'           names (`u0`/`u1`/..., or the legacy `u0_eb`/`u1_eb` names). For
-#'           `brmsfit` objects it is the (posterior-mean) random-effects
-#'           covariance of the term, reconstructed from the posterior of its
-#'           `sd_`/`cor_` hyperparameters; for brms location-scale models it
-#'           is the full (correlated) covariance of all the random
-#'           coefficients (mu and `sigma`).
+#'           names (`u0`/`u1`/..., or the legacy `u0_eb`/`u1_eb` names).
 #'         * `alpha`: effective (prior-adjusted) means of the latent
 #'           variables (a named vector of length `q`), with the same group
 #'           nesting and point-estimate semantics as `psi`. With
 #'           `prior_mean` supplied it equals the prior, otherwise the
 #'           per-group lavaan estimate; a named zero vector (`0` per latent)
 #'           when the model has no (estimated) mean structure. For `merMod`
-#'           and `brmsfit` objects a named zero vector (random effects are
-#'           mean zero).
+#'           objects a named zero vector (random effects are mean zero).
 #'         * `fs_pattern`: for lavaan models, a named list by group of
 #'           `list(label, pat)` entries. `label` is a character vector with
 #'           one entry per case in the group giving that case's
@@ -288,16 +261,6 @@
 #'           are all missing); `pat` is a logical matrix with rows =
 #'           indicators and one column per pattern, the columns being named
 #'           by pattern name.
-#'
-#'         For `brmsfit` location-scale models (a random `sigma` coefficient)
-#'         the result is a multi-factor correlated result: one factor per
-#'         random coefficient (`fs_u0`, `fs_u1`, ..., in the model's
-#'         coefficient order, mu coefficients before `sigma` coefficients),
-#'         each score the posterior mean of the corresponding random
-#'         coefficient; `psi` is the full (correlated) random-effects
-#'         covariance, `alpha` a zero vector, and `scoring_matrix` is `NULL`
-#'         (no linear scoring map exists). Scoring is EB (posterior) only —
-#'         `method = "ML"` is rejected; see `method`.
 #'
 #'         For a lavaan group without missing data, its `fsT`/`fsL`/`fsb`/
 #'         `scoring_matrix` elements are the plain matrix/vector for the whole

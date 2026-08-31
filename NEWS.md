@@ -1,34 +1,6 @@
 # R2spa 0.0.5
 
 ## New Features
-- `get_fs()` gains a `brmsfit` method: Bayesian Gaussian mixed models (brms)
-  are now a supported stage-1 input alongside lavaan, lme4, and mirt. The
-  per-level posterior-mean random effects of the (single) random-effects term
-  are the factor scores, with `fsL`/`fsT`/`scoring_matrix` from the same EB/ML
-  formulas the `merMod` method uses, generalised to a `p x p` random-effects
-  covariance `D` reconstructed from the posterior of the term's `sd_`/`cor_`
-  hyperparameters. `method = "EB"` (default) returns the posterior-mean random
-  effects; `method = "ML"` a prior-free per-cluster OLS estimate. v1 requires
-  the Gaussian family and a single random grouping factor (random slopes
-  supported; `p > 2` terms via the generic Cholesky). `brms`/`posterior`/
-  `reformulas` are `Suggests`-only and guarded by `require_brms()`; the fixed
-  and random designs are built directly from the model formula + data
-  (bit-identical to `lme4::getME`), so no throwaway fit is required.
-- `get_fs()` now supports brms **location-scale** mixed models with a random
-  scale coefficient (e.g. `bf(y ~ x + (x|p|Subject), sigma ~
-  (1|p|Subject))`, random slopes included): a random effect on the residual
-  scale is detected from the posterior and the model is scored
-  posterior-based (the EAP analog) — one factor per random coefficient (mu
-  and `sigma`, in the model's coefficient order), the scores are the
-  posterior means of the random coefficients, `psi` is the full (correlated)
-  random-effects covariance (from `brms_re_cov()` on the posterior of the
-  `sd_`/`cor_` hyperparameters), and the per-level `fsL`/`fsT` come from the
-  level's posterior covariance via the shared regression-form engine
-  (`compute_lav_fs_matrices()`); no design matrix is reconstructed.
-  `method = "EB"` (posterior) only — `"ML"` is rejected, because the
-  prior-free OLS scoring presumes a constant residual variance — and
-  `scoring_matrix` is `NULL` (no linear scoring map exists); single grouping
-  factor, Gaussian family, `corrected_fsT`/`vfsLT`/`prior_*` not supported.
 - `vcov_corrected()` and `tspa(corrected_se = TRUE)` gain an `engine`
   argument, and its default is now `"analytic"`: a refit-free,
   deterministic influence-function closed form (PLAN 16, sections 2.4 and

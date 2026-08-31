@@ -39,14 +39,11 @@ Imports:
     MASS
 Suggests: 
     boot,
-    brms,
     knitr,
     Matrix,
     mirt,
     OpenMx,
     numDeriv,
-    posterior,
-    reformulas,
     rmarkdown,
     psych,
     testthat (>= 3.0.0)

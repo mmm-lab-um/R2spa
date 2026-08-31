@@ -3,10 +3,8 @@
 ## Overview
 `R2spa` — an R package implementing **two-stage path analysis (2S-PA)**, a latent-variable /
 structural-equation-modeling (SEM) technique. Stage 1 extracts factor scores and their
-observation-specific SEs/reliability from a `lavaan` CFA, `lme4` mixed model, a `brms`
-mixed model (Gaussian, including location-scale models with a random `sigma`
-coefficient), or a `mirt` IRT fit. Stage 2 feeds those scores and
-error-variance estimates into a `lavaan::sem()` path model
+observation-specific SEs/reliability from a `lavaan` CFA, `lme4` mixed model, or `mirt` IRT
+fit. Stage 2 feeds those scores and error-variance estimates into a `lavaan::sem()` path model
 that corrects for measurement error (or an OpenMx model via `tspa_mx_model()`). Core
 machinery: factor-score computation, schema-driven stage-2 model assembly. Both stage-2
 entrypoints auto-derive the measurement inputs (`fsT`/`fsL`/`fsb`/`se_fs`) from a `get_fs()`
@@ -112,13 +110,8 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
   `block_diag`, `tspa_mx_model`, `vcov_corrected`,
   `grand_standardized_solution`/`grandStandardizedSolution`
   — the legacy CamelCase alias pair is kept in sync). S3 methods on `get_fs()`:
-  `data.frame`, `default`, `lavaan`, `merMod`, `brms`'s `brmsfit` (Gaussian, single
-  random-effects term, random slopes, and location-scale models with a random
-  `sigma` coefficient — posterior-based (EAP-analog) scoring: one factor per RE
-  coefficient (correlated `psi`), EB-only (`"ML"` rejected), no design matrix,
-  `scoring_matrix` `NULL`; `brms` is `Suggests`-only, guarded by
-  `require_brms()`), and `mirt`'s `SingleGroupClass`/`MultipleGroupClass` (`mirt` is
-  `Suggests`-only, guarded by `require_mirt()`).
+  `data.frame`, `default`, `lavaan`, `merMod`, and `mirt`'s `SingleGroupClass`/
+  `MultipleGroupClass` (`mirt` is `Suggests`-only, guarded by `require_mirt()`).
 - Column conventions from `get_fs()` — downstream functions parse by name:
   - `fs_<name>` score | `<name>_se` SE | `ev_<name>` error variance
   - `ecov_<name1>_<name2>` error covariance | `<indicator>_by_<name>` implied loading
@@ -140,19 +133,12 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
    `get_fs_lmer()`), `fs_to_group_list()`, helpers (`augment_fs()`, `assemble_fs_blocks()`;
    `check_blocks_identical()` was deleted with PLAN 06 — per-pattern blocks are kept, not
    dropped).
-2. **`get_fs_methods.R`** (~2,400 lines) — S3 methods (`get_fs.data.frame()`,
-    `get_fs.default()`, `get_fs.lavaan()`, `get_fs.merMod()`, `get_fs.brmsfit()`,
-    `mirt`'s `get_fs.SingleGroupClass()`/`get_fs.MultipleGroupClass()`), block builders
-    (`get_fs_blocks.lavaan()`, `get_fs_blocks.merMod()`, `get_fs_blocks.brmsfit()`, and
-    `get_fs_blocks.brmsfit_ls()` — the brms **location-scale** (random `sigma`) path:
-    EAP-analog posterior scoring (per-level posterior means + posterior covariance of
-    the RE coefficients fed through the shared `compute_lav_fs_matrices()` engine,
-    `psi` from `brms_re_cov()`), EB-only (`"ML"` rejected), no design matrix,
-    `scoring_matrix` `NULL`, one factor per RE coefficient, single grouping factor);
-    `local = TRUE` per-construct scoring internals (`get_fs_local()`, `merge_local_fs()`, …;
-    PLAN 14); `brms` helpers (`require_brms()`, `brms_main_formula()`, `brms_re_cov()`,
-    `brms_ls_detected()`, `brms_re_draw_cols()`);
-    `mirt` helpers (`mirt_full_cov()`, `mirt_group_pars()`, `require_mirt()`).
+2. **`get_fs_methods.R`** (~2,000 lines) — S3 methods (`get_fs.data.frame()`,
+   `get_fs.default()`, `get_fs.lavaan()`, `get_fs.merMod()`, `mirt`'s
+   `get_fs.SingleGroupClass()`/`get_fs.MultipleGroupClass()`), block builders
+   (`get_fs_blocks.lavaan()`, `get_fs_blocks.merMod()`); `local = TRUE` per-construct scoring
+   internals (`get_fs_local()`, `merge_local_fs()`, …; PLAN 14); `mirt` helpers
+   (`mirt_full_cov()`, `mirt_group_pars()`, `require_mirt()`).
 3. **`get_fscore_math.R`** (~760 lines) — `compute_fscore()`, `augment_lav_predict()`,
    `compute_a*`, `compute_fspars()`, `correct_evfs()`, `compute_evfs()`, `compute_ldfs()`,
    `compute_fsrel()`. Pure math, no S3. Touchpoint for SE bugs, missing data, multigroup.

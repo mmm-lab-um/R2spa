@@ -2,7 +2,6 @@
 
 S3method(get_fs,MultipleGroupClass)
 S3method(get_fs,SingleGroupClass)
-S3method(get_fs,brmsfit)
 S3method(get_fs,data.frame)
 S3method(get_fs,default)
 S3method(get_fs,lavaan)
