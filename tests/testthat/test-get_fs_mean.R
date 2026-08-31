@@ -13,6 +13,19 @@ mean_fit_2f <- cfa(mean_mod_2f, data = PoliticalDemocracy)
 mean_fit_hs <- cfa(mean_mod_hs, data = HolzingerSwineford1939,
                    group = "school")
 
+########## Corrected-SE fixtures (mean scores, stage 2) ############
+## The tspa() fits are the expensive part, so they are built once here;
+## the get_fs() calls feeding them are cheap and are re-run inline where
+## needed by the vfsLT-attribute tests.
+
+fs_mc <- get_fs(mean_fit_2f, method = "mean", vfsLT = TRUE)
+vfs_mc <- attr(fs_mc, "vfsLT")
+tspa_mc_plain <- tspa("dem60 ~ ind60", data = fs_mc,
+                      fsT = attr(fs_mc, "fsT"), fsL = attr(fs_mc, "fsL"))
+tspa_mc_corr <- tspa("dem60 ~ ind60", data = fs_mc,
+                     fsT = attr(fs_mc, "fsT"), fsL = attr(fs_mc, "fsL"),
+                     vfsLT = vfs_mc, corrected_se = TRUE)
+
 ########## Testing section ############
 
 test_that("method = 'mean' single-factor column layout and unified attributes", {
@@ -334,10 +347,6 @@ test_that("method = 'mean' is rejected together with the corrected-FS options", 
     "not supported together with: corrected_fsT"
   )
   expect_error(
-    get_fs(mean_fit_1f, method = "mean", vfsLT = TRUE),
-    "not supported together with: vfsLT"
-  )
-  expect_error(
     get_fs(mean_fit_1f, method = "mean", reliability = TRUE),
     "not supported together with: reliability"
   )
@@ -349,12 +358,61 @@ test_that("method = 'mean' is rejected together with the corrected-FS options", 
     get_fs(mean_fit_1f, method = "mean", prior_cov = 1),
     "not supported together with: prior_cov"
   )
-  # Two at once: the message lists both
+  # Two at once: only corrected_fsT is still rejected, so the message
+  # names exactly that option (vfsLT is now supported for mean)
   expect_error(
     get_fs(mean_fit_1f, method = "mean", corrected_fsT = TRUE,
            vfsLT = TRUE),
-    "not supported together with: corrected_fsT, vfsLT"
+    "not supported together with: corrected_fsT"
   )
+})
+
+test_that("method = 'mean' vfsLT is a valid covariance (1- and 2-factor)", {
+  fs1 <- get_fs(mean_fit_1f, method = "mean", vfsLT = TRUE)
+  v1 <- attr(fs1, "vfsLT")
+  expect_true(is.matrix(v1))
+  # 1 factor: 1 free fsL element + 1 lower-tri fsT element
+  expect_equal(dim(v1), c(2L, 2L))
+  expect_true(all(is.finite(v1)))
+  expect_true(isTRUE(all.equal(v1, t(v1))))
+  expect_gte(min(eigen(v1, symmetric = TRUE, only.values = TRUE)$values),
+             -1e-10)
+
+  fs2 <- get_fs(mean_fit_2f, method = "mean", vfsLT = TRUE)
+  v2 <- attr(fs2, "vfsLT")
+  # 2 factors: 4 fsL + 3 lower-tri fsT elements
+  expect_equal(dim(v2), c(7L, 7L))
+  expect_true(all(is.finite(v2)))
+  expect_true(isTRUE(all.equal(v2, t(v2))))
+  expect_gte(min(eigen(v2, symmetric = TRUE, only.values = TRUE)$values),
+             -1e-10)
+})
+
+test_that("method = 'mean' vfsLT[1,1] matches the hand-computed fsL[1,1] variance", {
+  # fsL[1,1] = (1/3) * (lambda_x1 + lambda_x2 + lambda_x3), so its sampling
+  # variance is (1/9) * the sum of the vcov block over the ind60 loadings.
+  # The first loading (x1) is fixed to 1 under lavaan's default marker
+  # scaling, so it is a constant with zero sampling variance and drops out;
+  # the free-loadings block sum is exact. Independent of the package's own
+  # Jacobian: a pure vcov() block sum.
+  v2 <- vfs_mc
+  vc <- vcov(mean_fit_2f)
+  nm <- names(coef(mean_fit_2f))
+  indl <- intersect(nm, c("ind60=~x1", "ind60=~x2", "ind60=~x3"))
+  stopifnot(length(indl) >= 2)   # fail loudly if the param-name format differs
+  hand <- (1 / 9) * sum(vc[indl, indl])
+  expect_equal(v2[1, 1], hand, tolerance = 1e-9)
+})
+
+test_that("method = 'mean' vfsLT is invariant to explicit sum_items", {
+  fs_auto <- get_fs(mean_fit_2f, method = "mean", vfsLT = TRUE)
+  fs_exp <- get_fs(
+    mean_fit_2f, method = "mean",
+    sum_items = list(ind60 = c("x1", "x2", "x3"),
+                     dem60 = c("y1", "y2", "y3", "y4")),
+    vfsLT = TRUE
+  )
+  expect_equal(attr(fs_auto, "vfsLT"), attr(fs_exp, "vfsLT"), tolerance = 0)
 })
 
 test_that("explicit sum_items equals auto derivation on a clean CFA", {
@@ -415,6 +473,36 @@ test_that("stage-2 tspa() runs with method = 'mean' scores", {
   )
   expect_s4_class(fit2s, "lavaan")
   expect_true(is.finite(coef(fit2s)["dem60~ind60"]))
+})
+
+test_that("tspa(corrected_se = TRUE) end-to-end on mean scores", {
+  # (a) in-place corrected fit == standalone vcov_corrected()
+  expect_equal(
+    sqrt(diag(vcov(tspa_mc_corr))),
+    sqrt(diag(vcov_corrected(tspa_mc_plain, vfsLT = vfs_mc))),
+    tolerance = 1e-8
+  )
+  # (b) the correction is SE-only: point estimates untouched
+  # (est() is not exported by this lavaan version; the suite idiom is
+  # lavInspect(what = "est"))
+  expect_identical(
+    lavInspect(tspa_mc_plain, what = "est"),
+    lavInspect(tspa_mc_corr, what = "est")
+  )
+  # (c) the correction delta is PSD and only inflates the SE on the
+  # structural coefficient
+  D <- vcov(tspa_mc_corr) - vcov(tspa_mc_plain)
+  expect_gte(min(eigen(D, symmetric = TRUE, only.values = TRUE)$values),
+             -1e-10)
+  ss0 <- standardizedSolution(tspa_mc_plain)
+  ss1 <- standardizedSolution(tspa_mc_corr)
+  keep <- ss1$lhs == "dem60" & ss1$rhs == "ind60" & ss1$op == "~"
+  expect_gte(ss1$se[keep], ss0$se[keep])
+  # (d) replaying tspa_args reproduces the corrected covariance (and the
+  # double-correction guard does not fire on the replay)
+  rep <- do.call(tspa, attr(tspa_mc_corr, "tspa_args"))
+  expect_equal(rep@vcov[["vcov"]], tspa_mc_corr@vcov[["vcov"]],
+               tolerance = 1e-8)
 })
 
 test_that("'mean' is a distinct method, not an alias of the others", {

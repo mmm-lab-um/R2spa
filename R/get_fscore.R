@@ -145,15 +145,19 @@
 #'               estimated loadings when `NULL`); it errors when the model
 #'               was fitted with missing data retained (e.g. FIML/digamma),
 #'               and is not supported together with `corrected_fsT`,
-#'               `vfsLT`, `reliability`, `prior_mean`, or `prior_cov`.
+#'               `reliability`, `prior_mean`, or `prior_cov`. It *is*
+#'               supported together with `vfsLT` (built from the same
+#'               `sum_items` assignment as the scores), so the downstream
+#'               `tspa(corrected_se = TRUE)` works with mean scores.
 #' @param corrected_fsT Logical. Whether to correct for the sampling
 #'                      error in the factor score weights when computing
 #'                      the error variance estimates of factor scores.
 #'                      Currently ignored for `merMod` objects.
 #' @param vfsLT Logical. Whether to return the covariance matrix of `fsT`
 #'              and `fsL`, returned as attribute `vfsLT`; used for
-#'              second-order SE correction of 2S-PA results. Currently
-#'              ignored for `merMod` objects.
+#'              second-order SE correction of 2S-PA results. Supported for
+#'              lavaan `regression`, `Bartlett`, and `mean` scoring;
+#'              currently ignored for `merMod` objects.
 #' @param reliability Logical. Whether to return the reliability of factor
 #'                    scores. Available only for single-factor lavaan models;
 #'                    for multi-factor models a warning is issued and no

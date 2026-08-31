@@ -135,7 +135,10 @@ assignment from \code{sum_items} (auto-derived from the
 estimated loadings when \code{NULL}); it errors when the model
 was fitted with missing data retained (e.g. FIML/digamma),
 and is not supported together with \code{corrected_fsT},
-\code{vfsLT}, \code{reliability}, \code{prior_mean}, or \code{prior_cov}.}
+\code{reliability}, \code{prior_mean}, or \code{prior_cov}. It \emph{is}
+supported together with \code{vfsLT} (built from the same
+\code{sum_items} assignment as the scores), so the downstream
+\code{tspa(corrected_se = TRUE)} works with mean scores.}
 
 \item{corrected_fsT}{Logical. Whether to correct for the sampling
 error in the factor score weights when computing
@@ -144,8 +147,9 @@ Currently ignored for \code{merMod} objects.}
 
 \item{vfsLT}{Logical. Whether to return the covariance matrix of \code{fsT}
 and \code{fsL}, returned as attribute \code{vfsLT}; used for
-second-order SE correction of 2S-PA results. Currently
-ignored for \code{merMod} objects.}
+second-order SE correction of 2S-PA results. Supported for
+lavaan \code{regression}, \code{Bartlett}, and \code{mean} scoring;
+currently ignored for \code{merMod} objects.}
 
 \item{reliability}{Logical. Whether to return the reliability of factor
 scores. Available only for single-factor lavaan models;
