@@ -1,6 +1,14 @@
 # R2spa 0.0.5
 
 ## New Features
+- `combine_fs()` combines several `get_fs()` results -- possibly from
+  different measurement models (e.g. a `mirt` fit for some items and a
+  `lavaan` fit for the rest) and different subsets of the data -- into a
+  single `get_fs()`-shaped result whose `fsL`/`fsT`/`psi` are block-diagonal
+  across the inputs (each input is one block; every cross-block entry is
+  exactly zero). Rows align on the shared order (`id = NULL`) or on a join
+  column (`id = "<column>"`, union with all-`NA` blocks for absent rows). The
+  result feeds `tspa()` directly. Single-group inputs only (v1).
 - `vcov_corrected()` and `tspa(corrected_se = TRUE)` gain an `engine`
   argument, and its default is now `"analytic"`: a refit-free,
   deterministic influence-function closed form (PLAN 16, sections 2.4 and
