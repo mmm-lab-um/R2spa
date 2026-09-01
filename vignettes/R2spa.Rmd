@@ -185,6 +185,12 @@ tspa_fit <- tspa(model = "dem60 ~ ind60",
 summary(tspa_fit, standardized = TRUE)
 ```
 
+In this flow `tspa()` also recovers each score's factor-score loading
+automatically from its implied-loading column (`<name>_by_fs_<name>`),
+rather than assuming a unit loading, so a shrinkage score (implied
+loading below one) is corrected consistently with the explicit
+`fsL`/`fsT` form.
+
 To view the Two-Stage Path Analysis model, use `attributes([model name])$tspaModel`. Function `cat()` can help tidy up the model output. In the output, the values of error constraints are computed by squaring standard errors from the previous section.
 
 ```{r}

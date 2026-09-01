@@ -237,6 +237,19 @@ column (simple names only; product-score columns
 attributes and leaves only the score/SE columns.
 }
 
+In that single-factor (attribute-dropped) case, the stage-2
+factor-score loading is no longer hard-coded to one: when \code{se_fs} is
+auto-derived, the per-latent implied loading is recovered from the
+data's \verb{<v>_by_fs_<v>} implied-loading columns (present on a
+\code{cbind()}'d \code{\link[=get_fs]{get_fs()}} result, absent on a hand-rolled
+\verb{fs_<v>}/\verb{fs_<v>_se} frame), so a single-factor structural fit
+matches the explicit \code{fsL}/\code{fsT} form — in particular for a shrinkage
+score whose implied loading is below one. The loading stays one when
+\code{se_fs} is passed explicitly, when no \verb{<v>_by_fs_<v>} column is
+present, or for a multi-factor result (which uses the \code{fsL}
+attribute); a fit replayed via \code{do.call(tspa, attr(fit, "tspa_args"))} re-passes the derived \code{se_fs} as an explicit argument
+and so falls back to the unit loading.
+
 A supplied \code{se_fs} (even an empty \code{list()}) suppresses the
 multi-factor derivation, keeping the single-factor path.
 

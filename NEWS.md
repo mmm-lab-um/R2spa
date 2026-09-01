@@ -188,6 +188,10 @@
     * Rename `vc` to `ev` (error variance-covariance) for better consistency
 
 ## Bug Fixes
+- Single-factor two-stage path analysis on a `cbind()`'d shrinkage-score
+  `get_fs()` result (with no explicit `se_fs`) no longer silently uses a
+  unit factor-score loading (which biased the structural coefficient); the
+  per-latent loading is now recovered from the `<v>_by_fs_<v>` column.
 - `tspa_mx_model()` no longer mis-specifies off-diagonal factor-score
   covariances when `lavaanify()` presents a `~~` row with the (lhs, rhs)
   pair reversed relative to the score order: the definition-variable lookup
