@@ -210,6 +210,15 @@ combine_fs <- function(fs_list, ..., id = NULL, latent_names = NULL) {
              call. = FALSE)
       }
       idv[[k]] <- as.character(fs_list[[k]][[id]])
+      if (anyNA(idv[[k]])) {
+        stop("combine_fs(): input ", k,
+             " has NA values in the id column '", id, "'.", call. = FALSE)
+      }
+      if (anyDuplicated(idv[[k]]) > 0L) {
+        stop("combine_fs(): input ", k,
+             " has duplicated values in the id column '", id, "'.",
+             call. = FALSE)
+      }
     }
     all_ids <- unique(do.call(c, idv))
     n <- length(all_ids)

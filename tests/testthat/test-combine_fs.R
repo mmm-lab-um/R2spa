@@ -259,3 +259,15 @@ test_that("T11: factor id columns align by label regardless of level order", {
   expect_equal(unname(comb$fs_vis), unname(as.numeric(a$fs_vis)))
   expect_equal(unname(comb$fs_qua), unname(as.numeric(b$fs_qua)))
 })
+
+# ===========================================================================
+test_that("T12: NA or duplicated id values are rejected", {
+  a <- f_vis; b <- f_qua
+  a$uid <- seq_len(n_hs); b$uid <- seq_len(n_hs)
+  a_na <- a; a_na$uid[5L] <- NA
+  expect_error(combine_fs(list(a_na, b), id = "uid"),
+               "NA values in the id column")
+  a_dup <- a; a_dup$uid[6L] <- a_dup$uid[7L]
+  expect_error(combine_fs(list(a_dup, b), id = "uid"),
+               "duplicated values in the id column")
+})
