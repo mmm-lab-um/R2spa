@@ -100,8 +100,16 @@ combine_fs <- function(fs_list, ..., id = NULL, latent_names = NULL) {
   # Accept either one list of results or cbind-style separate arguments:
   # combine_fs(a, b, c) == combine_fs(list(a, b, c)). A data frame is itself
   # a list in R, so "a results list" means a list that is NOT a data frame
-  # (a multi-group result also looks like this; it is rejected in the loop).
+  # (a multi-group result also looks like this; it is rejected below on its
+  # group_col attribute, before the per-input loop).
   if (is.list(fs_list) && !is.data.frame(fs_list)) {
+    if (!is.null(attr(fs_list, "group_col"))) {
+      stop(
+        "combine_fs() (v1) supports single-group inputs only; the first ",
+        "argument is a multi-group (list-of-groups) get_fs() result.",
+        call. = FALSE
+      )
+    }
     if (...length() > 0L) {
       stop(
         "combine_fs(): pass either one list of get_fs() results or the ",
@@ -162,7 +170,7 @@ combine_fs <- function(fs_list, ..., id = NULL, latent_names = NULL) {
   if (length(dup) > 0L) {
     stop(
       "combine_fs(): duplicate latent name(s) across inputs: ",
-      paste(deparse(unique(dup)), collapse = ", "), ".",
+      paste(unique(dup), collapse = ", "), ".",
       call. = FALSE
     )
   }
@@ -201,9 +209,9 @@ combine_fs <- function(fs_list, ..., id = NULL, latent_names = NULL) {
         stop("combine_fs(): input ", k, " has no column named '", id, "'.",
              call. = FALSE)
       }
-      idv[[k]] <- fs_list[[k]][[id]]
+      idv[[k]] <- as.character(fs_list[[k]][[id]])
     }
-    all_ids <- unique(unlist(idv, use.names = FALSE))
+    all_ids <- unique(do.call(c, idv))
     n <- length(all_ids)
     pos <- lapply(idv, function(v) match(all_ids, v))
   }

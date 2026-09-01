@@ -225,3 +225,37 @@ test_that("T8: the combined result feeds tspa() via the multi-factor derivation"
   # the derived measurement inputs come from the attributes (not explicit)
   expect_true(!is.null(attr(fit, "tspa_args")$fsT))
 })
+
+# ===========================================================================
+test_that("T9: a multi-group (list-of-groups) result is rejected, not misread as inputs", {
+  # mimic a multi-group get_fs() result: a (named) list of per-group data
+  # frames carrying a group_col attribute on the list
+  mg <- list(g1 = f_vis, g2 = f_qua)
+  attr(mg, "group_col") <- "grp"
+  expect_error(combine_fs(mg), "multi-group")
+  # a plain list of single-group results (no group_col) still combines
+  expect_identical(combine_fs(list(f_vis, f_qua)), comb_vq)
+})
+
+# ===========================================================================
+test_that("T10: duplicate-latent message lists names cleanly (no deparse())", {
+  f2a <- get_fs(cfa("a =~ x1 + x2 + x3\nb =~ x4 + x5 + x6", data = hs))
+  f2b <- get_fs(cfa("a =~ x4 + x5 + x6\nb =~ x1 + x2 + x3", data = hs))
+  err <- tryCatch(combine_fs(list(f2a, f2b)), error = identity)
+  msg <- conditionMessage(err)
+  expect_match(msg, "across inputs: a, b")
+  expect_false(grepl("c(", msg, fixed = TRUE))
+})
+
+# ===========================================================================
+test_that("T11: factor id columns align by label regardless of level order", {
+  a <- f_vis; b <- f_qua
+  lab <- as.character(seq_len(n_hs))
+  a$fid <- factor(lab)                    # forward level order
+  b$fid <- factor(lab, levels = rev(lab)) # reversed level order
+  comb <- combine_fs(list(a, b), id = "fid")
+  expect_equal(nrow(comb), n_hs)
+  # aligned by label: row i carries observation i's scores from both inputs
+  expect_equal(unname(comb$fs_vis), unname(as.numeric(a$fs_vis)))
+  expect_equal(unname(comb$fs_qua), unname(as.numeric(b$fs_qua)))
+})
