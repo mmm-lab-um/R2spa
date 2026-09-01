@@ -237,16 +237,18 @@ the rewritten product vignette was re-integrated as
 `vignettes/product-factor-scores.Rmd` (2026-08-27).
 
 ## Git / Push / PR Workflow
-- Agents have **no `gh` credentials and no remote push access** — never run `git push` or open a
-  pull request yourself. A local `git commit` is allowed only when the user explicitly asks.
-- When work is ready to share, stop at the local commit and hand the **user** the exact commands
-  to push and open the PR, giving both the `gh` form and the web fallback:
-  - Push: `git push -u origin <branch>`
+- **Commit, push, and open PRs only when the user explicitly asks.**
+- `git push` **works** in this environment via cached git credentials (`credential.helper =
+  cache`), so an approved change on a feature branch can be pushed directly from any worktree
+  (they share refs); confirm with `git ls-remote origin <branch>`. Pushing to an existing PR's
+  head branch auto-updates that PR (no new PR needed).
+- The `gh` CLI for opening a PR **may be unauthenticated**. If asked to open one, try `gh`; if
+  it reports no auth, hand the **user** the commands — the `gh` form plus the web fallback:
   - PR (`gh`): `gh pr create --base devel --head <branch> --title "..." --body "..."`
   - PR (web): `https://github.com/mmm-lab-um/R2spa/compare/devel...<branch>` → *Create pull request*
-- Before writing those instructions, `git fetch` and confirm the base branch (usually `devel`)
-  is up to date so the PR shows only the intended commits; call out any branch staleness or file
-  overlap that would enlarge the PR.
+- Before pushing or handing over instructions, `git fetch` and confirm the base branch (usually
+  `devel`) is up to date so the PR shows only the intended commits; call out any branch staleness
+  or file overlap that would enlarge the PR.
 
 ## General Instruction
 Trust and follow the rules above exactly. Never hand-edit `NAMESPACE` or `man/*.Rd`, never call
