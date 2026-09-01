@@ -211,3 +211,28 @@ anything the strict string grammar rejects, e.g. a within-factor residual
 covariance (`y1 ~~ y4`). `vfsLT` (and hence `tspa(corrected_se = TRUE)`),
 `prior_cov`, and `reliability` are not supported in `local` mode (v1); see
 `?get_fs` (Details) for the full contract.
+
+## Combining separate `get_fs()` results
+
+`local = TRUE` scores every latent from its own local model in a **single**
+`get_fs()` call on one multi-factor model. When the per-construct scores instead
+come from **separate** `get_fs()` calls — because the items were measured with
+different methods (for example `mirt` for some items and `lavaan` for the rest)
+or come from different subsets of the data — `combine_fs()` assembles them into
+the same block-diagonal layout and feeds `tspa()` directly (no explicit
+`fsL`/`fsT` needed). Each result contributes one block (a multi-latent result is
+a `k x k` block); every cross-block entry is exactly zero.
+
+```{r}
+comb_local <- combine_fs(
+  get_fs(PoliticalDemocracy, model = "ind60 =~ x1 + x2 + x3", std.lv = TRUE),
+  get_fs(PoliticalDemocracy, model = "dem60 =~ y1 + y2 + y3 + y4", std.lv = TRUE),
+  get_fs(PoliticalDemocracy, model = "dem65 =~ y5 + y6 + y7 + y8", std.lv = TRUE)
+)
+# For this data the block-diagonal fsL matches the local = TRUE result above
+# exactly, and so does the stage-2 estimate:
+all.equal(attr(comb_local, "fsL")[[1]], attr(fs_local, "fsL")[[1]])
+all.equal(coef(tspa_fit_local),
+          coef(tspa(model = "dem60 ~ ind60\n dem65 ~ ind60 + dem60",
+                    data = comb_local)))
+```

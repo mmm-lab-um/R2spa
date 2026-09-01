@@ -260,6 +260,13 @@ fs_dat <- get_fs(PoliticalDemocracy,
 head(fs_dat)  # check that the error covariances and cross-loadings are zero.
 ```
 
+`local = TRUE` (above) scores each latent from its own measurement model in a
+single call on one multi-factor model. When the per-factor `get_fs()` results
+instead come from different data subsets or different measurement methods (for
+example `mirt` for some items and `lavaan` for the rest), `combine_fs()`
+assembles them into the same block-diagonal `get_fs()`-shaped result that feeds
+`tspa()` directly; see the *Multi-Factor Measurement Model* vignette.
+
 To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = regressions (for all predictors) and data = the factor score data frame created by combining results from `get_fs()`. Each score's standard error is available in the column named `fs_[variable name]_se`.^[The text inside `[]` should be replaced with the actual variable name.] For example, the standard error of latent variable ind60 is in column `fs_ind60_se` of the `fs_dat` data frame. Because the combined frame carries each score's `fs_[variable name]_se` column from `get_fs()`, `tspa()` reads those standard errors from the columns automatically, so the `se_fs` argument can be omitted (passing it explicitly as a list or a data frame still works). In the output model, the values of error constraints are computed by squaring the standard errors.
 
 ```{r}
