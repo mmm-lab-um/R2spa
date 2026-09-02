@@ -1275,14 +1275,15 @@ pool_se_fs <- function(data, se_names, reduce, group_col) {
 # Per-group reduction of the materialized `<v>_by_fs_<v>` implied-loading
 # columns of a get_fs() result (single-factor), mirroring pool_se_fs() so
 # the pooled loading shares the pooled SE's group order and shape. A latent
-# whose implied-loading column is absent (a hand-rolled fs_<v>/fs_<v>_se
-# frame) yields `default` (a unit loading: today's behavior is preserved).
+# whose implied-loading column is absent or non-numeric (a hand-rolled
+# fs_<v>/fs_<v>_se frame, or a mistyped column) yields `default` (a unit
+# loading: today's behavior is preserved).
 pool_ld_fs <- function(data, ld_names, reduce, group_col, default = 1) {
   ld_col <- function(v) paste0(v, "_by_fs_", v)
   if (is.null(group_col)) {
     return(vapply(ld_names, function(v) {
       cl <- ld_col(v)
-      if (!(cl %in% names(data))) return(default)
+      if (!is.numeric(data[[cl]])) return(default)
       pool_se_col(data, cl, reduce)
     }, numeric(1)))
   }
@@ -1291,7 +1292,7 @@ pool_ld_fs <- function(data, ld_names, reduce, group_col, default = 1) {
   out <- do.call(rbind, lapply(gnames, function(g) {
     vals <- vapply(ld_names, function(v) {
       cl <- ld_col(v)
-      if (!(cl %in% names(data))) return(default)
+      if (!is.numeric(data[[cl]])) return(default)
       pool_se_col(data, cl, reduce, rows = (gvals == g))
     }, numeric(1))
     data.frame(t(vals), check.names = FALSE)

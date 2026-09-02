@@ -71,6 +71,14 @@ hand_no_ld <- data.frame(fs_v = fs_vv, fs_v_se = 0.25, d = d_vv)
 fit_hand_u_d <- tspa("d ~ v", data = hand_unit_ld)
 fit_hand_u_e <- tspa("d ~ v", data = hand_unit_ld, se_fs = list(v = 0.25))
 fit_hand_n_d <- tspa("d ~ v", data = hand_no_ld)
+# T8: a non-numeric (character / factor) <v>_by_fs_<v> column is treated the
+# same as a missing one (unit loading, no error in the derivation path)
+hand_chr_ld <- data.frame(fs_v = fs_vv, fs_v_se = 0.25,
+                          v_by_fs_v = "not-numeric", d = d_vv)
+hand_fct_ld <- data.frame(fs_v = fs_vv, fs_v_se = 0.25,
+                          v_by_fs_v = factor("x"), d = d_vv)
+fit_hand_c_d <- tspa("d ~ v", data = hand_chr_ld)
+fit_hand_f_d <- tspa("d ~ v", data = hand_fct_ld)
 
 # T7 multigroup cbind()'d get_fs() result with deliberately reversed
 # factor levels (first appearance: Pasteur, Grant-White; level order:
@@ -192,4 +200,19 @@ test_that("T7: derived per-group loadings follow first-appearance group order", 
   # the loading rows share the derived per-group SE order
   se_der <- attr(fit_mg_ord, "tspa_args")$se_fs
   expect_equal(rownames(se_der), c("Pasteur", "Grant-White"))
+})
+
+test_that("T8: a non-numeric <v>_by_fs_<v> column falls back to a unit loading (no error)", {
+  # a mistyped (character or factor) implied-loading column is treated the
+  # same as a missing one: the derived fit uses a unit loading and equals the
+  # explicit-se_fs unit-loading reference, rather than erroring during the
+  # auto-derivation path
+  expect_identical(attr(fit_hand_c_d, "tspaModel"),
+                   attr(fit_hand_u_e, "tspaModel"))
+  expect_equal(coef(fit_hand_c_d), coef(fit_hand_u_e), tolerance = 1e-10)
+  expect_identical(attr(fit_hand_f_d, "tspaModel"),
+                   attr(fit_hand_u_e, "tspaModel"))
+  expect_equal(coef(fit_hand_f_d), coef(fit_hand_u_e), tolerance = 1e-10)
+  mdl <- strsplit(attr(fit_hand_c_d, "tspaModel"), "\n")[[1L]]
+  expect_true(any(grepl("^v =~ 1 \\* fs_v$", mdl)))
 })
