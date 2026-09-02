@@ -1271,21 +1271,24 @@ pool_se_fs <- function(data, se_names, reduce, group_col) {
 # loading: today's behavior is preserved).
 pool_ld_fs <- function(data, ld_names, reduce, group_col, default = 1) {
   ld_col <- function(v) paste0(v, "_by_fs_", v)
+  # One latent's pooled loading. Falls back to `default` (a unit loading) when
+  # the implied-loading column is absent or non-numeric (a hand-rolled
+  # fs_<v>/fs_<v>_se frame, or a mistyped column), or when the pool is
+  # non-finite (e.g. an all-NA column -> NaN/NA from mean/median(na.rm = TRUE)) —
+  # a non-finite fixed loading would otherwise render into the lavaan syntax.
+  pool_one <- function(v, rows) {
+    cl <- ld_col(v)
+    if (!is.numeric(data[[cl]])) return(default)
+    x <- pool_se_col(data, cl, reduce, rows = rows)
+    if (is.finite(x)) x else default
+  }
   if (is.null(group_col)) {
-    return(vapply(ld_names, function(v) {
-      cl <- ld_col(v)
-      if (!is.numeric(data[[cl]])) return(default)
-      pool_se_col(data, cl, reduce)
-    }, numeric(1)))
+    return(vapply(ld_names, function(v) pool_one(v, NULL), numeric(1)))
   }
   gvals <- data[[group_col]]
   gnames <- fs_group_order(gvals)
   out <- do.call(rbind, lapply(gnames, function(g) {
-    vals <- vapply(ld_names, function(v) {
-      cl <- ld_col(v)
-      if (!is.numeric(data[[cl]])) return(default)
-      pool_se_col(data, cl, reduce, rows = (gvals == g))
-    }, numeric(1))
+    vals <- vapply(ld_names, function(v) pool_one(v, (gvals == g)), numeric(1))
     data.frame(t(vals), check.names = FALSE)
   }))
   colnames(out) <- ld_names
