@@ -46,6 +46,23 @@
 #'   `cbind()`'d [get_fs()] result, because `cbind()` drops the
 #'   attributes and leaves only the score/SE columns.
 #'
+#' In that single-factor (attribute-dropped) case, the stage-2
+#' factor-score loading is no longer hard-coded to one: when `se_fs` is
+#' auto-derived, the per-latent implied loading is recovered from the
+#' data's `<v>_by_fs_<v>` implied-loading columns (present on a
+#' `cbind()`'d [get_fs()] result, absent on a hand-rolled
+#' `fs_<v>`/`fs_<v>_se` frame), so a single-factor structural fit
+#' matches the explicit `fsL`/`fsT` form — in particular for a shrinkage
+#' score whose implied loading is below one. The loading stays one when
+#' `se_fs` is passed explicitly, when no `<v>_by_fs_<v>` column is
+#' present, or for a multi-factor result (which uses the `fsL`
+#' attribute); a fit replayed via `do.call(tspa, attr(fit,
+#' "tspa_args"))` re-passes the derived `se_fs` as an explicit argument
+#' and so falls back to the unit loading — i.e. for a derived single-factor
+#' fit such a replay is not guaranteed to reproduce the original
+#' recovered-loading fit (the general self-contained-replay guarantee does
+#' not extend to this case).
+#'
 #' A supplied `se_fs` (even an empty `list()`) suppresses the
 #' multi-factor derivation, keeping the single-factor path.
 #'
@@ -497,6 +514,10 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
   # such call errors today (no measurement inputs reach stage 2), so no
   # currently-working call changes behavior.
   derived_prov_err <- NULL
+  # PLAN 17: the per-group implied loading recovered in the single-factor
+  # derivation below; set only when se_fs was derived (an explicit se_fs
+  # keeps the unit-loading contract), NULL => unit loading.
+  sf_ld <- NULL
   if (is.null(fsT) && is.null(fsL) && !se_fs_given) {
     # Multi-factor derivation: the data's own fsT/fsL (and fsb) attributes
     # (unified or list format; per-unit shapes -- FIML per-pattern, merMod
@@ -527,11 +548,13 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     }
     # Single-factor derivation: the data's own fs_<v>/fs_<v>_se columns
     # (a cbind'd get_fs() result carries no attributes, so its se_fs is
-    # derived from the columns).
+    # derived from the columns; so is the per-latent implied loading from
+    # the `<v>_by_fs_<v>` columns, PLAN 17).
     if (is.null(fsT)) {
-      derived_se <- derive_sf_se_fs(data, list(...)[["group"]], reduce)
-      if (!is.null(derived_se)) {
-        se_fs <- derived_se
+      derived_sf <- derive_sf_se_fs(data, list(...)[["group"]], reduce)
+      if (!is.null(derived_sf)) {
+        se_fs <- derived_sf$se
+        sf_ld <- derived_sf$ld
       }
     }
   }
@@ -816,7 +839,7 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
         call. = FALSE
       )
     }
-    tspaModel <- tspa_sf(model, data, se_fs, prod_ecov)
+    tspaModel <- tspa_sf(model, data, se_fs, prod_ecov, sf_ld)
   } else { # multi-factor measurement model
     # Opt-in product-score auto-compute, multi-factor path: the product
     # latent (named by concatenation or lavaan interaction syntax, as in
@@ -1249,6 +1272,39 @@ pool_se_fs <- function(data, se_names, reduce, group_col) {
   out
 }
 
+# Per-group reduction of the materialized `<v>_by_fs_<v>` implied-loading
+# columns of a get_fs() result (single-factor), mirroring pool_se_fs() so
+# the pooled loading shares the pooled SE's group order and shape. A latent
+# whose implied-loading column is absent or non-numeric (a hand-rolled
+# fs_<v>/fs_<v>_se frame, or a mistyped column) yields `default` (a unit
+# loading: today's behavior is preserved).
+pool_ld_fs <- function(data, ld_names, reduce, group_col, default = 1) {
+  ld_col <- function(v) paste0(v, "_by_fs_", v)
+  # One latent's pooled loading. Falls back to `default` (a unit loading) when
+  # the implied-loading column is absent or non-numeric (a hand-rolled
+  # fs_<v>/fs_<v>_se frame, or a mistyped column), or when the pool is
+  # non-finite (e.g. an all-NA column -> NaN/NA from mean/median(na.rm = TRUE)) —
+  # a non-finite fixed loading would otherwise render into the lavaan syntax.
+  pool_one <- function(v, rows) {
+    cl <- ld_col(v)
+    if (!is.numeric(data[[cl]])) return(default)
+    x <- pool_se_col(data, cl, reduce, rows = rows)
+    if (is.finite(x)) x else default
+  }
+  if (is.null(group_col)) {
+    return(vapply(ld_names, function(v) pool_one(v, NULL), numeric(1)))
+  }
+  gvals <- data[[group_col]]
+  gnames <- fs_group_order(gvals)
+  out <- do.call(rbind, lapply(gnames, function(g) {
+    vals <- vapply(ld_names, function(v) pool_one(v, (gvals == g)), numeric(1))
+    data.frame(t(vals), check.names = FALSE)
+  }))
+  colnames(out) <- ld_names
+  rownames(out) <- gnames
+  out
+}
+
 # ---------------------------------------------------------------------------
 # Product-score auto-compute (opt-in `product = TRUE`): the product latents
 # a model string names, the missing product columns, and the per-pair
@@ -1528,7 +1584,11 @@ fs_group_order <- function(gvals) {
 # attribute, else the user's `group` argument (a cbind'd frame has no
 # attribute, so the argument is the only stage-2 group signal), else a
 # literal "group" column. Returns NULL when no latent pair exists (the
-# caller keeps the empty se_fs).
+# caller keeps the empty se_fs); otherwise list(se, ld) -- `se` the pooled
+# se block above and `ld` the pooled `<v>_by_fs_<v>` implied-loading block
+# (PLAN 17: same group order/shape, so the two are row-aligned by
+# construction; a latent whose implied-loading column is absent yields the
+# unit loading 1, a no-op for a hand-rolled frame).
 derive_sf_se_fs <- function(data, group_arg, reduce) {
   dnames <- names(data)
   if (is.null(dnames)) {
@@ -1559,12 +1619,16 @@ derive_sf_se_fs <- function(data, group_arg, reduce) {
     }
   }
   pooled <- pool_se_fs(data, latents, reduce, grp_col)
-  if (is.data.frame(pooled)) {
-    return(pooled)
+  pooled_ld <- pool_ld_fs(data, latents, reduce, grp_col)
+  if (!is.data.frame(pooled)) {
+    # No group column: pool_se_fs() returned a named numeric vector; shape
+    # it the way the se_fs coercion does (one row, one column per latent).
+    pooled <- as.data.frame(as.list(pooled))
   }
-  # No group column: pool_se_fs() returned a named numeric vector; shape
-  # it the way the se_fs coercion does (one row, one column per latent).
-  as.data.frame(as.list(pooled))
+  if (!is.data.frame(pooled_ld)) {
+    pooled_ld <- as.data.frame(as.list(pooled_ld))
+  }
+  list(se = pooled, ld = pooled_ld)
 }
 
 # ---------------------------------------------------------------------------
@@ -1610,16 +1674,22 @@ tspa_user_rows <- function(model) {
 # (groups) in order; fixed error-covariance rows between product
 # indicators sharing a factor score when `prod_ecov` is given
 # (single-group v1, hence group 1).
-tspa_schema_sf <- function(model, se, prod_ecov = NULL) {
+tspa_schema_sf <- function(model, se, prod_ecov = NULL, ld = NULL) {
   var <- colnames(se)
   fs <- paste0("fs_", var)
   ng <- nrow(se)
+  # A missing or shape-mismatched `ld` defaults to a unit-loading block
+  # sized to `se` (the pre-PLAN 17 behavior).
+  if (is.null(ld) || nrow(ld) != nrow(se) || ncol(ld) != ncol(se)) {
+    ld <- matrix(1, nrow = ng, ncol = length(var),
+                 dimnames = list(rownames(se), var))
+  }
   rows <- list(tspa_user_rows(model))
   for (k in seq_along(var)) {
     lab <- paste0("__r2spa_ld", k, "__")
     for (g in seq_len(ng)) {
       rows[[length(rows) + 1L]] <- tspa_row(
-        var[k], "=~", fs[k], 1, g, "struct", lab
+        var[k], "=~", fs[k], ld[g, k], g, "struct", lab
       )
     }
     ev_lab <- paste0("__r2spa_ev", k, "__")
@@ -1876,9 +1946,9 @@ tspa_render <- function(sch, style = c("sf", "mf")) {
   paste0(elems, collapse = "\n")
 }
 
-tspa_sf <- function(model, data, se = NULL, prod_ecov = NULL) {
+tspa_sf <- function(model, data, se = NULL, prod_ecov = NULL, ld = NULL) {
   if (!is.null(se) && nrow(se) > 0L) {
-    return(tspa_render(tspa_schema_sf(model, se, prod_ecov), style = "sf"))
+    return(tspa_render(tspa_schema_sf(model, se, prod_ecov, ld), style = "sf"))
   }
 }
 

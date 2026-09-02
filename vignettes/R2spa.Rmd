@@ -205,6 +205,12 @@ tspa_fit <- tspa(model = "dem60 ~ ind60",
 summary(tspa_fit, standardized = TRUE)
 ```
 
+In this flow `tspa()` also recovers each score's factor-score loading
+automatically from its implied-loading column (`<name>_by_fs_<name>`),
+rather than assuming a unit loading, so a shrinkage score (implied
+loading below one) is corrected consistently with the explicit
+`fsL`/`fsT` form.
+
 The **standardized** coefficients (the `est.std` column) are usually the
 parameters of interest, because the latent constructs have no intrinsic scale
 (see the 'Why the standardized coefficients are of interest' section above).

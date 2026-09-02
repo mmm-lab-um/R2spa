@@ -120,6 +120,34 @@ se_exp_mg <- data.frame(visual = unique(fs_hs$fs_visual_se),
                         speed = unique(fs_hs$fs_speed_se))
 fit_mg_sfd <- tspa(mod_m, data = fs_hs, group = "school")
 fit_mg_sfe <- tspa(mod_m, data = fs_hs, se_fs = se_exp_mg, group = "school")
+# PLAN 17 re-baseline: the derived single-factor fits now carry the
+# recovered per-latent implied loading (the <v>_by_fs_<v> columns that
+# survive cbind()) instead of a unit loading, so their reference is the
+# explicit fsL/fsT (multi-factor) form, not the explicit-se_fs (unit)
+# control. The per-construct 1x1 blocks are combined into the 2x2
+# (block-diagonal) form the mf schema consumes; the zero off-diagonal
+# cells render as extra `+ 0 *` terms in the explicit model (same
+# implied covariance, a different optimizer path), so the A/B in the
+# tests below is on coef/vcov, not on the model string.
+bd2 <- function(a, b) {
+  z_r <- `dimnames<-`(matrix(0, 1L, 1L), list(rownames(b), colnames(a)))
+  z_c <- `dimnames<-`(matrix(0, 1L, 1L), list(rownames(a), colnames(b)))
+  rbind(cbind(a, z_c), cbind(z_r, b))
+}
+fsL_cb <- bd2(attr(fs_ind, "fsL")[[1L]], attr(fs_dem, "fsL")[[1L]])
+fsT_cb <- bd2(attr(fs_ind, "fsT")[[1L]], attr(fs_dem, "fsT")[[1L]])
+fit_sg_mf <- tspa("dem60 ~ ind60", data = fs_cb, fsL = fsL_cb, fsT = fsT_cb)
+# per-group explicit blocks in first-appearance group order (Pasteur,
+# Grant-White), mirroring the derived per-group se/ld rows
+grp_ord <- c("Pasteur", "Grant-White")
+fsL_hs <- setNames(lapply(grp_ord, function(g) bd2(attr(fs_v, "fsL")[[g]],
+                                                   attr(fs_s, "fsL")[[g]])),
+                   grp_ord)
+fsT_hs <- setNames(lapply(grp_ord, function(g) bd2(attr(fs_v, "fsT")[[g]],
+                                                   attr(fs_s, "fsT")[[g]])),
+                   grp_ord)
+fit_mg_mf <- suppressWarnings(tspa(mod_m, data = fs_hs, group = "school",
+                                   fsL = fsL_hs, fsT = fsT_hs))
 
 # FIML (SG and MG); the derived and explicit-triple forms both pool
 fit_fiml_sg_d <- suppressWarnings(tspa(mod_m, data = fs_fin))
@@ -236,7 +264,7 @@ test_that("derived MG multi-factor (unified and list) equals the explicit full-t
   expect_equal(coef(fit_mgdl_d), coef(fit_mg_e), tolerance = 1e-10)
 })
 
-test_that("derived SG single-factor se_fs from cbind()'d frames equals the explicit se_fs fit", {
+test_that("derived SG single-factor se_fs from cbind()'d frames equals the explicit fsL/fsT fit", {
   se_der <- attr(fit_sg_sfd, "tspa_args")$se_fs
   # the derived values are the (row-constant) fs_<v>_se columns, in
   # first-appearance (cbind) order of the score columns
@@ -244,12 +272,39 @@ test_that("derived SG single-factor se_fs from cbind()'d frames equals the expli
   # house-pinned (rounded) values from the tspa() examples
   expect_equal(unname(se_der$ind60), 0.1213615, tolerance = 1e-6)
   expect_equal(unname(se_der$dem60), 0.6756472, tolerance = 1e-6)
-  expect_identical(attr(fit_sg_sfd, "tspaModel"),
-                   attr(fit_sg_sfe, "tspaModel"))
-  expect_equal(coef(fit_sg_sfd), coef(fit_sg_sfe), tolerance = 1e-10)
+  # PLAN 17: the derived fit carries the recovered per-latent implied
+  # loading (the <v>_by_fs_<v> columns, 1 - Vpost/psi; here the fsL
+  # diagonals), not a unit loading, so the reference is the explicit
+  # fsL/fsT (multi-factor) form, not the unit-loading explicit-se_fs
+  # control. Cross-form A/B: the explicit mf rendering carries the zero
+  # off-diagonal score terms (same implied covariance, a different
+  # optimizer path), so the MLEs agree to ~1e-8 relative, not
+  # bit-for-bit.
+  expect_equal(coef(fit_sg_sfd), coef(fit_sg_mf), tolerance = 1e-6)
+  expect_equal(vcov(fit_sg_sfd), vcov(fit_sg_mf), tolerance = 1e-6,
+               ignore_attr = TRUE)
+  # ...and it differs from the pre-PLAN 17 unit-loading fit
+  expect_false(isTRUE(all.equal(coef(fit_sg_sfd), coef(fit_sg_sfe),
+                                tolerance = 1e-6)))
+  # house-pinned (rounded) structural coefficient
+  expect_equal(unname(coef(fit_sg_sfd)["dem60~ind60"]), 1.4478669,
+               tolerance = 1e-6)
+  # golden: the derived model string carries the recovered (non-unit)
+  # per-latent loadings
+  expect_identical(attr(fit_sg_sfd, "tspaModel"), paste0(
+    "# latent variables (indicated by factor scores)\n",
+    "ind60 =~ 0.965767270434244 * fs_ind60\n",
+    "dem60 =~ 0.886804906625876 * fs_dem60\n",
+    "\n",
+    "# constrain the errors\n",
+    "fs_ind60 ~~ 0.0147286194470876 * fs_ind60\n",
+    "fs_dem60 ~~ 0.456499146148539 * fs_dem60\n",
+    "\n",
+    "# structural model\n",
+    "dem60 ~ ind60"))
 })
 
-test_that("derived MG single-factor se_fs from cbind()'d MG frames equals the explicit per-group se_fs fit", {
+test_that("derived MG single-factor se_fs from cbind()'d MG frames equals the explicit per-group fsL/fsT fit", {
   se_der <- attr(fit_mg_sfd, "tspa_args")$se_fs
   # one row per group in first-appearance order: Pasteur then Grant-White
   expect_equal(rownames(se_der), c("Pasteur", "Grant-White"))
@@ -258,9 +313,29 @@ test_that("derived MG single-factor se_fs from cbind()'d MG frames equals the ex
   # house-pinned (rounded) values from the tspa() examples, in group order
   expect_equal(unname(se_der$visual), c(0.3391326, 0.3118280), tolerance = 1e-6)
   expect_equal(unname(se_der$speed), c(0.2786875, 0.2740507), tolerance = 1e-6)
-  expect_identical(attr(fit_mg_sfd, "tspaModel"),
-                   attr(fit_mg_sfe, "tspaModel"))
-  expect_equal(coef(fit_mg_sfd), coef(fit_mg_sfe), tolerance = 1e-10)
+  # PLAN 17: the recovered per-group loadings make the derived fit equal
+  # the explicit per-group fsL/fsT reference (cross-form A/B, tolerance as
+  # in the SG test), not the unit-loading explicit-se_fs control
+  expect_equal(coef(fit_mg_sfd), coef(fit_mg_mf), tolerance = 1e-6)
+  expect_equal(vcov(fit_mg_sfd), vcov(fit_mg_mf), tolerance = 1e-6,
+               ignore_attr = TRUE)
+  expect_false(isTRUE(all.equal(coef(fit_mg_sfd), coef(fit_mg_sfe),
+                                tolerance = 1e-6)))
+  # house-pinned (rounded) structural coefficient
+  expect_equal(unname(coef(fit_mg_sfd)["visual~speed"]), 0.3398422,
+               tolerance = 1e-6)
+  # golden: the per-group loadings are in first-appearance group order
+  expect_identical(attr(fit_mg_sfd, "tspaModel"), paste0(
+    "# latent variables (indicated by factor scores)\n",
+    "visual =~ c(0.673482617533149, 0.699050944243108) * fs_visual\n",
+    "speed =~ c(0.662316098427474, 0.812759419528942) * fs_speed\n",
+    "\n",
+    "# constrain the errors\n",
+    "fs_visual ~~ c(0.115010888044477, 0.0972366713691954) * fs_visual\n",
+    "fs_speed ~~ c(0.0776667057991782, 0.0751037642308851) * fs_speed\n",
+    "\n",
+    "# structural model\n",
+    "visual ~ speed"))
 })
 
 test_that("derived FIML (SG and MG) equals the explicit full-triple fit; replay is self-contained", {
@@ -380,12 +455,15 @@ test_that("derived per-group se_fs order follows first appearance, not factor le
   d_rev[["school"]] <- factor(d_rev[["school"]],
                               levels = c("Grant-White", "Pasteur"))
   se_der <- R2spa:::derive_sf_se_fs(d_rev, "school", "mean")
-  expect_equal(rownames(se_der), c("Pasteur", "Grant-White"))
-  # the derived fit equals the explicit control whose se_fs rows are in
-  # first-appearance order ...
+  # PLAN 17: derive_sf_se_fs() now returns list(se, ld); the se block's
+  # group order is unchanged
+  expect_equal(rownames(se_der$se), c("Pasteur", "Grant-White"))
+  # the derived fit's per-group rows (se and the PLAN 17 recovered
+  # loadings) are in first-appearance order: identical to the derived
+  # fit on the unreversed frame ...
   fit_rd <- suppressWarnings(tspa(mod_m, data = d_rev, group = "school"))
   expect_identical(attr(fit_rd, "tspaModel"),
-                   attr(fit_mg_sfe, "tspaModel"))
+                   attr(fit_mg_sfd, "tspaModel"))
   # ... and not the level-order one
   se_lvl <- data.frame(
     visual = c(unique(fs_hs$fs_visual_se)[2L], unique(fs_hs$fs_visual_se)[1L]),
