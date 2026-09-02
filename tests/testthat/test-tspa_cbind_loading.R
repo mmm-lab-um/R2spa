@@ -79,6 +79,10 @@ hand_fct_ld <- data.frame(fs_v = fs_vv, fs_v_se = 0.25,
                           v_by_fs_v = factor("x"), d = d_vv)
 fit_hand_c_d <- tspa("d ~ v", data = hand_chr_ld)
 fit_hand_f_d <- tspa("d ~ v", data = hand_fct_ld)
+# T9: an all-NA numeric <v>_by_fs_<v> column -> NaN/NA pool -> unit loading
+hand_nan_ld <- data.frame(fs_v = fs_vv, fs_v_se = 0.25,
+                          v_by_fs_v = NA_real_, d = d_vv)
+fit_hand_nan_d <- tspa("d ~ v", data = hand_nan_ld)
 
 # T7 multigroup cbind()'d get_fs() result with deliberately reversed
 # factor levels (first appearance: Pasteur, Grant-White; level order:
@@ -214,5 +218,16 @@ test_that("T8: a non-numeric <v>_by_fs_<v> column falls back to a unit loading (
                    attr(fit_hand_u_e, "tspaModel"))
   expect_equal(coef(fit_hand_f_d), coef(fit_hand_u_e), tolerance = 1e-10)
   mdl <- strsplit(attr(fit_hand_c_d, "tspaModel"), "\n")[[1L]]
+  expect_true(any(grepl("^v =~ 1 \\* fs_v$", mdl)))
+})
+
+test_that("T9: an all-NA numeric <v>_by_fs_<v> column falls back to a unit loading (no NaN)", {
+  # a numeric implied-loading column that is entirely NA pools to NaN/NA; the
+  # non-finite value is coerced back to the unit loading, not rendered into the
+  # lavaan syntax
+  expect_identical(attr(fit_hand_nan_d, "tspaModel"),
+                   attr(fit_hand_u_e, "tspaModel"))
+  expect_equal(coef(fit_hand_nan_d), coef(fit_hand_u_e), tolerance = 1e-10)
+  mdl <- strsplit(attr(fit_hand_nan_d, "tspaModel"), "\n")[[1L]]
   expect_true(any(grepl("^v =~ 1 \\* fs_v$", mdl)))
 })
