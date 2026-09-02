@@ -58,7 +58,10 @@
 #' present, or for a multi-factor result (which uses the `fsL`
 #' attribute); a fit replayed via `do.call(tspa, attr(fit,
 #' "tspa_args"))` re-passes the derived `se_fs` as an explicit argument
-#' and so falls back to the unit loading.
+#' and so falls back to the unit loading — i.e. for a derived single-factor
+#' fit such a replay is not guaranteed to reproduce the original
+#' recovered-loading fit (the general self-contained-replay guarantee does
+#' not extend to this case).
 #'
 #' A supplied `se_fs` (even an empty `list()`) suppresses the
 #' multi-factor derivation, keeping the single-factor path.

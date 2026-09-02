@@ -249,7 +249,10 @@ score whose implied loading is below one. The loading stays one when
 \code{se_fs} is passed explicitly, when no \verb{<v>_by_fs_<v>} column is
 present, or for a multi-factor result (which uses the \code{fsL}
 attribute); a fit replayed via \code{do.call(tspa, attr(fit, "tspa_args"))} re-passes the derived \code{se_fs} as an explicit argument
-and so falls back to the unit loading.
+and so falls back to the unit loading — i.e. for a derived single-factor
+fit such a replay is not guaranteed to reproduce the original
+recovered-loading fit (the general self-contained-replay guarantee does
+not extend to this case).
 
 A supplied \code{se_fs} (even an empty \code{list()}) suppresses the
 multi-factor derivation, keeping the single-factor path.

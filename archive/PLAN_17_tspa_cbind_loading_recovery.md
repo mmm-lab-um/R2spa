@@ -121,9 +121,12 @@ co-located.
    unchanged). The loading row becomes
    `tspa_row(var[k], "=~", fs[k], ld[g, k], g, "struct", lab)` — replacing the literal `1` at
    :1613. (The `error_var`/`error_cov`/`intercept` rows are untouched, D4.)
-5. **`tspa_args` replay.** The resolved `ld` is recorded in the fit's `tspa_args` alongside
-   `se_fs` so `do.call(tspa, attr(fit,"tspa_args"))` (used by `vcov_corrected()`) replays the
-   recovered loading and does not re-derive. (PLAN 13 already records resolved values this way.)
+5. **`tspa_args` replay (refined for the derive-only scope).** The resolved `ld` is NOT
+    recorded in `tspa_args`; `tspa_args` records the *derived* `se_fs`, so a replay via
+    `do.call(tspa, attr(fit,"tspa_args"))` re-passes that `se_fs` as explicit and therefore
+    falls back to the unit loading (it does not re-derive the loading). Documented edge: the
+    self-contained-replay guarantee does not extend to a derived single-factor fit.
+    `vcov_corrected()` is unaffected (it requires the multi-factor `fsT`/`fsL` path).
 
 ## 6. Tests (`r-tester`, edition 3, `tests/testthat/`)
 
