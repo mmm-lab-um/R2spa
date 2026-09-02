@@ -1,0 +1,283 @@
+---
+title: "2S-PA with a brms random-intercept model"
+author: "Mark Lai"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{2S-PA with a brms random-intercept model}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+Two-stage path analysis (2S-PA; Lai & Hsiao, 2022) estimates a structural model
+whose constructs are measured with error in two steps. **Stage 1** scores each
+construct and records its measurement error; **stage 2** path-analyzes the
+scores while correcting for that error, so the structural coefficients are not
+biased by it (Cole & Preacher, 2014). In `R2spa`, `get_fs()` is stage 1 and
+`tspa()` is stage 2.
+
+This vignette uses stage 1 from a **brms mixed model with a single
+random-effects term** — the common case of a latent trait measured by repeated
+or clustered observations, modeled as a Gaussian random-intercept model (and, by
+extension, a random-slope model). `get_fs.brmsfit()` scores the random effect as
+a factor score and records its standard error and its **implied loading**;
+`tspa()` then corrects for the score's measurement error. This is the ordinary
+(location-only) counterpart to the location-scale / random-`sigma` case in
+[the random-sigma vignette](tspa-brms-random-sigma.html).
+
+Compared with that vignette, this one makes three things explicit:
+
+1. The **scoring convention**: the brmsfit score is the **posterior mean** of the
+   random effect (a Bayesian empirical-Bayes score), and its implied loading is
+   the **shrinkage weight** `w = 1 - Vpost/psi`, which is **not 1**.
+2. The two scoring **methods**: `method = "EB"` (posterior mean, the default) and
+   `method = "ML"` (the prior-free group-mean / Bartlett analog).
+3. Why the **loading** must be *recovered*, not assumed, once a distal variable
+   is added for a structural model.
+
+## The data
+
+We simulate `n` subjects with `m` repeated measures each. Each subject has a
+latent trait `b0` (the random intercept, standard deviation 1); the measured
+values are the trait plus noise. A **distal** outcome `d` (one per subject) is
+generated from the *true* trait with a known coefficient of `1`.
+
+```{r dgp, eval = FALSE}
+suppressMessages({ library(brms); library(R2spa) })
+set.seed(33)
+n <- 200L; m <- 5L                     # n subjects, m repeated measures each
+Subject <- factor(rep(seq_len(n), each = m))
+b0  <- rnorm(n, 0, 1)                  # true latent trait (random intercept), SD 1
+y   <- b0[as.integer(Subject)] + rnorm(n * m, 0, 1)   # y_ij = b0_j + e_ij
+d   <- 1.0 * b0 + rnorm(n, 0, 1)       # distal: d_j = 1.0 * b0_j + v_j
+dat <- data.frame(y = y, Subject = Subject)
+
+# stage 1: the trait is the random intercept of a Gaussian brms model
+fit <- brm(y ~ 1 + (1 | Subject), data = dat, family = gaussian(),
+           chains = 2, iter = 2500, seed = 1, silent = TRUE)
+fs_eb <- get_fs(fit, method = "EB")
+```
+
+The trait is the random intercept `u0` of the Gaussian brms model
+`y ~ 1 + (1 | Subject)`. A random-slope variant, `y ~ x + (1 + x | Subject)`, is
+scored the same way (one factor score per random-effect coefficient). The MCMC
+fit and the `get_fs()` calls are the expensive part, so the results are cached;
+the analysis below loads them.
+
+```{r load, echo = FALSE, include = FALSE}
+library(lavaan); library(R2spa)
+x <- readRDS("sim_brms_ri_vignette.rds")
+fs_eb <- x$fs_eb; fs_ml <- x$fs_ml; fs_lmer <- x$fs_lmer
+d <- x$d; beta <- x$beta
+re_summary <- x$re_summary; psi <- x$psi; sd_g <- x$sd_g
+Vpost <- x$Vpost; ld_eb <- x$ld_eb; w <- x$w
+lme4_tau2 <- x$lme4_tau2
+```
+
+## Stage 1: `get_fs.brmsfit()`
+
+The stage-1 output (EB) has one row per subject and four columns: the score
+`fs_u0`, its standard error `fs_u0_se`, its **implied loading** `u0_by_fs_u0`,
+and its measurement-error variance `ev_fs_u0`. The per-subject loadings (`fsL`),
+error variances (`fsT`), and the latent covariance (`psi`) are attached as
+attributes.
+
+```{r scores}
+head(fs_eb)
+```
+
+### The scoring convention: `fsL = 1 - Vpost/psi = w`
+
+The score is the **posterior mean** of the random effect, so it is *shrunk*
+toward the population mean (zero here). Its implied loading is the **shrinkage
+weight** `w`, which satisfies the identity `fsL = 1 - Vpost/psi`, where `psi` is
+the random-effect (prior) variance and `Vpost` the per-subject posterior
+variance. brms estimates `psi = sd_Subject__Intercept^2`:
+
+```{r re}
+re_summary
+```
+
+`Vpost` is read off the posterior draws of each subject's random effect. The
+identity holds on the numbers — the implied loading (`u0_by_fs_u0`), the
+`1 - Vpost/psi` computed from the prior and posterior variances, and the analytic
+weight `w` all agree:
+
+```{r identity}
+data.frame(
+  subject        = as.character(head(seq_len(nrow(fs_eb)), 6)),
+  fs_u0          = round(fs_eb$fs_u0[1:6], 4),
+  Vpost          = round(Vpost[1:6], 4),
+  `1 - Vpost/psi` = round(1 - Vpost[1:6] / psi, 4),
+  fsL            = round(ld_eb, 4),
+  w              = round(w, 4))
+```
+
+The loading is `0.85`, **not 1**: it is the shrinkage weight. (This is the same
+convention as the `mirt` and the lme4 `method = "EB"` paths — a shrinkage score
+carries a sub-unit loading.)
+
+### EB vs ML
+
+`get_fs.brmsfit()` offers two scoring methods:
+
+- `method = "EB"` (the default): the **posterior mean**. The score is shrunk
+  toward the prior mean, and the loading is the shrinkage weight `w < 1`.
+- `method = "ML"`: the **prior-free** group mean (a Bartlett analog). No
+  shrinkage, so the loading is the **unit** loading (`1`).
+
+```{r ebml}
+data.frame(
+  fs_EB  = round(fs_eb$fs_u0[1:5], 4),
+  fs_ML  = round(fs_ml$fs_u0[1:5], 4),
+  fsL_EB = round(ld_eb, 4),
+  fsL_ML = round(as.numeric(attr(fs_ml, "fsL"))[1], 4),
+  fsT_EB = round(as.numeric(attr(fs_eb, "fsT"))[1], 4),
+  fsT_ML = round(as.numeric(attr(fs_ml, "fsT"))[1], 4))
+```
+
+The EB scores are shrunk toward zero relative to the ML scores (e.g. `-2.01` vs
+`-2.36`), and the EB loading is the shrinkage weight `0.85` while the ML loading
+is `1`. Prefer **EB** for a person-specific score: it is the posterior mean and
+carries a coherent person-specific standard error. **ML** is the classical
+frequentist (Bartlett) score — it is what the lme4 `method = "ML"` path
+computes. Both methods are available for plain Gaussian brms models; only the EB
+path is available for location-scale / random-`sigma` models (a prior-free OLS
+score presumes a constant residual variance, which a random sigma violates).
+
+## Stage 2a: the latent variance
+
+First, recover the random effect's variance. With no distal variable there is
+nothing to `cbind`, so the **derived** form works directly — `tspa()` reads the
+score, its SE, and its loading straight out of the `get_fs()` result:
+
+```{r stage2a}
+fit_var <- tspa("u0 ~~ u0", data = fs_eb)
+pt <- lavaan::parameterTable(fit_var)
+pt$est[pt$lhs == "u0" & pt$op == "~~" & pt$rhs == "u0"]
+```
+
+The 2S-PA latent variance agrees with both the brms estimate
+(`sd_Subject__Intercept^2`) and the `lme4` analog:
+
+```{r var}
+data.frame(tspa = round(pt$est[pt$lhs == "u0" & pt$op == "~~" & pt$rhs == "u0"], 4),
+           brms_sd_g_sq = round(sd_g^2, 4),
+           lme4_tau_sq  = round(lme4_tau2, 4),
+           true_tau2    = 1)
+```
+
+## Stage 2b: a structural model, and why the loading matters
+
+Now relate the trait to the distal `d`. Adding `d` to the scored data is the
+`cbind()` step:
+
+```{r stage2b}
+comb <- cbind(fs_eb, d = d)
+se_u0 <- mean(fs_eb$fs_u0_se)
+sc <- function(f) {
+  p <- lavaan::parameterTable(f)
+  p$est[p$lhs == "d" & p$op == "~" & p$rhs == "u0"]
+}
+naive     <- coef(lm(d ~ fs_u0, data = comb))["fs_u0"]
+fit_unit  <- tspa("d ~ u0", data = comb, se_fs = list(u0 = se_u0))  # unit loading
+fit_derived <- tspa("d ~ u0", data = comb)                          # recovered loading
+data.frame(
+  true           = beta,
+  naive_regression = round(naive, 4),
+  unit_loading   = round(sc(fit_unit), 4),
+  derived        = round(sc(fit_derived), 4))
+```
+
+The score's loading is the shrinkage weight `0.85`, **not** 1. A 2S-PA
+correction that **assumes unit loading** — the explicit `se_fs` form above, or
+the derived form before the R2spa 0.0.5 loading-recovery fix — over-corrects and
+inflates the coefficient (`1.28` against the true `1.00`). The **derived** form
+recovers the implied loading automatically (from the `u0_by_fs_u0` column) and
+is correct. The naive regression of `d` on the raw score happens to land near the
+truth for this random-intercept design, but it ignores the score's measurement
+error entirely, so it is not a 2S-PA correction (it neither estimates the latent
+variance nor the score's standard error).
+
+> **The `cbind()` footgun.** Adding `d` with `cbind()` drops the `get_fs()`
+> attributes, so the derived form can no longer read the loading from them — it
+> relies instead on the implied-loading *column* (`u0_by_fs_u0`), which `tspa()`
+> recovers since R2spa 0.0.5. Before that fix the same call silently assumed a
+> unit loading and biased the result. If you are on an older release, pass the
+> loading explicitly rather than relying on the derived form.
+
+## Validation against lme4
+
+Fit the same model in `lme4` and score the empirical-Bayes random effects; the
+frequentist gold standard:
+
+```{r validate, eval = FALSE}
+library(lme4)
+fit_lmer  <- lmer(y ~ 1 + (1 | Subject), data = dat, REML = FALSE)
+fs_lmer   <- get_fs(fit_lmer, method = "EB")
+```
+
+The `fs_lmer` result is in the cached data. Running the same derived structural
+model on the lme4 scores and comparing with the brms route:
+
+```{r validate2}
+comb_lmer   <- cbind(fs_lmer, d = d)
+fit_lmer2sa <- tspa("d ~ u0", data = comb_lmer)
+data.frame(
+  brms_EB = round(sc(fit_derived), 4),
+  lme4_EB = round(sc(fit_lmer2sa), 4),
+  true    = beta)
+```
+
+The brms (posterior EB) and lme4 (frequentist EB) routes agree: both use a
+shrinkage loading near `0.85` and recover the structural coefficient. This ties
+the brms stage-1 route to the familiar lme4 one.
+
+## The exact, per-subject route
+
+`tspa()` (a `lavaan` model) pools the per-subject error variance to a single
+value. `tspa_mx_model()` (an `OpenMx` model) honours each subject's error
+variance as a definition variable — the exact, non-pooled route; see [the OpenMx
+vignette](tspa-vignette-mx.html).
+
+## Scope and notes
+
+- `brms` is a `Suggests` dependency; `get_fs()` stops with a clear message if it
+  is not installed.
+- `get_fs.brmsfit()` supports a **single** random-effects grouping factor with
+  any number of coefficients (random slopes); multiple distinct grouping factors
+  are not yet supported.
+- Both `method = "EB"` and `method = "ML"` are available for plain Gaussian brms
+  models; the location-scale (random-`sigma`) case is EB-only (see
+  [the random-sigma vignette](tspa-brms-random-sigma.html)).
+- Scoring is **posterior-based**: the EB path needs no design matrix.
+
+## References
+
+- Cole, D. A., & Preacher, K. J. (2014). Manifest variable path analysis:
+  Potentially serious and misleading consequences due to uncorrected measurement
+  error. *Psychological Methods, 19*(2), 300–315.
+  [https://doi.org/10.1037/a0033805](https://doi.org/10.1037/a0033805)
+- Bürkner, P.-C. (2017). brms: An R package for Bayesian multilevel models using
+  Stan. *Journal of Statistical Software, 80*(1), 1–28.
+  [https://doi.org/10.18637/jss.v080.i01](https://doi.org/10.18637/jss.v080.i01)
+- Lai, M. H. C., & Hsiao, Y.-Y. (2022). Two-stage path analysis with definition
+  variables: An alternative framework to account for measurement error.
+  *Psychological Methods, 27*(4), 568–588.
+  [https://doi.org/10.1037/met0000410](https://doi.org/10.1037/met0000410)
+- Lai, M. H. C., & Liu, S. (2026). A two-stage approach to account for
+  measurement error when using empirical Bayes estimates of random slopes.
+  *Psychological Methods.* Advance online publication.
+  [https://doi.org/10.1037/met0000838](https://doi.org/10.1037/met0000838)
+- Neale, M. C., et al. (2016). OpenMx: An open source extended structural
+  equation modeling framework. *Psychometrika, 81*(2), 535–549.
+  [https://doi.org/10.1007/s11336-016-9549-x](https://doi.org/10.1007/s11336-016-9549-x)
+- Rosseel, Y. (2012). *lavaan*: An R package for structural equation modeling.
+  *Journal of Statistical Software, 48*(2), 1–36.
+  [https://doi.org/10.18637/jss.v048.i02](https://doi.org/10.18637/jss.v048.i02)

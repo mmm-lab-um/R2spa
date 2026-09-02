@@ -303,6 +303,8 @@ cat(attributes(tspa_fit)$tspaModel)
 
 - [`Multiple factors`](multiple-factors.html) — a score that is a composite of several indicators: the `fsT`/`fsL` path and `tspa()` cross-loadings.
 - [`2S-PA with Random Effects`](multilevel.html) — stage 1 from an `lme4` mixed model, feeding empirical-Bayes random effects into 2S-PA.
+- [`2S-PA with a brms Random-Intercept Model`](tspa-brms.html) — stage 1 from a brms Gaussian mixed model (random intercept/slope): posterior-mean scores, the shrinkage-weight loading `fsL = 1 - Vpost/psi`, and the EB vs ML scoring methods.
+- [`2S-PA with a brms Location-Scale Model`](tspa-brms-random-sigma.html) — the brms random-`sigma` (person-specific / heteroskedastic) case.
 - [`Scoring Matrices: lavaan CFA and lme4`](scoring-matrices.html) — the per-observation scoring matrices `get_fs()` attaches, and the empirical-Bayes identity behind them.
 - [`Correction to Measurement Error`](correction-error.html) — the measurement-error correction factor and its effect on standard errors.
 - [`EFA Scores`](efa-score.html) — stage 1 from an exploratory factor analysis (EFA) rather than a CFA.
