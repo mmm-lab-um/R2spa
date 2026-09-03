@@ -192,13 +192,13 @@ knitr::kable(se_tbl, row.names = FALSE,
 
 ## Coverage
 
-```{r coverage-plot, message = FALSE}
-library(ggplot2)
-covplot <- do.call(rbind, lapply(n_list, function(n) {
+```{r coverage-plot, message = FALSE, fig.width = 8, fig.height = 4}
+covdat <- do.call(rbind, lapply(n_list, function(n) {
   d <- res[res$n == n, ]
   data.frame(
     n = n,
-    method = c("regression", "regression", "Bartlett", "Bartlett", "sum", "joint"),
+    label = c("regression naive", "regression corr.", "Bartlett naive",
+              "Bartlett corr.", "sum naive", "joint"),
     se = c("naive", "corrected", "naive", "corrected", "naive", "naive"),
     coverage = c(summ(d$est_reg, d$se_reg_naive)["coverage"],
                  cov95(d$est_reg, d$se_reg_corr),
@@ -207,16 +207,16 @@ covplot <- do.call(rbind, lapply(n_list, function(n) {
                  summ(d$est_sum, d$se_sum_naive)["coverage"],
                  summ(d$est_joint, d$se_joint)["coverage"]))
 }))
-covplot$label <- interaction(covplot$method, covplot$se, sep = " ")
-ggplot(covplot, aes(x = label, y = coverage, fill = se)) +
-  geom_col(width = 0.75) +
-  geom_hline(yintercept = 0.95, linetype = "dashed", color = "grey30") +
-  scale_fill_manual(values = c(naive = "grey70", corrected = "#2166ac")) +
-  facet_wrap(~ n) +
-  labs(x = NULL, y = "empirical 95% coverage", fill = "SE") +
-  theme_classic(base_size = 11) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  coord_cartesian(ylim = c(0.85, 1.0))
+op <- par(mfrow = c(1, 2), mar = c(8, 4, 3, 1))
+for (n in n_list) {
+  sub <- covdat[covdat$n == n, ]
+  cols <- ifelse(sub$se == "corrected", "#2166ac", "grey70")
+  barplot(sub$coverage, names.arg = sub$label, col = cols,
+          ylim = c(0.85, 1.0), las = 2, cex.names = 0.6,
+          main = sprintf("n = %d", n), ylab = "empirical 95% coverage")
+  abline(h = 0.95, lty = 2, col = "grey30")
+}
+par(op)
 ```
 
 # Discussion
