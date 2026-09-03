@@ -25,7 +25,8 @@ estimates a structural path model by first computing factor scores (stage 1) and
 regressing those scores on one another while correcting for their measurement error
 (stage 2, `tspa()`). Stage 1 can produce scores by several methods —
 **regression** (empirical Bayes, the default), **Bartlett**, or **sum** scores
-(`get_fs(..., method = )`). Separately, the *standard errors* of the stage-2 path
+(the unweighted item means, `method = "mean"`), selected via `get_fs(..., method = )`.
+Separately, the *standard errors* of the stage-2 path
 estimates can optionally be inflated by a first-order (delta-method) correction for the
 sampling error in the stage-1 scoring weights
 (see `vignette("Corrected Standard Errors", package = "R2spa")`; `tspa(..., corrected_se = TRUE)`).
