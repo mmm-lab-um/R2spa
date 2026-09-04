@@ -293,6 +293,7 @@
 #' - `vignette("Scoring Matrices: lavaan CFA and lme4", package = "R2spa")` for the scoring-matrix internals.
 #' - `vignette("EFA Scores", package = "R2spa")` for EFA-based factor scores.
 #' - `vignette("2S-PA with Missing Data", package = "R2spa")` for `missing = "fiml"`.
+#' - `vignette("Scoring Methods and SE Correction in 2S-PA: A Simulation Study", package = "R2spa")` for a simulation study comparing scoring methods and SE correction.
 #'
 #' @export
 #'

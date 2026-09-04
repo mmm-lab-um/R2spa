@@ -300,6 +300,7 @@
 #' - `vignette("2S-PA with Missing Data", package = "R2spa")` for missing data (`missing = "fiml"`).
 #' - `vignette("Product factor-score indicators (latent interactions)", package = "R2spa")` for `product = TRUE`.
 #' - `vignette("Corrected Standard Errors", package = "R2spa")` for `corrected_se = TRUE`.
+#' - `vignette("Scoring Methods and SE Correction in 2S-PA: A Simulation Study", package = "R2spa")` for a simulation comparison of scoring methods and SE correction.
 #'
 #' @export
 #'

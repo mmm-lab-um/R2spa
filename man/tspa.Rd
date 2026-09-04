@@ -495,5 +495,6 @@ tspa("y ~ x + m + x:m", data = fs_prod, product = TRUE)
 \item \code{vignette("2S-PA with Missing Data", package = "R2spa")} for missing data (\code{missing = "fiml"}).
 \item \code{vignette("Product factor-score indicators (latent interactions)", package = "R2spa")} for \code{product = TRUE}.
 \item \code{vignette("Corrected Standard Errors", package = "R2spa")} for \code{corrected_se = TRUE}.
+\item \code{vignette("Scoring Methods and SE Correction in 2S-PA: A Simulation Study", package = "R2spa")} for a simulation comparison of scoring methods and SE correction.
 }
 }

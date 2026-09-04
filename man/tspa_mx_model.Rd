@@ -88,7 +88,7 @@ that \code{lavaan::tspa(reduce = )} only approximates.
 The internal design is a single-level RAM model (no sub-model, no \code{umx}):
 the lavaan structural string is parsed with \code{\link[lavaan:lavaanify]{lavaan::lavaanify()}}, the
 corrected latents are given auto latent variances, the score indicators and
-their errors/intercepts are attached per \href{https://www.rdocumentation.org/packages/R2spa}{tspa()'s} schema, and the whole thing
+their errors/intercepts are attached per \code{tspa()}'s schema, and the whole thing
 is fit with \code{mxFitFunctionML()} (raw-data FIML).
 \subsection{Auto-derivation from a \code{\link[=get_fs]{get_fs()}} result}{
 

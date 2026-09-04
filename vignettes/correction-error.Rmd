@@ -63,7 +63,7 @@ simy <- function(eta, lambda) {
 
 ```{r, eval = FALSE}
 #' Simulation
-nsim <- 2500
+nsim <- 1000
 tfsy_sim <- fsy_sim <- matrix(NA, nrow = num_obs, ncol = nsim)
 # Also save the scoring matrix
 a_sim <- matrix(NA, nrow = length(lambda), ncol = nsim)
@@ -173,7 +173,7 @@ simy <- function(eta, lambda) {
 
 ```{r, eval = FALSE}
 #' Simulation
-nsim <- 2500
+nsim <- 1000
 tfsy_sim <- fsy_sim <- array(NA, dim = c(num_obs, ncol(lambda), nsim))
 # Also save the scoring matrix
 a_sim <- array(NA, dim = c(ncol(lambda), nrow(lambda), nsim))

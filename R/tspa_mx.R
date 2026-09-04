@@ -12,8 +12,7 @@
 #' The internal design is a single-level RAM model (no sub-model, no `umx`):
 #' the lavaan structural string is parsed with [lavaan::lavaanify()], the
 #' corrected latents are given auto latent variances, the score indicators and
-#' their errors/intercepts are attached per [tspa()'s](
-#' https://www.rdocumentation.org/packages/R2spa) schema, and the whole thing
+#' their errors/intercepts are attached per `tspa()`'s schema, and the whole thing
 #' is fit with `mxFitFunctionML()` (raw-data FIML).
 #'
 #' ## Auto-derivation from a [get_fs()] result
