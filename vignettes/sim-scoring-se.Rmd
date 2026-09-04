@@ -193,39 +193,6 @@ knitr::kable(se_tbl, row.names = FALSE,
              caption = "Standard errors (std.all path). True value = 0.5; nominal coverage 0.95.")
 ```
 
-## Coverage
-
-```{r coverage-plot, message = FALSE, fig.width = 8, fig.height = 5}
-covdat <- do.call(rbind, lapply(n_list, function(n) {
-  d <- res[res$n == n, ]
-  data.frame(
-    n = n,
-    label = c("regression naive", "regression corr.", "Bartlett naive",
-              "Bartlett corr.", "sum naive", "sum corr.", "joint"),
-    se = c("naive", "corrected", "naive", "corrected", "naive", "corrected", "naive"),
-    coverage = c(summ(d$est_reg, d$se_reg_naive)["coverage"],
-                 cov95(d$est_reg, d$se_reg_corr),
-                  summ(d$est_bar, d$se_bar_naive)["coverage"],
-                  cov95(d$est_bar, d$se_bar_corr),
-                 summ(d$est_sum, d$se_sum_naive)["coverage"],
-                 cov95(d$est_sum, d$se_sum_corr),
-                 summ(d$est_joint, d$se_joint)["coverage"]))
-}))
-op <- par(mfrow = c(1, 2), mar = c(4, 2.2, 3, 1))
-for (n in n_list) {
-  sub <- covdat[covdat$n == n, ]
-  cols <- ifelse(sub$se == "corrected", "#2166ac", "grey70")
-  bp <- barplot(sub$coverage, horiz = TRUE, names.arg = sub$label, col = cols,
-                xlim = c(0.85, 1.025), las = 1, cex.names = 0.7, axes = FALSE,
-                main = sprintf("n = %d", n), xlab = "empirical 95% coverage")
-  axis(1, at = c(0.85, 0.90, 0.95, 1.00))
-  abline(v = 0.95, lty = 2, col = "grey30")
-  text(sub$coverage + 0.004, bp, labels = sprintf("%.3f", sub$coverage),
-       pos = 4, cex = 0.7)
-}
-par(op)
-```
-
 # Discussion
 
 - **Point estimates track the gold standard.** Every scoring method is (near-)
