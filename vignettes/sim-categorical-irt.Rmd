@@ -1,0 +1,197 @@
+---
+title: "2S-PA with Categorical Items (mirt): A Simulation Study"
+author: "Mark Lai"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{2S-PA with Categorical Items (mirt): A Simulation Study}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+# Overview
+
+Two-stage path analysis (2S-PA) estimates a structural path model by first computing
+factor scores (stage 1) and then regressing those scores on one another while
+correcting for their measurement error (stage 2, `tspa()` / `tspa_mx_model()`).
+Until now the package's scoring and correction machinery was exercised on *continuous*
+indicators. This vignette reports a small Monte Carlo study that asks whether the
+two-stage approximation remains accurate when the stage-1 model is a **categorical**
+(item-response) fit scored by `get_fs.mirt()`, and how it compares with the
+fully joint **WLSMV** model.
+
+The structural model has two correlated unit-variance factors with a single path,
+`F2 ~ F1`. The stage-1 items are either **binary** (2PL) or **polytomous** (graded
+response, 4 categories), and the item thresholds are either **balanced** (spread
+across the latent range) or **skewed** (shifted so most responses fall in the lowest
+category). The three estimators compared are:
+
+- **`tspa`** — two-stage path analysis with the pooled lavaan stage 2;
+- **`tspa_mx`** — two-stage path analysis with the exact OpenMx stage 2;
+- **WLSMV** — the fully joint `lavaan::sem()` with categorical indicators (gold standard).
+
+Because the data are simulated, the true standardized path is known, so we can report
+bias (point estimate) and coverage (standard-error accuracy).
+
+The generation script is `data-raw/sim_categorical_irt.R` (kept out of the build); it
+writes the fixture read here (`vignettes/sim_categorical_irt.RDS`).
+
+# Data generation process
+
+The latent model is, on the unit-factor-variance scale,
+
+$$
+\begin{aligned}
+\texttt{F1} & \sim N(0, 1), \\
+\texttt{F2} & = 0.6 \, \texttt{F1} + \zeta, \qquad \zeta \sim N(0, 0.64),
+\end{aligned}
+$$
+
+so `Var(F1) = Var(F2) = 1`, the factor correlation is $0.6$, and the true
+**standardized** `F2 ~ F1` path is $\gamma^* = 0.6$. Each factor is measured by
+`5` items with discrimination $a = 1.5$.
+
+- **Binary** items follow the 2PL, $P(Y = 1 \mid \theta) = 1 / (1 + e^{-(a\theta - b)})$.
+- **Polytomous** items follow the graded-response model with `4` categories and
+  thresholds $d_1 < d_2 < d_3$, where $P(Y \ge k \mid \theta) = 1 / (1 + e^{-(a\theta - d_k)})$.
+
+The two threshold conditions shift the marginal item response:
+
+```{r dgp, message = FALSE}
+x <- readRDS("sim_categorical_irt.RDS")
+meta <- x$meta
+cat("gamma* (true std path) =", meta$gamma_star,
+    "  n =", paste(meta$n, collapse = ", "),
+    "  B =", meta$B, "\n")
+cat("mean marginal item response by condition:\n")
+print(round(meta$marginal, 3))
+```
+
+`balanced` is centered (binary marginal ~0.5; graded ~1.4 of 0--3) while `skewed`
+concentrates responses in the low end (binary ~0.2; graded ~0.7). Skewed thresholds
+make many observations weakly identified, so the per-observation score standard errors
+are larger and more heterogeneous — the condition that stresses the two-stage
+correction.
+
+# Estimators compared
+
+All three estimate the **standardized** `F2 ~ F1` path (the correlation between the
+factors), which is the scale-free quantity comparable across them.
+
+- **Stage 1 (shared by the two 2S-PA arms):** fit the two-factor item-response model
+  (`mirt`, `COV = F1*F2`) and score it with `get_fs()`. This returns the EAP scores and
+  the per-observation error-variance quantities (`fsT`/`fsL`/`fsb`) that drive the
+  correction.
+- **`tspa`:** stage 2 is `tspa("F2 ~ F1", scores)`, which *pools* the per-observation
+  quantities to a representative value before correcting the stage-2 regression.
+- **`tspa_mx`:** stage 2 is `tspa_mx_model("F2 ~ F1", scores)`, which uses the
+  per-observation quantities as definition variables — the *exact*, non-pooled
+  correction.
+- **WLSMV:** the fully joint `lavaan::sem()` of the measurement model and the path, fit
+  with `estimator = "WLSMV"` on the ordered items.
+
+The standardized path is read from each fitted model as
+$\hat\gamma \, \text{SD}(F1) / \text{SD}(F2)$, with the standard error from a
+first-order (delta-method) linearization in the structural path and the two factor
+variances. This single formula reproduces `lavaan`'s `standardizedSolution()` for the
+two lavaan arms and the equivalent algebra for the OpenMx arm.
+
+# Results
+
+`B = `r meta$B` replications at each of two sample sizes. Convergence was at least
+`99%` of replications in every condition for every method.
+
+```{r summ, message = FALSE}
+res <- x$res
+g <- meta$gamma_star
+summ <- function(d) {
+  d <- d[!is.na(d$est_std), ]
+  lo <- d$est_std - 1.96 * d$se_std; hi <- d$est_std + 1.96 * d$se_std
+  c(bias = mean(d$est_std) - g, mc_sd = sd(d$est_std),
+    mean_se = mean(d$se_std), calib = mean(d$se_std) / sd(d$est_std),
+    coverage = mean(lo <= g & g <= hi))
+}
+conds <- expand.grid(n = meta$n, item = c("binary", "graded"),
+                     skew = c("balanced", "skewed"), stringsAsFactors = FALSE)
+methods <- c("tspa", "tspa_mx", "WLSMV")
+```
+
+## Point estimates
+
+Bias (mean estimate minus `0.6`) and the Monte Carlo standard deviation of the
+standardized path, per condition and method:
+
+```{r point-est}
+pt <- do.call(rbind, lapply(seq_len(nrow(conds)), function(i) {
+  o <- conds[i, ]
+  do.call(rbind, lapply(methods, function(m) {
+    d <- res[res$n == o$n & res$itemtype == o$item & res$skew == o$skew & res$method == m, ]
+    s <- summ(d)
+    data.frame(n = o$n, item = o$item, skew = o$skew, method = m,
+               bias = round(s["bias"], 3), mc_sd = round(s["mc_sd"], 3),
+               stringsAsFactors = FALSE)
+  }))
+}))
+knitr::kable(pt, row.names = FALSE,
+             caption = "Point estimates (standardized path). True value = 0.6.")
+```
+
+All three methods are close to unbiased (cell biases within about `0.02` of `0.6`). The
+**pooled** `tspa` is biased downward in every cell, and the **exact** `tspa_mx` has
+strictly smaller bias than the pooled route in every cell; the WLSMV reference has the
+smallest bias in most cells. The pooled-vs-exact gap is largest under the **skewed**
+thresholds — largest in the skewed binary, `n = 200`, cell — where the per-observation
+standard errors are most heterogeneous.
+
+## Standard errors
+
+Mean reported standard error, its calibration (`mean SE` / Monte Carlo SD), and the
+empirical 95% coverage, per condition and method:
+
+```{r se-table}
+se <- do.call(rbind, lapply(seq_len(nrow(conds)), function(i) {
+  o <- conds[i, ]
+  do.call(rbind, lapply(methods, function(m) {
+    d <- res[res$n == o$n & res$itemtype == o$item & res$skew == o$skew & res$method == m, ]
+    s <- summ(d)
+    data.frame(n = o$n, item = o$item, skew = o$skew, method = m,
+               mean_se = round(s["mean_se"], 3), calib = round(s["calib"], 3),
+               coverage = round(s["coverage"], 3), stringsAsFactors = FALSE)
+  }))
+}))
+knitr::kable(se, row.names = FALSE,
+             caption = "Standard errors (standardized path). Nominal coverage 0.95.")
+```
+
+Coverage is within about `4` points of the nominal `0.95` everywhere. Calibration is
+condition-dependent rather than uniformly close to `1`: it sits near or above `1` for the
+balanced binary conditions, falls below `1` for the graded items (most so at `n = 500`),
+and it does **not** improve monotonically with `n` — for the balanced graded and skewed
+binary conditions the reported SE is, if anything, *more* conservative (further below `1`)
+as `n` grows.
+
+# Discussion
+
+- **The two-stage approximation carries over to categorical items.** Both `tspa` and
+  `tspa_mx` recover the standardized path for binary and polytomous indicators, matching
+  the WLSMV reference to within about `0.03` in the worst (skewed, `n = 200`) cell — the
+  exact `tspa_mx` route stays within about `0.015` throughout. Categorical stage-1 items
+  are therefore not an obstacle to 2S-PA.
+- **Exact beats pooled under skew.** Pooling the per-observation error variances to a
+  single representative value is a better approximation when those variances are
+  homogeneous (balanced thresholds) and a worse one when they are heterogeneous
+  (skewed thresholds, where many observations are weakly identified). The bias gap
+  between `tspa` and `tspa_mx` is largest in exactly those cells; the OpenMx route, which
+  keeps the per-observation quantities, stays closer to WLSMV.
+- **SEs are well behaved.** All three methods give coverage within about `4` points of
+  `0.95`. Calibration is condition-dependent — near- or above-nominal for balanced binary,
+  mildly conservative for the graded and skewed items — and does not improve uniformly with
+  `n`, but the deviations from nominal are small.
+- **Scope.** The study is small-scale (`B = `r meta$B`), single-group, and uses one
+  discrimination value and `4` categories for the polytomous case. It is meant to show
+  that the machinery works and to point at the pooled-vs-exact trade-off, not to give
+  precise coverage figures.
