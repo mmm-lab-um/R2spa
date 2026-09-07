@@ -26,7 +26,7 @@ args <- commandArgs(trailingOnly = TRUE)
 B <- if (length(args) >= 1L) as.integer(args[1L]) else 200L
 
 gamma_star <- 0.6
-n_list <- c(200L, 500L)
+n_list <- c(50L, 200L, 500L)
 a_disc <- 1.5
 n_items <- 5L
 K <- 4L                       # graded categories (K - 1 = 3 thresholds)
