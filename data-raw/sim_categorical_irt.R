@@ -10,10 +10,15 @@
 # polytomous (graded-response, 4 categories). Item thresholds are either
 # "balanced" (spread across the latent range) or "skewed" (shifted so most
 # responses fall in the lowest category). For each (itemtype, skew, n, rep) we
-# estimate the standardized F2 ~ F1 path by three methods:
-#   tspa        two-stage path analysis, pooled lavaan stage 2
-#   tspa_mx     two-stage path analysis, exact OpenMx stage 2
-#   WLSMV       fully joint lavaan with categorical indicators (gold standard)
+# estimate the standardized F2 ~ F1 path by five methods:
+#   tspa           two-stage path analysis, joint stage 1, pooled lavaan stage 2
+#   tspa_mx        two-stage path analysis, joint stage 1, exact OpenMx stage 2
+#   WLSMV          fully joint lavaan with categorical indicators (gold standard)
+#   tspa_local     two-stage path analysis, LOCAL (per-construct) stage 1, pooled stage 2
+#   tspa_mx_local  two-stage path analysis, LOCAL (per-construct) stage 1, exact stage 2
+# The local stage 1 scores each factor from its own 5 items with separate
+# single-factor mirt fits and combines them block-diagonally via combine_fs();
+# the joint stage 1 scores both factors together from one two-factor fit.
 # and record the standardized estimate, its (delta-method) SE, and convergence.
 
 suppressMessages({
@@ -117,7 +122,7 @@ run_one <- function(itemtype, skew, n, b) {
                           itemtype = if (itemtype == "binary") "2PL" else "graded")),
     error = function(e) NULL)
   if (is.null(mf)) {
-    m <- c("tspa", "tspa_mx", "WLSMV")
+    m <- c("tspa", "tspa_mx", "WLSMV", "tspa_local", "tspa_mx_local")
     return(do.call(rbind, lapply(m, function(mm) rec(mm, NA_real_, NA_real_))))
   }
   fs <- get_fs(mf)
@@ -135,15 +140,39 @@ run_one <- function(itemtype, skew, n, b) {
   # gold: WLSMV
   ord <- dat; for (j in colnames(ord)) ord[[j]] <- factor(ord[[j]], ordered = TRUE)
   r_w <- tryCatch({ w <- suppressWarnings(sem(
-                     "F1 =~ i1+i2+i3+i4+i5\nF2 =~ i6+i7+i8+i9+i10\nF2 ~ F1",
-                     data = ord, estimator = "WLSMV"))
-                   est_of(extract_lavaan(w)) },
-                  error = function(e) c(est = NA_real_, se = NA_real_))
+                      "F1 =~ i1+i2+i3+i4+i5\nF2 =~ i6+i7+i8+i9+i10\nF2 ~ F1",
+                      data = ord, estimator = "WLSMV"))
+                    est_of(extract_lavaan(w)) },
+                   error = function(e) c(est = NA_real_, se = NA_real_))
+
+  # stage 1 (local): score each factor from its own 5 items with separate
+  # single-factor fits, then combine the two single-factor results into a
+  # block-diagonal (zero cross-block fsL/fsT) 2-factor result via combine_fs().
+  # This is the "separate" per-construct scoring: each factor score conditions
+  # only on its own items, not on the other factor's (as the joint fit does).
+  r_lt <- r_lmx <- c(est = NA_real_, se = NA_real_)
+  lfs <- tryCatch({
+    itype <- if (itemtype == "binary") "2PL" else "graded"
+    m1 <- suppressWarnings(mirt(dat[, 1:5], "F1 = 1-5", itemtype = itype))
+    m2 <- suppressWarnings(mirt(dat[, 6:10], "F2 = 1-5", itemtype = itype))
+    combine_fs(get_fs(m1), get_fs(m2))
+  }, error = function(e) NULL)
+  if (!is.null(lfs)) {
+    r_lt <- tryCatch({ f <- suppressWarnings(tspa("F2 ~ F1", data = lfs));
+                       est_of(extract_lavaan(f)) },
+                     error = function(e) c(est = NA_real_, se = NA_real_))
+    r_lmx <- tryCatch({ invisible(capture.output(
+                          fx <- suppressWarnings(tspa_mx_model("F2 ~ F1", data = lfs))))
+                       est_of(extract_mx(fx)) },
+                      error = function(e) c(est = NA_real_, se = NA_real_))
+  }
 
   do.call(rbind, list(
     rec("tspa", unname(r_tspa["est"]), unname(r_tspa["se"])),
     rec("tspa_mx", unname(r_mx["est"]), unname(r_mx["se"])),
-    rec("WLSMV", unname(r_w["est"]), unname(r_w["se"]))))
+    rec("WLSMV", unname(r_w["est"]), unname(r_w["se"])),
+    rec("tspa_local", unname(r_lt["est"]), unname(r_lt["se"])),
+    rec("tspa_mx_local", unname(r_lmx["est"]), unname(r_lmx["se"]))))
 }
 
 # ------------------------------------------------------------------- loop --

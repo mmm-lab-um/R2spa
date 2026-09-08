@@ -28,10 +28,13 @@ The structural model has two correlated unit-variance factors with a single path
 `F2 ~ F1`. The stage-1 items are either **binary** (2PL) or **polytomous** (graded
 response, 4 categories), and the item thresholds are either **balanced** (spread
 across the latent range) or **skewed** (shifted so most responses fall in the lowest
-category). The three estimators compared are:
+category). The estimators differ along two dimensions — the **stage-1 scoring** (joint
+vs. local per-construct) and the **stage-2 correction** (pooled vs. exact):
 
-- **`tspa`** — two-stage path analysis with the pooled lavaan stage 2;
-- **`tspa_mx`** — two-stage path analysis with the exact OpenMx stage 2;
+- **`tspa`** / **`tspa_mx`** — two-stage path analysis with the *joint* stage 1 and,
+  respectively, the pooled lavaan or the exact OpenMx stage 2;
+- **`tspa_local`** / **`tspa_mx_local`** — the same two stage-2 routes, but with a
+  *local* stage 1 that scores each factor from its own items separately;
 - **WLSMV** — the fully joint `lavaan::sem()` with categorical indicators (gold standard).
 
 Because the data are simulated, the true standardized path is known, so we can report
@@ -79,20 +82,27 @@ correction.
 
 # Estimators compared
 
-All three estimate the **standardized** `F2 ~ F1` path (the correlation between the
-factors), which is the scale-free quantity comparable across them.
+All five estimate the **standardized** `F2 ~ F1` path (the correlation between the
+factors), the scale-free quantity comparable across them. They differ along two
+dimensions — the **stage-1 scoring** (joint vs. local) and the **stage-2 correction**
+(pooled vs. exact):
 
-- **Stage 1 (shared by the two 2S-PA arms):** fit the two-factor item-response model
-  (`mirt`, `COV = F1*F2`) and score it with `get_fs()`. This returns the EAP scores and
-  the per-observation error-variance quantities (`fsT`/`fsL`/`fsb`) that drive the
-  correction.
-- **`tspa`:** stage 2 is `tspa("F2 ~ F1", scores)`, which *pools* the per-observation
-  quantities to a representative value before correcting the stage-2 regression.
-- **`tspa_mx`:** stage 2 is `tspa_mx_model("F2 ~ F1", scores)`, which uses the
-  per-observation quantities as definition variables — the *exact*, non-pooled
+- **Stage 1 — joint.** Fit the two-factor item-response model (`mirt`, `COV = F1*F2`) and
+  score it with `get_fs()`. Each factor's EAP score conditions on *all* items, so the two
+  factors borrow information from one another through their correlation.
+- **Stage 1 — local.** Score each factor from its *own* five items with two separate
+  single-factor `mirt` fits, then combine the two single-factor results into a
+  block-diagonal two-factor result with `combine_fs()` (zero cross-block `fsL`/`fsT`).
+  Each score then conditions only on its own items.
+- **Stage 2 — pooled** (`tspa`, `tspa_local`): `tspa("F2 ~ F1", scores)`, which *pools*
+  the per-observation quantities to a representative value before correcting the
+  regression.
+- **Stage 2 — exact** (`tspa_mx`, `tspa_mx_local`): `tspa_mx_model("F2 ~ F1", scores)`,
+  which uses the per-observation quantities as definition variables — the non-pooled
   correction.
 - **WLSMV:** the fully joint `lavaan::sem()` of the measurement model and the path, fit
-  with `estimator = "WLSMV"` on the ordered items.
+  with `estimator = "WLSMV"` on the ordered items. It depends only on the raw items, so
+  it is the same reference regardless of stage-1 scoring.
 
 The standardized path is read from each fitted model as
 $\hat\gamma \, \text{SD}(F1) / \text{SD}(F2)$, with the standard error from a
@@ -121,7 +131,7 @@ summ <- function(d) {
 }
 conds <- expand.grid(n = meta$n, item = c("binary", "graded"),
                      skew = c("balanced", "skewed"), stringsAsFactors = FALSE)
-methods <- c("tspa", "tspa_mx", "WLSMV")
+methods <- c("tspa", "tspa_mx", "WLSMV", "tspa_local", "tspa_mx_local")
 ```
 
 ## Point estimates
@@ -187,6 +197,20 @@ the stage-2 parameters are themselves uncertain. The WLSMV SEs are the least cal
 these small-sample cells, worst on the skewed binary items, where the `n_se` count also
 drops (some fits return no usable covariance).
 
+## Joint vs. local stage-1 scoring
+
+The `tspa_local` / `tspa_mx_local` arms repeat the two-stage estimation with *local*
+(per-construct) scoring. Local and joint scoring give nearly the same precision (Monte
+Carlo SD) and similar standard-error coverage at every `n` — the stage-2 correction
+absorbs the difference in how the scores were obtained. The difference is in **bias at
+small `n`**: at `n = 50` the locally-scored arms are noticeably more biased (mean cell
+`|bias|` about `0.08`, versus about `0.02`–`0.03` for the joint arms), the penalty
+largest for the **binary** items, where each item carries less information and dropping
+the cross-factor borrowing hurts most. At `n = 200` and `500` the gap closes to a couple
+of hundredths or less, so the two scoring modes are essentially equivalent at moderate
+and larger sample sizes. Per-construct scoring is therefore a workable alternative to
+joint scoring, at the cost of some extra small-sample bias.
+
 # Discussion
 
 - **The two-stage approximation carries over to categorical items.** At `n = 200` and `500`
@@ -204,8 +228,14 @@ drops (some fits return no usable covariance).
   `n = 200` and `500` all three methods give coverage within about `4` points of `0.95`
   with near-nominal, condition-dependent calibration. At `n = 50` the first-order
   delta-method SEs under-cover for every method (calibration about `0.7`–`0.9`) — an
-  expected limitation of first-order linearization when the stage-2 parameters are
-  themselves uncertain — and WLSMV is the least calibrated, most on the skewed binary items.
+   expected limitation of first-order linearization when the stage-2 parameters are
+   themselves uncertain — and WLSMV is the least calibrated, most on the skewed binary items.
+- **Local (per-construct) scoring is close to joint, except at small `n`.** Scoring each
+  factor from its own items and combining the results block-diagonally with
+  `combine_fs()` gives essentially the same estimates as joint scoring at `n = 200` and
+  `500`, with similar precision and SE coverage at every size. The only cost is extra bias
+  at `n = 50` (largest for binary items): joint EAP scoring's cross-factor borrowing is
+  worth more when each factor is measured by few, weak items.
 - **Scope.** The study is small-scale (`B = `r meta$B`), single-group, and uses one
   discrimination value and `4` categories for the polytomous case. It is meant to show
   that the machinery works and to point at the pooled-vs-exact trade-off, not to give
