@@ -126,38 +126,45 @@ summ <- function(d) {
   ds <- d[!is.na(d$se_std), ]
   lo <- ds$est_std - 1.96 * ds$se_std; hi <- ds$est_std + 1.96 * ds$se_std
   c(bias = mean(de$est_std) - g, mc_sd = sd(de$est_std),
+    rmse = sqrt(mean((de$est_std - g)^2)),
     mean_se = mean(ds$se_std), calib = mean(ds$se_std) / sd(de$est_std),
     coverage = mean(lo <= g & g <= hi), n_se = nrow(ds))
 }
-conds <- expand.grid(n = meta$n, item = c("binary", "graded"),
-                     skew = c("balanced", "skewed"), stringsAsFactors = FALSE)
 methods <- c("tspa", "tspa_mx", "WLSMV", "tspa_local", "tspa_mx_local")
 ```
 
 ## Point estimates
 
-Bias (mean estimate minus `0.6`) and the Monte Carlo standard deviation of the
-standardized path, per condition and method:
+Per condition and method, bias (mean estimate minus `0.6`), the Monte Carlo standard
+deviation (MC SD), and RMSE (`sqrt(bias^2 + MC SD^2)`) of the standardized path, with the
+binary and polytomous items in separate columns:
 
 ```{r point-est}
-pt <- do.call(rbind, lapply(seq_len(nrow(conds)), function(i) {
-  o <- conds[i, ]
+pt_ns <- expand.grid(n = meta$n, skew = c("balanced", "skewed"),
+                     stringsAsFactors = FALSE)
+pt <- do.call(rbind, lapply(seq_len(nrow(pt_ns)), function(i) {
+  o <- pt_ns[i, ]
+  mm <- function(it, m) {
+    d <- res[res$n == o$n & res$itemtype == it & res$skew == o$skew & res$method == m, ]
+    s <- summ(d); c(s["bias"], s["mc_sd"], s["rmse"])
+  }
   do.call(rbind, lapply(methods, function(m) {
-    d <- res[res$n == o$n & res$itemtype == o$item & res$skew == o$skew & res$method == m, ]
-    s <- summ(d)
-    data.frame(n = o$n, item = o$item, skew = o$skew, method = m,
-               bias = round(s["bias"], 3), mc_sd = round(s["mc_sd"], 3),
-               stringsAsFactors = FALSE)
+    b <- mm("binary", m); gd <- mm("graded", m)
+    data.frame(n = o$n, skew = o$skew, method = m,
+               bias_binary = round(b[1], 3), mc_sd_binary = round(b[2], 3),
+               rmse_binary = round(b[3], 3),
+               bias_graded = round(gd[1], 3), mc_sd_graded = round(gd[2], 3),
+               rmse_graded = round(gd[3], 3), stringsAsFactors = FALSE)
   }))
 }))
 knitr::kable(pt, row.names = FALSE,
-             caption = "Point estimates (standardized path). True value = 0.6.")
+             caption = "Point estimates (standardized path) by item type. True value = 0.6.")
 ```
 
-At `n = 200` and `500` all three methods are close to unbiased (cell biases within about
-`0.02` of `0.6`). The **pooled** `tspa` is biased downward in every one of those cells,
-and the **exact** `tspa_mx` has strictly smaller bias than the pooled route; the WLSMV
-reference has the smallest bias in most cells. The pooled-vs-exact gap is largest under
+At `n = 200` and `500` the joint methods (`tspa`, `tspa_mx`) and WLSMV are close to
+unbiased (cell biases within about `0.02` of `0.6`). The **pooled** `tspa` is biased
+downward in every one of those cells, and the **exact** `tspa_mx` has strictly smaller
+bias than the pooled route; the WLSMV reference has the smallest bias in most cells. The pooled-vs-exact gap is largest under
 the **skewed** thresholds, where the per-observation standard errors are most
 heterogeneous. The smaller sample size (`n = 50`) is noisier, as expected (Monte Carlo SD
 roughly two to three times larger), but the point estimates stay close to `0.6` in most
@@ -169,22 +176,28 @@ categories that skewed binary thresholds produce at small `n`.
 ## Standard errors
 
 Mean reported standard error, its calibration (`mean SE` / Monte Carlo SD), and the
-empirical 95% coverage, per condition and method:
+empirical 95% coverage, per condition and method, with the binary and polytomous items in
+separate columns (`n_se` = reps with a usable SE):
 
 ```{r se-table}
-se <- do.call(rbind, lapply(seq_len(nrow(conds)), function(i) {
-  o <- conds[i, ]
+se <- do.call(rbind, lapply(seq_len(nrow(pt_ns)), function(i) {
+  o <- pt_ns[i, ]
+  mm <- function(it, m) {
+    d <- res[res$n == o$n & res$itemtype == it & res$skew == o$skew & res$method == m, ]
+    s <- summ(d); c(s["mean_se"], s["calib"], s["coverage"], s["n_se"])
+  }
   do.call(rbind, lapply(methods, function(m) {
-    d <- res[res$n == o$n & res$itemtype == o$item & res$skew == o$skew & res$method == m, ]
-    s <- summ(d)
-    data.frame(n = o$n, item = o$item, skew = o$skew, method = m,
-               mean_se = round(s["mean_se"], 3), calib = round(s["calib"], 3),
-               coverage = round(s["coverage"], 3), n_se = s["n_se"],
+    b <- mm("binary", m); gd <- mm("graded", m)
+    data.frame(n = o$n, skew = o$skew, method = m,
+               mean_se_binary = round(b[1], 3), calib_binary = round(b[2], 3),
+               coverage_binary = round(b[3], 3), n_se_binary = b[4],
+               mean_se_graded = round(gd[1], 3), calib_graded = round(gd[2], 3),
+               coverage_graded = round(gd[3], 3), n_se_graded = gd[4],
                stringsAsFactors = FALSE)
   }))
 }))
 knitr::kable(se, row.names = FALSE,
-             caption = "Standard errors (standardized path). Nominal coverage 0.95.")
+             caption = "Standard errors (standardized path) by item type. Nominal coverage 0.95.")
 ```
 
 At `n = 200` and `500` coverage is within about `4` points of the nominal `0.95`, and
