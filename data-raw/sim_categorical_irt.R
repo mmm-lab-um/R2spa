@@ -44,7 +44,7 @@ gen_binary <- function(th, a, b) rbinom(length(th), 1L, 1 / (1 + exp(-(a * th - 
 # per person, Y = sum_k I(u <= c_k) (categories 0..K-1)
 gen_grm <- function(th, a, d) {
   cums <- 1 / (1 + exp(-outer(th, d, function(t, dk) a * t - dk)))
-  u <- matrix(runif(nrow(cums)), nrow = nrow(cums), ncol = ncol(cums), byrow = TRUE)
+  u <- runif(nrow(cums))
   rowSums(u <= cums)
 }
 

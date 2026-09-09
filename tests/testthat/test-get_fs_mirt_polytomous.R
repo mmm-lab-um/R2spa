@@ -34,12 +34,11 @@ skip_if_not_installed("mirt")
 
 # ---- fixtures -------------------------------------------------------------
 # Returns the integer category codes (0..K-1) for each person: draw one
-# uniform per threshold and count how many cumulative probabilities it
-# exceeds (GRM sampling).
+# uniform per person and count how many cumulative thresholds it falls below
+# (GRM sampling: the shared uniform makes the category monotone in theta).
 gen_grm <- function(theta, a, d) {
   cums <- 1 / (1 + exp(-outer(theta, d, function(th, dk) a * th - dk)))
-  u <- matrix(runif(nrow(cums)), nrow = nrow(cums), ncol = ncol(cums),
-              byrow = TRUE)
+  u <- runif(nrow(cums))
   rowSums(u <= cums)
 }
 # K 4-category graded items (3 thresholds each) on one latent vector.

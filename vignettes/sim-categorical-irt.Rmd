@@ -204,11 +204,11 @@ At `n = 200` and `500` coverage is within about `4` points of the nominal `0.95`
 calibration is condition-dependent rather than uniformly close to `1` (near- or
 above-nominal for the balanced binary conditions, mildly below for the graded and skewed
 items). At `n = 50` the picture changes: the first-order (delta-method) SEs used throughout
-**under-cover** for all three methods (calibration roughly `0.7` to `0.9`), because a
+**under-cover** for all three methods (calibration roughly `0.7` to `0.95`), because a
 first-order linearization of the standardized path understates its sampling variability when
 the stage-2 parameters are themselves uncertain. The WLSMV SEs are the least calibrated in
-these small-sample cells, worst on the skewed binary items, where the `n_se` count also
-drops (some fits return no usable covariance).
+these small-sample cells (about `0.7`), and on the skewed binary items the usable-SE count
+(`n_se`) also drops, since some fits return no usable covariance.
 
 ## Joint vs. local stage-1 scoring
 
@@ -217,7 +217,7 @@ The `tspa_local` / `tspa_mx_local` arms repeat the two-stage estimation with *lo
 Carlo SD) and similar standard-error coverage at every `n` — the stage-2 correction
 absorbs the difference in how the scores were obtained. The difference is in **bias at
 small `n`**: at `n = 50` the locally-scored arms are noticeably more biased (mean cell
-`|bias|` about `0.08`, versus about `0.02`–`0.03` for the joint arms), the penalty
+`|bias|` about `0.10`, versus about `0.03`–`0.04` for the joint arms), the penalty
 largest for the **binary** items, where each item carries less information and dropping
 the cross-factor borrowing hurts most. At `n = 200` and `500` the gap closes to a couple
 of hundredths or less, so the two scoring modes are essentially equivalent at moderate
@@ -240,9 +240,10 @@ joint scoring, at the cost of some extra small-sample bias.
 - **SEs are well behaved at moderate `n`, with their limits visible at `n = 50`.** At
   `n = 200` and `500` all three methods give coverage within about `4` points of `0.95`
   with near-nominal, condition-dependent calibration. At `n = 50` the first-order
-  delta-method SEs under-cover for every method (calibration about `0.7`–`0.9`) — an
+  delta-method SEs under-cover for every method (calibration about `0.7`–`0.95`) — an
    expected limitation of first-order linearization when the stage-2 parameters are
-   themselves uncertain — and WLSMV is the least calibrated, most on the skewed binary items.
+   themselves uncertain — and WLSMV is the least calibrated (about `0.7`), with the fewest
+   usable SEs on the skewed binary items.
 - **Local (per-construct) scoring is close to joint, except at small `n`.** Scoring each
   factor from its own items and combining the results block-diagonally with
   `combine_fs()` gives essentially the same estimates as joint scoring at `n = 200` and
