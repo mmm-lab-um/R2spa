@@ -162,7 +162,7 @@ knitr::kable(pt, row.names = FALSE,
 ```
 
 At `n = 200` and `500` the joint methods (`tspa`, `tspa_mx`) and WLSMV are close to
-unbiased (cell biases within about `0.02` of `0.6`). The **pooled** `tspa` is biased
+unbiased (cell biases within about `0.02` of `0`). The **pooled** `tspa` is biased
 downward in every one of those cells, and the **exact** `tspa_mx` has strictly smaller
 bias than the pooled route; the WLSMV reference has the smallest bias in most cells. The pooled-vs-exact gap is largest under
 the **skewed** thresholds, where the per-observation standard errors are most

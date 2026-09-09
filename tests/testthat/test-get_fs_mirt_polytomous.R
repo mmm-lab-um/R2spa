@@ -9,7 +9,7 @@
 # regression-form engine compute_lav_fs_matrices() -- exactly as for binary.
 # The regression-form closed forms therefore hold for graded items too, and
 # for a single factor, with SE_i^2 = diag(Vpost_i):
-#   fs_F1_by_fs_F1_i == 1 - SE_i^2
+#   F1_by_fs_F1_i    == 1 - SE_i^2
 #   ev_fs_F1_i       == (1 - SE_i^2) * SE_i^2
 #   fs_F1_se_i       == sqrt((1 - SE_i^2) * SE_i^2)
 #   fs_F1_i          == mirt's EAP posterior mean
