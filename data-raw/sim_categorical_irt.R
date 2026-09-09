@@ -182,7 +182,6 @@ cells <- expand.grid(itemtype = c("binary", "graded"),
 tasks <- expand.grid(cell = seq_len(nrow(cells)), rep = seq_len(B),
                      stringsAsFactors = FALSE)
 
-library(parallel)
 nc <- max(1L, min(parallel::detectCores() - 1L, 16L))
 run_idx <- function(k) {
   cl <- cells[tasks$cell[k], ]
@@ -207,7 +206,7 @@ marg_of <- function(itemtype, skew, n = 5000L) {
   set.seed(99L); th <- rnorm(n)
   mean(rowMeans(as.data.frame(gen_items(itemtype, skew, th))))
 }
-meta <- list(gamma_star = gamma_star, B = B, n = n_list, seed = 100000L,
+meta <- list(gamma_star = gamma_star, B = B, n = n_list,
              a = a_disc, n_items = n_items, K = K, marginal = c(
                binary_balanced = marg_of("binary", "balanced"),
                binary_skewed = marg_of("binary", "skewed"),

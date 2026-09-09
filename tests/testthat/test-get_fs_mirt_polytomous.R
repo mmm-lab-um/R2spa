@@ -210,11 +210,8 @@ test_that("get_fs(): 2-factor graded off-diagonals non-identity; per-row fsL/fsT
   # ev/ecov columns are the lower triangle in i-outer / j<=i-inner order
   ev_cols <- grep("^ev_|^ecov_", names(fs2), value = TRUE)
   expect_identical(ev_cols, c("ev_fs_F1", "ecov_fs_F2_fs_F1", "ev_fs_F2"))
-  # the factors really do correlate in this data (from GroupPars)
-  gp <- coef(m2f)$GroupPars[1L, , drop = TRUE]
-  cv <- as.numeric(unname(gp[grepl("^COV_", names(gp))]))
-  Vp <- matrix(c(cv[1], cv[2], cv[2], cv[3]), 2)
-  dimnames(Vp) <- list(c("F1", "F2"), c("F1", "F2"))
+  # the factors really do correlate in this data (full estimated latent covariance)
+  Vp <- R2spa:::mirt_full_cov(m2f)
   expect_gt(abs(Vp[1L, 2L]), 0.2)
   # get_fs psi == the full estimated factor covariance
   expect_equal(unname(as.matrix(attr(fs2, "psi"))), unname(Vp), tolerance = 1e-8)
