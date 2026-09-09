@@ -182,7 +182,8 @@ cells <- expand.grid(itemtype = c("binary", "graded"),
 tasks <- expand.grid(cell = seq_len(nrow(cells)), rep = seq_len(B),
                      stringsAsFactors = FALSE)
 
-nc <- max(1L, min(parallel::detectCores() - 1L, 16L))
+cores <- parallel::detectCores()
+nc <- max(1L, min(if (is.na(cores)) 1L else cores - 1L, 16L))
 run_idx <- function(k) {
   cl <- cells[tasks$cell[k], ]
   run_one(cl$itemtype, cl$skew, cl$n, tasks$rep[k])

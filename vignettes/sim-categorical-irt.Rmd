@@ -28,13 +28,16 @@ The structural model has two correlated unit-variance factors with a single path
 `F2 ~ F1`. The stage-1 items are either **binary** (2PL) or **polytomous** (graded
 response, 4 categories), and the item thresholds are either **balanced** (spread
 across the latent range) or **skewed** (shifted so most responses fall in the lowest
-category). The estimators differ along two dimensions — the **stage-1 scoring** (joint
-vs. local per-construct) and the **stage-2 correction** (pooled vs. exact):
+category). The two-stage estimators differ along two dimensions — the **stage-1 scoring**
+(joint vs. local per-construct) and the **stage-2 correction** (pooled vs. exact). The
+pooled stage-2 is `tspa()` and the exact stage-2 is `tspa_mx_model()`; local scoring is
+not a separate function, only a different way of obtaining the stage-1 scores. The table
+labels are shorthand for each combination:
 
-- **`tspa`** / **`tspa_mx`** — two-stage path analysis with the *joint* stage 1 and,
-  respectively, the pooled lavaan or the exact OpenMx stage 2;
-- **`tspa_local`** / **`tspa_mx_local`** — the same two stage-2 routes, but with a
-  *local* stage 1 that scores each factor from its own items separately;
+- **`tspa`** / **`tspa_mx`** — *joint* stage 1, with the pooled `tspa()` or the exact
+  `tspa_mx_model()` stage 2, respectively;
+- **`tspa_local`** / **`tspa_mx_local`** — the same two stage-2 routes, but with a *local*
+  stage 1 that scores each factor from its own items separately;
 - **WLSMV** — the fully joint `lavaan::sem()` with categorical indicators (gold standard).
 
 Because the data are simulated, the true standardized path is known, so we can report
@@ -94,12 +97,12 @@ dimensions — the **stage-1 scoring** (joint vs. local) and the **stage-2 corre
   single-factor `mirt` fits, then combine the two single-factor results into a
   block-diagonal two-factor result with `combine_fs()` (zero cross-block `fsL`/`fsT`).
   Each score then conditions only on its own items.
-- **Stage 2 — pooled** (`tspa`, `tspa_local`): `tspa("F2 ~ F1", scores)`, which *pools*
-  the per-observation quantities to a representative value before correcting the
+- **Stage 2 — pooled** (labels `tspa`, `tspa_local`): `tspa("F2 ~ F1", scores)`, which
+  *pools* the per-observation quantities to a representative value before correcting the
   regression.
-- **Stage 2 — exact** (`tspa_mx`, `tspa_mx_local`): `tspa_mx_model("F2 ~ F1", scores)`,
-  which uses the per-observation quantities as definition variables — the non-pooled
-  correction.
+- **Stage 2 — exact** (labels `tspa_mx`, `tspa_mx_local`): `tspa_mx_model("F2 ~ F1",
+  scores)`, which uses the per-observation quantities as definition variables — the
+  non-pooled correction.
 - **WLSMV:** the fully joint `lavaan::sem()` of the measurement model and the path, fit
   with `estimator = "WLSMV"` on the ordered items. It depends only on the raw items, so
   it is the same reference regardless of stage-1 scoring.
