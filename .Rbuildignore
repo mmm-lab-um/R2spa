@@ -16,6 +16,7 @@
 ^\.git$
 ^archive$
 ^legacy$
+^data-raw$
 ^PERF_FIX_SUMMARY\.md$
 ^STATUS\.md$
 ^dependency_analysis\.md$
