@@ -20,7 +20,7 @@ joint-model `compute_fs_prod()` / `get_fs(product = )` (2026-08, branch
 measurement-error covariances in the stage-2 model.
 
 ## Repository Facts
-- ~8,000 lines of R across 12 files in `R/`; 26 test files in `tests/testthat/`.
+- ~8,000 lines of R across 12 files in `R/`; 27 test files in `tests/testthat/`.
 - `.quarantine/` — quarantined consumers of `get_fs()`/`tspa()` (`tests/` — only `_snaps/`
   remains; `vignettes/`; the `R/` subdirectory was deleted when its last files were
   re-integrated or removed), excluded from the package build via `^\.quarantine$` in `.Rbuildignore`.
@@ -91,6 +91,10 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
      `Matrix`, `mirt`, `OpenMx`, `numDeriv`, `rmarkdown`, `psych`, `testthat (>= 3.0.0)`.
      `OpenMx` is a `Suggests`-only dependency, consumed via `OpenMx::` in `R/tspa_mx.R`
      (re-integrated 2026-08) and guarded by `requireNamespace` — not in `NAMESPACE`.
+- `data-raw/` — simulation/data generator scripts (committed but **build-excluded** via
+  `^data-raw$` in `.Rbuildignore`); they write the `vignettes/` RDS fixtures (e.g.
+  `data-raw/sim_categorical_irt.R` → `vignettes/sim_categorical_irt.RDS`). Not part of the
+  build/check.
 - `.github/workflows/` — `R-CMD-check.yaml` and `pkgdown.yaml`. Catch failures locally first.
 
 ## Dependency Rules
