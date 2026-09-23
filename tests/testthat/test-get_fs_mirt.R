@@ -16,11 +16,13 @@
 # With a non-zero prior_mean the EAP scores are extracted under that factor
 # prior (mirt::fscores(mean = ...)).
 #
-# These tests cover: S3 dispatch + the MultipleGroupClass guard, the
-# column-set / row-count contract, the 1-factor regression identities, the
-# attribute shapes, the 2-factor off-diagonal identity against
-# compute_lav_fs_matrices(), the column naming order, and the
-# completely-missing-row handling (R2spa NA-row convention).
+# These tests cover: S3 dispatch + the MultipleGroupClass guard, the per-row
+# regression identities (column/order, row count, 1-factor closed forms, the
+# 2-factor engine match -- via assert_mirt_row_identities() in
+# helper-mirt_fs.R), the group-level psi/alpha/fsb attribute values, the
+# 2-factor off-diagonals + column naming order, prior_mean, the correlated-
+# factor regression net, and the completely-missing-row handling (R2spa NA-row
+# convention).
 #
 # mirt is Suggests-only; every call is namespaced (mirt::). No library().
 
@@ -44,23 +46,6 @@ m_na <- suppressWarnings(mirt::mirt(d_na, 1))
 fs <- get_fs(m1)
 fs2 <- get_fs(m2)
 fs_na <- get_fs(m_na)
-ind <- fs_indiv(fs)
-
-# mirt's per-observation SEs for the 1-factor fit (SE_F1 = sqrt(diag(Vpost))).
-se1 <- mirt::fscores(m1, full.scores = TRUE, full.scores.SE = TRUE)[, "SE_F1"]
-
-# ---- helpers ------------------------------------------------------------
-# Map a full (n-row) result row index i to the 1-based position of its entry in
-# a mirt acov list. mirt::fscores(return.acov = TRUE) skips completely-missing
-# rows, so the scorable rows are the complement of `completely_missing` and
-# acov[[k]] is the k-th scorable row.
-acov_index_for_row <- function(acov, cm, i, n) {
-  keep <- !seq_len(n) %in% (if (is.null(cm)) integer(0) else cm)
-  scorsc <- which(keep)
-  k <- which(scorsc == i)
-  if (length(k) != 1L) stop("row ", i, " has no scorable posterior covariance")
-  k
-}
 
 # ============================================================================
 # 1. S3 dispatch + type
@@ -80,79 +65,23 @@ test_that("get_fs(): S3 dispatch -- mirt S4 objects route to the mirt methods", 
 })
 
 # ============================================================================
-# 2. Column-set / order identity with fs_indiv()
+# 2. Per-row identities: column/order, row count, 1-factor closed forms,
+#    2-factor engine match (shared via helper-mirt_fs.R)
 # ============================================================================
 
-test_that("get_fs(): mirt per-row column set and order match fs_indiv()", {
-  expect_identical(sort(names(fs)), sort(names(fs_indiv(fs))))
-  expect_identical(sort(names(fs2)), sort(names(fs_indiv(fs2))))
-  # and the exact column ORDER is preserved, not just the set
-  expect_identical(names(fs), names(ind))
-  expect_identical(names(fs2), names(fs_indiv(fs2)))
-})
-
-# ============================================================================
-# 3. Row count
-# ============================================================================
-
-test_that("get_fs(): one row per observation, preserved through fs_indiv()", {
-  expect_equal(nrow(fs), nrow(d1))
-  expect_equal(nrow(ind), nrow(d1))
-  expect_equal(nrow(fs2), nrow(d2))
-  expect_equal(nrow(fs_indiv(fs2)), nrow(d2))
-})
-
-# ============================================================================
-# 4. 1-factor: implied loading == 1 - SE_i^2
-# ============================================================================
-
-test_that("get_fs(): 1-factor implied loading F1_by_fs_F1 == 1 - SE_i^2 (all rows)", {
-  expect_equal(unname(fs[["F1_by_fs_F1"]]), 1 - se1^2, tolerance = 1e-8)
-  expect_true(all(fs[["F1_by_fs_F1"]] < 1))
-  # the per-row fsL diagonal is also 1 - SE_i^2, and strictly < 1
-  Ldiag <- vapply(attr(fs, "fsL"), function(Lm) Lm[1L, 1L], numeric(1L))
-  expect_true(all(Ldiag < 1))
-  expect_equal(unname(Ldiag), 1 - se1^2, tolerance = 1e-8)
-})
-
-# ============================================================================
-# 5. 1-factor: ev and score SE == (1 - SE_i^2) * SE_i^2 (and its square root)
-# ============================================================================
-
-test_that("get_fs(): 1-factor ev and score SE == (1 - SE_i^2) * SE_i^2 (and sqrt)", {
-  ev_exp <- (1 - se1^2) * se1^2
-  expect_equal(unname(fs[["ev_fs_F1"]]), ev_exp, tolerance = 1e-8)
-  expect_equal(unname(fs[["fs_F1_se"]]), sqrt(ev_exp), tolerance = 1e-8)
-  # the per-row fsT diagonal equals the per-row ev value
-  Tdiag <- vapply(attr(fs, "fsT"), function(Tm) Tm[1L, 1L], numeric(1L))
-  expect_equal(unname(Tdiag), unname(fs[["ev_fs_F1"]]), tolerance = 1e-8)
-  # the score column is mirt's EAP posterior mean
-  eap <- mirt::fscores(m1, full.scores = TRUE, full.scores.SE = TRUE)[, "F1"]
-  expect_equal(unname(fs[["fs_F1"]]), unname(eap), tolerance = 1e-8)
+test_that("get_fs(): per-row identities (1-factor + 2-factor)", {
+  assert_mirt_row_identities(fs, m1, n_rows = nrow(d1))
+  assert_mirt_row_identities(fs2, m2, n_rows = nrow(d2))
 })
 
 # ============================================================================
 # 6. Attribute shapes
 # ============================================================================
 
-test_that("get_fs(): per-observation list attributes + group-level psi/alpha/fsb", {
+test_that("get_fs(): group-level psi/alpha/fsb + fs_pattern (per-row shapes in helper)", {
   q1 <- mirt::extract.mirt(m1, "nfact")
   fn1 <- mirt::extract.mirt(m1, "factorNames")
   n1 <- nrow(fs)
-  Tl <- attr(fs, "fsT")
-  Ll <- attr(fs, "fsL")
-  # fsT / fsL are per-row lists, each element a q x q matrix
-  expect_true(is.list(Tl) && is.list(Ll))
-  expect_length(Tl, n1)
-  expect_length(Ll, n1)
-  sq <- paste(c(q1, q1), collapse = "x")
-  expect_true(all(vapply(Tl, function(x) paste(dim(x), collapse = "x"),
-                         character(1L)) == sq))
-  expect_true(all(vapply(Ll, function(x) paste(dim(x), collapse = "x"),
-                         character(1L)) == sq))
-  # the fsT diagonal equals the per-row ev value
-  Tdiag <- vapply(Tl, function(Tm) Tm[1L, 1L], numeric(1L))
-  expect_equal(unname(Tdiag), unname(fs[["ev_fs_F1"]]), tolerance = 1e-8)
   # fs_pattern: label = 1..n, pat = NULL
   fp <- attr(fs, "fs_pattern")
   expect_equal(fp$label, seq_len(n1))
@@ -181,7 +110,7 @@ test_that("get_fs(): per-observation list attributes + group-level psi/alpha/fsb
 # 7. 2-factor: off-diagonals are NOT identity; per-row fsL/fsT == engine
 # ============================================================================
 
-test_that("get_fs(): 2-factor off-diagonals non-identity; per-row fsL/fsT == engine", {
+test_that("get_fs(): 2-factor off-diagonals non-identity; column order (engine in helper)", {
   q2 <- mirt::extract.mirt(m2, "nfact")
   fn2 <- mirt::extract.mirt(m2, "factorNames")
   fsn2 <- paste0("fs_", fn2)
@@ -212,28 +141,6 @@ test_that("get_fs(): 2-factor off-diagonals non-identity; per-row fsL/fsT == eng
     }
   }
   expect_identical(ev_cols, exp_ev)
-  # per-row full-matrix identity against the shared regression engine for a
-  # few sampled (scorable) rows, reconciling the acov row order
-  acov2 <- mirt::fscores(m2, full.scores = TRUE, return.acov = TRUE)
-  cm <- mirt::extract.mirt(m2, "completely_missing")
-  if (is.null(cm)) cm <- integer(0)
-  psi2 <- diag(q2)
-  rownames(psi2) <- colnames(psi2) <- fn2
-  alpha2 <- setNames(rep(0, q2), fn2)
-  for (i in c(1L, 5L, 60L, nrow(fs2))) {
-    k <- acov_index_for_row(acov2, cm, i, nrow(fs2))
-    m_i <- R2spa:::compute_lav_fs_matrices(
-      as.matrix(acov2[[k]]),
-      psi = psi2, alpha = alpha2,
-      method = "regression"
-    )
-    L_act <- attr(fs2, "fsL")[[i]]
-    T_act <- attr(fs2, "fsT")[[i]]
-    expect_equal(unname(c(L_act)), unname(c(m_i$fsL)), tolerance = 1e-8)
-    expect_equal(unname(c(T_act)), unname(c(m_i$fsT)), tolerance = 1e-8)
-    # the per-row fsL is not the identity (off-diagonal cross-loadings live here)
-    expect_false(isTRUE(all.equal(unname(c(L_act)), c(diag(q2)), tolerance = 1e-8)))
-  }
 })
 
 # ============================================================================
@@ -284,10 +191,9 @@ test_that("get_fs(): prior_mean -> per-row fsb == Vpost_i * alpha (1-factor)", {
   # posterior covariance (independent of fsL)
   acov <- mirt::fscores(m1, full.scores = TRUE, return.acov = TRUE,
                         mean = c(F1 = al))
-  cm <- mirt::extract.mirt(m1, "completely_missing")
-  if (is.null(cm)) cm <- integer(0)
+  scorable <- mirt_scorable(m1, n1)
   for (i in c(1L, 40L, n1)) {
-    k <- acov_index_for_row(acov, cm, i, n1)
+    k <- mirt_acov_k(scorable, i)
     Vpost_i <- as.numeric(as.matrix(acov[[k]])[1L, 1L])
     expect_identical(length(fb[[i]]), 1L)
     expect_equal(unname(as.numeric(fb[[i]])), Vpost_i * al, tolerance = 1e-8)
@@ -354,10 +260,8 @@ test_that("get_fs(): 2-factor correlated -> psi is the full mirt covariance, not
 
   # (b) per-row fsL == I - Vpost_i %*% solve(full cov) (uses the covariances)
   acov <- mirt::fscores(mc, full.scores = TRUE, return.acov = TRUE)
-  cm <- mirt::extract.mirt(mc, "completely_missing")
-  if (is.null(cm)) cm <- integer(0)
   i <- 10L
-  k <- acov_index_for_row(acov, cm, i, nrow(fsc))
+  k <- mirt_acov_k(mirt_scorable(mc, nrow(fsc)), i)
   Lexp <- diag(2) - as.matrix(acov[[k]]) %*% solve(Vp)
   expect_equal(unname(c(attr(fsc, "fsL")[[i]])), unname(c(Lexp)), tolerance = 1e-8)
 

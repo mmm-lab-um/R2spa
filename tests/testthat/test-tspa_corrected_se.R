@@ -497,20 +497,45 @@ test_that("T9: MG Jacobian wiring — independent central differences reproduce 
 ## and must agree to the FD's own noise floor. The gate also routes a
 ## restricted (df > 0) structural model back to the FD.
 
-test_that("T10: engine = 'analytic' matches the FD engine on the saturated fit", {
-  expect_equal(vc_an_sat, vc_fd_sat, tolerance = 1e-2)
-  # The analytic correction is non-trivial, symmetric, and PSD.
-  expect_gt(sum((vc_an_sat - vcov(tspa_joint3))^2), 0)
-  expect_equal(vc_an_sat, t(vc_an_sat), tolerance = 1e-10)
+## The 5 A/B shapes, each referencing its file-scope FD reference (never
+## recomputed in-test). The "fixed-mean prior" row is the est$nu regression net:
+## tspa_prior carries FIXED score means (fsb), and the analytic engine must read
+## the model's implied means from the partable (est$nu), not assume zero
+## (otherwise a spurious mean-coupling term corrupts the score: 4.2% vs 0.95%).
+## The restricted fit (tspa_joint3_nsat) occasionally fails to converge (a
+## fixture flake, handled in T13); the A/B itself is robust to it because the
+## analytic and the FD reference use the same base fit.
+ab_shapes <- list(
+  list(name = "3-factor saturated",  fit = tspa_joint3,      vl = attr(fs_joint3, "vfsLT"), fd = vc_fd_sat),
+  list(name = "restricted (df > 0)", fit = tspa_joint3_nsat, vl = attr(fs_joint3, "vfsLT"), fd = vc_fd_nsat),
+  list(name = "MG + free mean",      fit = tspa_mg,          vl = attr(fs_mg, "vfsLT"), fd = vc_fd_mg),
+  list(name = "fixed-mean prior",    fit = tspa_prior,       vl = attr(fs_prior, "vfsLT"), fd = vc_fd_prior),
+  list(name = "2-factor saturated",  fit = tspa_joint2,      vl = attr(fs_joint2, "vfsLT"), fd = vc_fd_joint2)
+)
+
+test_that("T10: engine = 'analytic' matches the FD engine on every A/B shape", {
+  for (s in ab_shapes) {
+    va <- vcov_corrected(s$fit, vfsLT = s$vl, engine = "analytic")
+    # The FD's own refit/optimizer noise floor is the A/B tolerance (1e-2); this
+    # is NOT the 1e-4 cross-BLAS drift floor used for the analytic goldens (T3).
+    expect_equal(va, s$fd, tolerance = 1e-2, label = s$name)
+    expect_true(all(is.finite(va)), label = s$name)
+    expect_equal(dim(va), dim(vcov(s$fit)), label = s$name)
+    expect_equal(va, t(va), tolerance = 1e-10, label = s$name)   # symmetric
+    expect_gt(sum((va - vcov(s$fit))^2), 0, label = s$name)      # non-trivial
+  }
 })
 
-test_that("T11: engine = 'analytic' is deterministic (bit-identical, no refits)", {
-  # No finite differences and no optimizer jitter, so the result reproduces
-  # bit-for-bit (the FD engine is only deterministic to ~1e-8 cross-run).
-  expect_identical(
-    vcov_corrected(tspa_joint3, vfsLT = attr(fs_joint3, "vfsLT"),
-                   engine = "analytic"),
-    vc_an_sat)
+test_that("T11: the analytic engine is run-to-run bit-identical (per backend) on every A/B shape", {
+  # No refits and no RNG -> the corrected vcov is a pure function of the base
+  # fit + vfsLT, so repeated calls are bit-identical (the property the FD lacks).
+  # Per-backend: across BLAS backends the result drifts ~1e-8-1e-7 (T3 header).
+  for (s in ab_shapes) {
+    expect_identical(
+      vcov_corrected(s$fit, vfsLT = s$vl, engine = "analytic"),
+      vcov_corrected(s$fit, vfsLT = s$vl, engine = "analytic"),
+      label = s$name)
+  }
 })
 
 test_that("T12: engine = 'analytic' honours which_free exactly as the FD", {
@@ -557,55 +582,9 @@ test_that("T13: the analytic path covers saturated and restricted (general) mode
   expect_equal(dim(vc_nsat), dim(vcov(tspa_joint3_nsat)))
 })
 
-test_that("T14: engine = 'analytic' matches the FD on the multigroup + free-mean fit", {
-  va <- vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"), engine = "analytic")
-  # vc_fd_mg is the file-scope explicit-"fd" MG correction (the A/B reference).
-  expect_equal(va, vc_fd_mg, tolerance = 1e-2)
-  expect_equal(dim(va), dim(vcov(tspa_mg)))
-  expect_true(all(is.finite(va)))
-  expect_equal(va, t(va), tolerance = 1e-10)
-})
-
-test_that("T15: engine = 'analytic' matches the FD on the restricted (non-saturated) fit", {
-  # df > 0 -> the general path (section 4.3), not the saturated closed form.
-  va <- vcov_corrected(tspa_joint3_nsat, vfsLT = attr(fs_joint3, "vfsLT"),
-                       engine = "analytic")
-  expect_equal(va, vc_fd_nsat, tolerance = 1e-2)
-  expect_true(all(is.finite(va)))
-})
-
-test_that("T16: engine = 'analytic' matches the FD on the fixed-mean (prior) fit", {
-  # tspa_prior carries FIXED score means (fsb). The analytic engine must read
-  # the model's implied means from the partable (est$nu), not assume zero:
-  # otherwise d = xbar - mu is nonzero and a spurious mean-coupling term
-  # corrupts the cov-param score (the 4.2% vs 0.95% regression this guards).
-  va <- vcov_corrected(tspa_prior, vfsLT = attr(fs_prior, "vfsLT"),
-                       engine = "analytic")
-  expect_equal(va, vc_fd_prior, tolerance = 1e-2)
-  expect_true(all(is.finite(va)))
-})
-
-test_that("T17: engine = 'analytic' matches the FD on the 2-factor saturated fit", {
-  va <- vcov_corrected(tspa_joint2, vfsLT = attr(fs_joint2, "vfsLT"),
-                       engine = "analytic")
-  expect_equal(va, vc_fd_joint2, tolerance = 1e-2)
-  expect_true(all(is.finite(va)))
-})
-
-test_that("T18: the analytic engine is run-to-run bit-identical (per backend) on every A/B shape", {
-  # No refits and no RNG -> the corrected vcov is a pure function of the base
-  # fit + vfsLT, so repeated calls on the same machine/BLAS are bit-identical
-  # (the property the FD lacks). This is per-backend: across BLAS backends the
-  # result drifts ~1e-8-1e-7 relative (see the T3 header), not bit-stable.
-  expect_identical(
-    vcov_corrected(tspa_joint3_nsat, vfsLT = attr(fs_joint3, "vfsLT"),
-                   engine = "analytic"),
-    vcov_corrected(tspa_joint3_nsat, vfsLT = attr(fs_joint3, "vfsLT"),
-                   engine = "analytic"))
-  expect_identical(
-    vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"), engine = "analytic"),
-    vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"), engine = "analytic"))
-})
+## T14-T17 (the MG + free-mean, restricted, fixed-mean prior, and 2-factor
+## saturated A/Bs) and T18 (bit-identity) are folded into the ab_shapes table
+## and the T10 / T11 loops above.
 
 test_that("T19: the analytic engine falls back to FD for a non-ML estimator", {
   # The analytic score is the unweighted normal-ML score. A non-ML estimator

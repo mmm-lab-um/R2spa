@@ -295,10 +295,10 @@ test_that("se of regression coefficients are similar for two methods", {
 
 sem_var_multi <- subset(standardizedSolution(sem_multi),
                         subset = op == "~~" &
-                          lhs %in% c("ind60", "dem60", "dem65"))
+                          lhs %in% c("fs_visual", "fs_speed"))
 tspa_var_multi <- subset(standardizedSolution(tspa_multi),
                          subset = op == "~~" &
-                           lhs %in% c("ind60", "dem60", "dem65"))
+                           lhs %in% c("fs_visual", "fs_speed"))
 
 test_that("test if the variance of factor is similar for two methods", {
   expect_equal(
