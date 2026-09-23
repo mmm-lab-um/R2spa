@@ -1,25 +1,5 @@
-# get_fs() for mirt MultipleGroupClass fits (per-observation factor scores).
-#
-# Multi-group mirt fits are extracted from the WHOLE fit (not per group): scores,
-# SEs and the per-observation posterior covariance all come from
-# mirt::fscores() on the MultipleGroupClass, so every observation carries its
-# own (fsL, fsT, fsb) through the shared regression-form engine
-# compute_lav_fs_matrices() -- with the factor covariance of the observation's
-# OWN group (mirt_group_pars()). The output is the single-group per-row column
-# set with a trailing `group` column (the model's factor levels; NA for
-# completely-missing rows, mirroring the all-NA row convention). `attr(psi)` is
-# a named list (one q x q per group), the only structural difference from the
-# single-group result.
-#
-# mirt drops completely-missing rows from every extraction; they are reconciled
-# against the full row set via extract.mirt("completely_missing"), exactly as in
-# the single-group path (test-get_fs_mirt.R).
-#
-# mirt is Suggests-only; every call is namespaced (mirt::). No library().
-# Note: mirt::multipleGroup() requires `model` as a NUMBER (number of factors)
-# and a factor/character `group` vector of length nrow(data); the standard
-# identifiable form uses metric invariance (invariance = "slopes"), which fixes
-# each group's factor to (0, I) and shares loadings.
+# Multigroup mirt fixtures. Missing rows retain NA-valued score blocks and
+# group; the shared per-row identities live in helper-mirt_fs.R.
 
 # ---- fixtures -----------------------------------------------------------
 set.seed(2024)
@@ -63,9 +43,6 @@ ind1 <- fs_indiv(fs1)
 cm1 <- mirt::extract.mirt(mg1, "completely_missing")
 sc1 <- which(!seq_len(nrow(fs1)) %in% cm1)
 
-# ============================================================================
-# 1. S3 dispatch + type + per-observation marker
-# ============================================================================
 test_that("get_fs(): multi-group mirt routes to the MultipleGroupClass method", {
   expect_true(inherits(mg1, "MultipleGroupClass"))
   expect_true(is.data.frame(fs1))
@@ -75,9 +52,6 @@ test_that("get_fs(): multi-group mirt routes to the MultipleGroupClass method", 
   expect_equal(nrow(ind1), 2L * n)
 })
 
-# ============================================================================
-# 2. Column set / order: single-group per-row set + a trailing `group` column
-# ============================================================================
 test_that("get_fs(): multi-group columns = single-group columns + trailing group", {
   expect_identical(names(fs1),
                    c("fs_F1", "fs_F1_se", "F1_by_fs_F1", "ev_fs_F1", "group"))
@@ -91,9 +65,6 @@ test_that("get_fs(): multi-group columns = single-group columns + trailing group
   expect_identical(setdiff(names(fs1), "group"), names(ind1))
 })
 
-# ============================================================================
-# 3. The `group` column: factor levels = model group names, NA for the missing
-# ============================================================================
 test_that("get_fs(): multi-group `group` column carries the model groups", {
   expect_true(is.factor(fs1$group))
   expect_identical(levels(fs1$group), c("A", "B"))
@@ -105,17 +76,11 @@ test_that("get_fs(): multi-group `group` column carries the model groups", {
   expect_true(all(as.character(fs2$group) %in% c("1", "2")))
 })
 
-# ============================================================================
-# 4. Per-row identities: 1-factor closed forms + 2-factor engine match (shared)
-# ============================================================================
 test_that("get_fs(): multi-group per-row identities (1-factor + 2-factor)", {
   assert_mirt_row_identities(fs1, mg1, n_rows = 2L * n)
   assert_mirt_row_identities(fs2, mg2, n_rows = 2L * n)
 })
 
-# ============================================================================
-# 6. Attribute shapes: per-row fsL/fsT/fsb + a per-GROUP psi list
-# ============================================================================
 test_that("get_fs(): multi-group per-group psi + alpha/fsb/fs_pattern (per-row shapes in helper)", {
   n1 <- nrow(fs1)
   # psi is a NAMED LIST (one 1x1 per group), keyed by the model group names --
@@ -145,9 +110,6 @@ test_that("get_fs(): multi-group per-group psi + alpha/fsb/fs_pattern (per-row s
                     logical(1L))))
 })
 
-# ============================================================================
-# 7. 2-factor: per-row fsL/fsT == the shared engine, per-group psi
-# ============================================================================
 test_that("get_fs(): multi-group 2-factor per-group psi (engine in helper)", {
   fn2 <- c("F1", "F2")
   gname <- mirt::extract.mirt(mg2, "groupNames")
@@ -163,9 +125,6 @@ test_that("get_fs(): multi-group 2-factor per-group psi (engine in helper)", {
   }
 })
 
-# ============================================================================
-# 8. fs_indiv(): per-row dispatch, drops the `group` column
-# ============================================================================
 test_that("get_fs(): multi-group result resolves through fs_indiv()", {
   expect_true(is.data.frame(ind1))
   expect_false("group" %in% names(ind1))
@@ -178,9 +137,6 @@ test_that("get_fs(): multi-group result resolves through fs_indiv()", {
                tolerance = 1e-8)
 })
 
-# ============================================================================
-# 9. Completely-missing row: all-NA per-row block + NA group
-# ============================================================================
 test_that("get_fs(): multi-group completely-missing row is all-NA + NA group", {
   na_rows <- cm1  # extract.mirt("completely_missing") gives original row indices
   expect_true(length(na_rows) >= 1L)

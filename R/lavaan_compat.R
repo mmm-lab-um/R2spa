@@ -1,14 +1,6 @@
-# R2spa's single boundary to lavaan internals.
-#
-# DESIGN RULE (PLAN 04): this file is the ONLY place in the package that
-# reads lavaan internals (partable/list views, `@Data@` slots, `lavTech`
-# views). Every other file consumes the `tsp_*` wrappers below, so a future
-# lavaan partable/format drift surfaces here (and in the canary tests) as one
-# localized failure with a table diff — never as a user-discovered
-# estimation bug. Capability probing (column inspection) is used in place of
-# `packageVersion()` string gating, so patch/dev releases are handled
-# without edits; the error path names the installed and tested-up-to
-# versions.
+# Compatibility boundary for lavaan partables, matrix views, and the vcov
+# write. Other modules still use lavaan inspection views and @Data slots
+# directly (examples below). Probe layouts by column rather than version number.
 #
 # ---------------------------------------------------------------------------
 # Lavaan dependency contract (audit artifact for the next format drift)
@@ -104,22 +96,24 @@
 #                                                 standardizedSolution()
 #                                                 dispatch is unchanged
 #
-# Known but NOT wrapped (deliberately deferred, PLAN 04 §1 — most stable
-# views; detection falls to the existing equivalence tests rather than the
+# Other lavaan internals read outside this file (not covered by the partable
 # canary):
 #   - lavInspect(what = "est"/"data")      R/get_fs_methods.R
 #   - unlist(fit@Data@norig)               R/get_fs_methods.R
 #   - lavInspect(what = "data"/"meanstructure"/"implied"/"free"/"nobs"/
 #     "ngroups"/"orig")                    R/get_fscore_math.R
+#   - fit@Data@ngroups / @Data@Mp           R/get_fscore_math.R,
+#                                            R/get_fs_methods.R
+#   - lavInspect(what = "est"/"options"/"group.label")
+#                                            R/tspa_corrected_se.R
 #   - fit@implied$cov / fit@implied$mean   vignettes (user-facing examples)
 #   - lavaan::lav_func_jacobian_complex    R/get_fscore_math.R (correct_evfs,
 #     compute_grad_ld_evfs, compute_fsrel — purely algebraic closures, no
 #     optimizer boundary => complex steps valid),
 #     R/grandStandardizedSolution.R (re-integrated, same shape).
-#     NOT used by the corrected-SE path: R/tspa_corrected_se.R
-#     computes its stage-2 Jacobian by explicit central differences (stepped
-#     refits through the optimizer silently degrade; complex literals die in
-#     the model-string parser).
+#     NOT used by the corrected-SE path: its default stage-2 Jacobian
+#     central-differences the analytic ML score; the fallback differences
+#     stage-2 refits.
 #
 # ---------------------------------------------------------------------------
 #

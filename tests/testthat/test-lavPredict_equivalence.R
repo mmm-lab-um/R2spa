@@ -1,8 +1,4 @@
-# Step 7: Numeric equivalence + timing vs lavPredict(acov=TRUE)
-#
-# These tests validate that the refactored get_fs() pipeline produces results
-# numerically equivalent to lavaan::lavPredict(..., acov = TRUE), which is the
-# canonical reference for factor score computation in lavaan.
+# Factor scores and measurement matrices against lavaan::lavPredict(acov=TRUE).
 
 library(lavaan)
 
@@ -16,13 +12,11 @@ hs_model_3f <- 'visual  =~ x1 + x2 + x3
                 textual =~ x4 + x5 + x6
                 speed   =~ x7 + x8 + x9'
 
-# ---- Helper: extract fs matrix from get_fs() output ----
 get_fs_scores <- function(fs_out) {
   fs_names <- grep("^fs_[^_]+$", colnames(fs_out), value = TRUE)
   as.matrix(fs_out[, fs_names, drop = FALSE])
 }
 
-# ---- Helper: extract fsT/fsL from a single-group or first element ----
 get_single_fsT <- function(fs_out) {
   a <- attr(fs_out, "fsT")
   if (is.list(a)) a[[1]] else a
@@ -32,7 +26,6 @@ get_single_fsL <- function(fs_out) {
   if (is.list(a)) a[[1]] else a
 }
 
-# ---- Helper: compute reference fsT/fsL from lavPredict acov ----
 lav_group_matrices <- function(fit, g, method) {
   acov_lst <- attr(
     lavPredict(fit, type = "lv", method = method, acov = TRUE), "acov")
@@ -43,7 +36,6 @@ lav_group_matrices <- function(fit, g, method) {
                                    method = method)
 }
 
-# ---- Helper: get lavPredict factor scores for a specific group ----
 lav_group_fs <- function(fit, g, method) {
   lp <- lavPredict(fit, type = "lv", method = method)
   if (lavInspect(fit, "ngroups") == 1) {
@@ -52,10 +44,6 @@ lav_group_fs <- function(fit, g, method) {
     as.matrix(lp[[g]])
   }
 }
-
-# ============================================================================
-# 1. Single-group, complete data
-# ============================================================================
 
 test_that("get_fs() ~ lavPredict: SG 1-factor complete regression", {
   fit <- cfa(single_model_1f, data = PoliticalDemocracy)

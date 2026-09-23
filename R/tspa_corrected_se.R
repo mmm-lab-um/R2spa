@@ -285,20 +285,12 @@ vcov_corrected <- function(tspa_fit, vfsLT, which_free = NULL,
         }
         c_i
     }
-    # Jacobian J = d(thetahat)/d(eta). engine = "analytic" (the default)
-    # evaluates it refit-free via the influence-function closed form (PLAN 16,
-    # sections 2.4 and 4.3; covers saturated, restricted, multigroup, and
-    # mean-structure models) and silently falls back to the finite-difference
-    # engine when the analytic form is not applicable (an unrecognised free
-    # parameter or unequal per-group free-param counts). engine = "fd" is
-    # byte-identical to the original central-difference implementation below.
+    # The analytic Jacobian is refit-free; unsupported shapes use the
+    # finite-difference refit path below.
     J <- if (engine == "analytic")
         vcov_jacobian_analytic(tspa_fit, names0, which_free) else NULL
     if (is.null(J)) {
-        # Central-difference step: verified stable over h in 1e-5..1e-7 for
-        # the package's stage-2 models (the stage-2 MLE is strongly curved,
-        # so the h = 1e-4 truncation error is already ~0.3%; optimizer jitter
-        # at h = 1e-5 is ~1e-8 relative and negligible).
+        # Scale the FD step to the magnitude of each measurement parameter.
         h0 <- 1e-5
         J <- matrix(0, nrow = length(coef0), ncol = nfree)
         rownames(J) <- names0

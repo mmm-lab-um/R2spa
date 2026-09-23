@@ -1,30 +1,4 @@
-# get_fs() for mirt SingleGroupClass fits (per-observation factor scores).
-#
-# get_fs() on a fitted mirt SingleGroupClass returns a data.frame whose
-# per-row columns are identical (in set AND order) to the output of fs_indiv().
-# Each row carries its own implied loadings / error-covariance / intercept,
-# computed per-observation from mirt's EAP posterior covariance (Vpost) through
-# the shared regression-form matrix engine compute_lav_fs_matrices() (psi is the
-# mirt model's full estimated factor covariance -- diag(q) for a 1-factor model
-# or uncorrelated factors -- and alpha = 0, or a user prior_mean):
-#   fsL_i = I - Vpost_i               (1-factor: F1_by_fs_F1 == 1 - SE_i^2)
-#   fsT_i = fsL_i %*% Vpost_i         (1-factor: (1 - SE_i^2) * SE_i^2)
-#   fsb_i = (I - fsL_i) %*% alpha     (1-factor: SE_i^2 * alpha; 0 when alpha=0)
-# where diag(Vpost_i) == SE_i^2 (the SE column of mirt::fscores(full.scores.SE
-# = TRUE)). fsb is a PER-ROW list attribute (like fsL/fsT); in addition the
-# `mirt_per_obs` marker is set and psi/alpha are attached as group-level moments.
-# With a non-zero prior_mean the EAP scores are extracted under that factor
-# prior (mirt::fscores(mean = ...)).
-#
-# These tests cover: S3 dispatch + the MultipleGroupClass guard, the per-row
-# regression identities (column/order, row count, 1-factor closed forms, the
-# 2-factor engine match -- via assert_mirt_row_identities() in
-# helper-mirt_fs.R), the group-level psi/alpha/fsb attribute values, the
-# 2-factor off-diagonals + column naming order, prior_mean, the correlated-
-# factor regression net, and the completely-missing-row handling (R2spa NA-row
-# convention).
-#
-# mirt is Suggests-only; every call is namespaced (mirt::). No library().
+# Single-group mirt fixtures; shared per-row identities live in helper-mirt_fs.R.
 
 # ---- fixtures -----------------------------------------------------------
 set.seed(2024)
@@ -47,10 +21,6 @@ fs <- get_fs(m1)
 fs2 <- get_fs(m2)
 fs_na <- get_fs(m_na)
 
-# ============================================================================
-# 1. S3 dispatch + type
-# ============================================================================
-
 test_that("get_fs(): S3 dispatch -- mirt S4 objects route to the mirt methods", {
   expect_true(inherits(m1, "SingleGroupClass"))
   # SingleGroupClass -> a data.frame carrying the per-observation marker
@@ -64,19 +34,10 @@ test_that("get_fs(): S3 dispatch -- mirt S4 objects route to the mirt methods", 
   expect_error(get_fs(42L), regexp = "not implemented for objects of class")
 })
 
-# ============================================================================
-# 2. Per-row identities: column/order, row count, 1-factor closed forms,
-#    2-factor engine match (shared via helper-mirt_fs.R)
-# ============================================================================
-
 test_that("get_fs(): per-row identities (1-factor + 2-factor)", {
   assert_mirt_row_identities(fs, m1, n_rows = nrow(d1))
   assert_mirt_row_identities(fs2, m2, n_rows = nrow(d2))
 })
-
-# ============================================================================
-# 6. Attribute shapes
-# ============================================================================
 
 test_that("get_fs(): group-level psi/alpha/fsb + fs_pattern (per-row shapes in helper)", {
   q1 <- mirt::extract.mirt(m1, "nfact")
@@ -105,10 +66,6 @@ test_that("get_fs(): group-level psi/alpha/fsb + fs_pattern (per-row shapes in h
       all(unname(x) == 0)
   }, logical(1L))))
 })
-
-# ============================================================================
-# 7. 2-factor: off-diagonals are NOT identity; per-row fsL/fsT == engine
-# ============================================================================
 
 test_that("get_fs(): 2-factor off-diagonals non-identity; column order (engine in helper)", {
   q2 <- mirt::extract.mirt(m2, "nfact")
@@ -142,10 +99,6 @@ test_that("get_fs(): 2-factor off-diagonals non-identity; column order (engine i
   }
   expect_identical(ev_cols, exp_ev)
 })
-
-# ============================================================================
-# 8. Completely-missing rows
-# ============================================================================
 
 test_that("get_fs(): completely-missing rows -> NA score/SE/ev, rows preserved", {
   expect_equal(nrow(fs_na), nrow(d_na))

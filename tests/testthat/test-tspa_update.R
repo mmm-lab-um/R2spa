@@ -1,14 +1,5 @@
-# =====================================================================
-# lavaan::update() on a tspa() fit.
-#
-# Regression tests for the self-contained @call fix: tspa() now inlines
-# the internally-built tspaModel / data / se into the fit's @call, so
-# lavaan::update(fit, ...) re-evaluates the stored call without
-# referencing tspa()-local symbols (before the fix: update(fit,
-# meanstructure = TRUE) failed with `object 'se' not found`). An
-# updated fit must be bit-identical to calling tspa(...,
-# meanstructure = TRUE) from the start.
-# =====================================================================
+# lavaan::update() must replay tspa()'s self-contained @call without
+# referencing tspa()-local model/data/se symbols.
 
 library(lavaan)
 
@@ -22,18 +13,14 @@ mod <- "dem60 ~ ind60\ndem65 ~ ind60 + dem60"
 fit <- tspa(mod, fs_dat, se_fs = sefs)
 
 test_that("U1: base 3-factor @call is self-contained; update() works and matches a fresh meanstructure fit", {
-  # The fix: model / data / se are inlined literals in the stored call,
-  # not tspa()-local symbols (out of scope when update() re-evaluates).
   expect_false(is.symbol(fit@call[["model"]]))
   expect_false(is.symbol(fit@call[["data"]]))
   expect_false(is.symbol(fit@call[["se"]]))
-  # The natural update now works (previously: `object 'se' not found`).
   upd <- update(fit, meanstructure = TRUE)
   expect_s4_class(upd, "lavaan")
   # The issue's exact form: re-feed the inspected data.
   upd2 <- update(fit, data = lavInspect(fit, "data"), meanstructure = TRUE)
   expect_s4_class(upd2, "lavaan")
-  # Equivalence: update() must match a fresh meanstructure fit.
   ref <- tspa(mod, fs_dat, se_fs = sefs, meanstructure = TRUE)
   common <- intersect(names(coef(upd)), names(coef(ref)))
   expect_gt(length(common), 0)
@@ -98,7 +85,6 @@ s ~ 1
               fsT = attr(fs_dat, "fsT"), fsL = attr(fs_dat, "fsL"),
               fsb = attr(fs_dat, "fsb"), estimator = "ML")
 
-  # The fix: model / data / se are inlined literals in the stored call.
   expect_false(is.symbol(fit@call[["model"]]))
   expect_false(is.symbol(fit@call[["data"]]))
   expect_false(is.symbol(fit@call[["se"]]))

@@ -1,21 +1,6 @@
-# Shared per-row invariants for get_fs() on fitted mirt objects
-# (SingleGroupClass / MultipleGroupClass), covering binary and graded items.
-#
-# The extraction path is itemtype-agnostic: get_fs() scores a fit by its EAP
-# posterior means and feeds each observation's EAP posterior covariance
-# (Vpost_i, from mirt::fscores(return.acov = TRUE)) into the shared regression-
-# form engine compute_lav_fs_matrices(). With SE_i^2 = diag(Vpost_i):
-#   1-factor: F1_by_fs_F1_i == 1 - SE_i^2 ; ev_i == (1 - SE_i^2) * SE_i^2
-#             fs_F1_se_i == sqrt(ev_i) ; fsT_i[1,1] == ev_i ; fs_F1_i == EAP
-#   all q:    fsL_i / fsT_i == compute_lav_fs_matrices(Vpost_i, psi, alpha, "regression")
-# psi is read from attr(fs, "psi") (a matrix in SG, a per-group named list in MG,
-# resolved through the `group` column) and alpha from attr(fs, "alpha"). The
-# per-file tests keep the psi/alpha VALUE assertions (psi == diag / mirt_full_cov /
-# per-group list) so this engine check is not circular. mirt drops
-# completely-missing rows from fscores(return.acov = TRUE); they are reconciled
-# against the full row set via extract.mirt("completely_missing").
-#
-# mirt is Suggests-only; every call is namespaced (mirt::). No library().
+# Shared binary/graded and single-/multigroup mirt identities. Per-file tests
+# independently pin psi/alpha values; mirt's posterior covariances omit
+# completely-missing rows, so map scorable positions back to full-row indices.
 
 # Full-row indices of the scorable rows (the complement of completely-missing).
 mirt_scorable <- function(fit, n) {
@@ -33,11 +18,7 @@ mirt_row_psi <- function(psi, group_i) {
   if (is.list(psi) && !is.matrix(psi)) psi[[as.character(group_i)]] else psi
 }
 
-# Per-row regression-identity checks shared by the binary / graded / multigroup
-# mirt tests. `fit` must be the mirt object that produced `fs`. The 1-factor
-# closed forms run on the full (NA-aware) column set; the per-row engine match
-# runs on a few scorable rows (default: first, second, a middle, last) or on
-# `samples` (full-row indices) when supplied.
+# `samples`, when supplied, are full-row indices rather than acov positions.
 assert_mirt_row_identities <- function(fs, fit, tol = 1e-8, samples = NULL,
                                        n_rows = NULL) {
   n <- if (is.null(n_rows)) nrow(fs) else n_rows

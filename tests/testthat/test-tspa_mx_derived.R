@@ -1,33 +1,6 @@
-# =====================================================================
-# PLAN 15: tspa_mx_model() auto-derives the measurement inputs (fsL/fsT/fsb)
-# from a get_fs() result when the caller omits se_fs/fsL/fsT/fsb entirely.
-# Explicit arguments always win (D1); constant quantities become fixed
-# numeric cells (D2); per-row (per_obs/mirt_per_obs) and per-pattern
-# (SG FIML) quantities become definition-variable matrices (D3); a
-# provenance gate rejects hand-rolled attributes (D4); the D5 fail-fast
-# replaces the old misleading "'fsL' rows must be named..." error; the
-# existing data-contract guards (incl. the NA-free defvar guard, D6) run on
-# the possibly int_fs_-augmented frame; multigroup (group_col) input is
-# refused (D7).
-#
-# A/B convention (mirrors test-tspa_derived.R): every derived fit is
-# compared against the explicit-argument control fit on the same data, via
-# coef()/vcov(). Derived and control calls build the identical spec and
-# feed the identical column values to OpenMx, so the pairs below agree
-# bit-exactly (expect_identical on unname(coef()) + tight-tolerance
-# coefficient extractions, as in test-tspa_mx.R).
-#
-# q >= 2 off-diagonal defvar models were once pinned at the string level
-# only (implementation finding V3c, plan section 5 item 3): they aborted
-# with "implied covariance not positive definite" on the derived route.
-# The abort was NOT an OpenMx limitation -- it was a '~~' defvar-lookup
-# orientation bug: lavaanify() may present a covariance row with (lhs, rhs)
-# reversed relative to the score order, so a lower-triangle-only fsT (the
-# documented and the derived convention) was not found and the c(1) defvar
-# sentinel leaked into the model as a fixed unit covariance between scores.
-# Fixed in tspa_mx_defvar_col(); the q >= 2 cases (SG FIML per-pattern and
-# mirt 2-factor per-row) are pinned numerically end-to-end below.
-# =====================================================================
+# Derived OpenMx measurement inputs are compared with explicit controls.
+# The q >= 2 cases exercise lower-triangle fsT lookup even when lavaanify()
+# reverses the score pair in a covariance row.
 
 library(lavaan)
 library(lme4)
@@ -44,11 +17,8 @@ mx_var_val <- function(m, x, model = "m1") {
   unname(coef(m)[sprintf("%s.S[%d,%d]", model, match(x, v), match(x, v))])
 }
 
-# Shared "derived == manual/explicit control" A/B assertions (the header's A/B
-# convention): identical coefficients, the given path/variance point estimates
-# agree, and (optionally) the vcov agrees. Each A/B block keeps its unique
-# derivation-shape pin (fixed-numeric vs defvar dispatch, int_fs_* columns, ...)
-# and calls this for the equality core. `paths` is a list of c(from, to) pairs.
+# `paths` is a list of c(from, to) pairs; check_vcov opts into a covariance
+# comparison when both fits expose one.
 mx_ab_equal <- function(fd, fe, paths = NULL, vars = NULL, check_vcov = FALSE) {
   expect_identical(unname(coef(fd)), unname(coef(fe)))
   for (p in paths) {
@@ -110,8 +80,8 @@ fit_e2 <- suppressWarnings(tspa_mx_model(model3, data = fs_local3,
                                          fsb = attr(fs_local3, "fsb")))
 
 # --- 3. SG FIML joint, 2-factor, with (fixed, nonzero) factor means --------
-# String/int_fs_ pins only: a full q = 2 per-pattern defvar fit does not
-# optimize in OpenMx 2.22.11 (V3c, see header).
+# The manual matrices pin the derived string and intercept columns as well as
+# the end-to-end fit comparison below.
 mod_hs <- "visual =~ x1 + x2 + x3\nspeed =~ x7 + x8 + x9"
 hs_fiml2 <- HolzingerSwineford1939
 set.seed(1334)

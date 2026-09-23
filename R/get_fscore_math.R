@@ -1,8 +1,3 @@
-# Math / statistics engine for factor-score computation
-#
-# Pure computational helpers: delta-method corrections, scoring-matrix code,
-# and the internal machinery that backs get_fs.lavaan() and augment_lav_predict().
-
 sqrt_or_na <- function(x) {
   sqrt(replace(x, x < 0, NA_real_))
 }

@@ -1,11 +1,3 @@
-# combine_fs() -- combine several get_fs() results into one block-diagonal
-# multi-factor result (PLAN: combining stage-1 results across models / data
-# subsets). Each input is one block; the combined fsL/fsT/psi are block
-# diagonal across the inputs (every cross-block entry is exactly zero). The
-# per-row machinery reuses resolve_fs_per_row() + fs_row_cols() + block_diag(),
-# so the derived _se / _by_ / ev_ / ecov_ columns are the same values get_fs()
-# itself emits.
-
 #' Combine `get_fs()` results into a block-diagonal multi-factor result
 #'
 #' @description

@@ -1,34 +1,5 @@
-# get_fs() for mirt SingleGroupClass fits with POLYTOMOUS (graded-response)
-# items (itemtype = "graded").
-#
-# Binary mirt is covered in test-get_fs_mirt.R and
-# test-get_fs_mirt_multigroup.R; graded items had no coverage. The extraction
-# path is itemtype-agnostic: get_fs() scores a fitted SingleGroupClass by its
-# EAP posterior means and feeds the per-observation EAP posterior covariance
-# (Vpost_i, from mirt::fscores(return.acov = TRUE)) into the shared
-# regression-form engine compute_lav_fs_matrices() -- exactly as for binary.
-# The regression-form closed forms therefore hold for graded items too, and
-# for a single factor, with SE_i^2 = diag(Vpost_i):
-#   F1_by_fs_F1_i    == 1 - SE_i^2
-#   ev_fs_F1_i       == (1 - SE_i^2) * SE_i^2
-#   fs_F1_se_i       == sqrt((1 - SE_i^2) * SE_i^2)
-#   fs_F1_i          == mirt's EAP posterior mean
-#
-# Graded data are generated manually (item-by-item uniform-threshold sampling
-# from the GRM category CDFs) rather than via mirt::simdata. Note a single
-# 4-category graded item is under-identified in a 1-factor model (4 free
-# parameters vs 3 df), so each factor gets 5 items, mirroring the binary
-# fixture size.
-#
-# These tests cover: S3 dispatch + the per-observation contract, the exact
-# 1-factor and 2-factor column sets (in order), the per-row regression
-# identities (1-factor closed forms + the 2-factor engine match, via
-# assert_mirt_row_identities() in helper-mirt_fs.R), the group-level
-# psi/alpha/fsb attributes, the 2-factor off-diagonals (and the independent
-# identity fsL_i == I - Vpost_i %*% solve(psi) with psi the FULL estimated
-# factor covariance), and column/score equivalence with fs_indiv().
-#
-# mirt is Suggests-only; every call is namespaced (mirt::). No library().
+# Graded-response mirt fixtures; shared per-row identities are checked in
+# helper-mirt_fs.R. Five items per factor keep the model identifiable.
 
 skip_if_not_installed("mirt")
 
@@ -82,10 +53,6 @@ fs2 <- get_fs(m2f)
 # q x q matrix per observation, in data-row order) -- used by the 2-factor block.
 acov2 <- mirt::fscores(m2f, full.scores = TRUE, return.acov = TRUE)
 
-# ============================================================================
-# 1. S3 dispatch + per-observation contract
-# ============================================================================
-
 test_that("get_fs(): graded mirt SingleGroupClass dispatches to the mirt method", {
   expect_true(inherits(m1f, "SingleGroupClass"))
   # the fit really is graded (per-item itemtype)
@@ -98,10 +65,6 @@ test_that("get_fs(): graded mirt SingleGroupClass dispatches to the mirt method"
   # non-mirt input still routes to get_fs.default (unchanged behaviour)
   expect_error(get_fs(42L), regexp = "not implemented for objects of class")
 })
-
-# ============================================================================
-# 2. Exact column sets (set AND order)
-# ============================================================================
 
 test_that("get_fs(): 1-factor graded column set and order are exact", {
   expect_identical(
@@ -119,18 +82,10 @@ test_that("get_fs(): 2-factor graded column set and order are exact", {
   )
 })
 
-# ============================================================================
-# 3. Per-row identities: 1-factor closed forms + 2-factor engine match (shared)
-# ============================================================================
-
 test_that("get_fs(): graded per-row identities (1-factor + 2-factor)", {
   assert_mirt_row_identities(fs1, m1f)
   assert_mirt_row_identities(fs2, m2f)
 })
-
-# ============================================================================
-# 4. Per-row attribute shapes + group-level moments
-# ============================================================================
 
 test_that("get_fs(): graded group-level psi/alpha/fsb (per-row shapes in helper)", {
   n1 <- nrow(fs1)
@@ -156,10 +111,6 @@ test_that("get_fs(): graded group-level psi/alpha/fsb (per-row shapes in helper)
   expect_named(alpha, "F1")
   expect_true(all(unname(alpha) == 0))
 })
-
-# ============================================================================
-# 5. 2-factor: off-diagonals non-identity; per-row fsL/fsT == shared engine
-# ============================================================================
 
 test_that("get_fs(): 2-factor graded off-diagonals non-identity; per-row fsL/fsT == engine", {
   fn2 <- mirt::extract.mirt(m2f, "factorNames")
@@ -201,4 +152,3 @@ test_that("get_fs(): 2-factor graded off-diagonals non-identity; per-row fsL/fsT
   expect_equal(unname(fs2[["fs_F2"]]), unname(as.data.frame(eap2)[["F2"]]),
                tolerance = 1e-8)
 })
-

@@ -19,7 +19,7 @@
 # The local stage 1 scores each factor from its own 5 items with separate
 # single-factor mirt fits and combines them block-diagonally via combine_fs();
 # the joint stage 1 scores both factors together from one two-factor fit.
-# and record the standardized estimate, its (delta-method) SE, and convergence.
+# Record standardized estimates, delta-method SEs, and convergence.
 
 suppressMessages({
   library(mirt); library(lavaan); library(OpenMx)
@@ -37,7 +37,7 @@ n_items <- 5L
 K <- 4L                       # graded categories (K - 1 = 3 thresholds)
 out <- file.path("vignettes", "sim_categorical_irt.RDS")
 
-# ---------------------------------------------------------------- item gen --
+# Item generators
 # binary 2PL: P(Y = 1 | th) = 1 / (1 + exp(-(a*th - b))); larger b => harder
 gen_binary <- function(th, a, b) rbinom(length(th), 1L, 1 / (1 + exp(-(a * th - b))))
 # graded response: c_k = P(Y >= k) = 1/(1+exp(-(a*th - d_k))); one uniform draw
@@ -66,11 +66,10 @@ gen_items <- function(itemtype, skew, th) {
   }
 }
 
-# ------------------------------------------------------- standardized path --
+# Standardized path and delta-method SE
 # std.all of the F2 ~ F1 path = gamma * SD(F1) / SD(F2), SD(F2)^2 = v2 + g^2*v1
-# where v1 = Var(F1), v2 = residual Var(F2). One formula for all three arms
-# (verified to equal lavaan's est.std for the two lavaan arms and, by the same
-# algebra, the OpenMx arm). SE by a numeric delta method on (g, v1, v2).
+# where v1 = Var(F1), v2 = residual Var(F2). All methods use the same
+# transformation; SEs use a numeric delta method on (g, v1, v2).
 std_path <- function(g, v1, v2) g * sqrt(v1) / sqrt(v2 + g^2 * v1)
 se_std_path <- function(p, V, h = 1e-6) {
   f <- function(x) std_path(x[1], x[2], x[3])
@@ -102,7 +101,6 @@ seed_for <- function(itemtype, skew, n, b) {
   as.integer(it * 100000000L + sk * 1000000L + n * 1000L + b)
 }
 
-# --------------------------------------------------------------- run one rep --
 run_one <- function(itemtype, skew, n, b) {
   set.seed(seed_for(itemtype, skew, n, b))
   e <- MASS::mvrnorm(n, mu = c(0, 0), Sigma = matrix(c(1, 0, 0, 1 - gamma_star^2), 2))
@@ -116,7 +114,6 @@ run_one <- function(itemtype, skew, n, b) {
                ci_lo = est - 1.96 * se, ci_hi = est + 1.96 * se,
                stringsAsFactors = FALSE)
 
-  # stage 1: mirt
   mf <- tryCatch(
     suppressWarnings(mirt(dat, "F1 = 1-5\nF2 = 6-10\nCOV = F1*F2",
                           itemtype = if (itemtype == "binary") "2PL" else "graded")),
@@ -128,16 +125,13 @@ run_one <- function(itemtype, skew, n, b) {
   fs <- get_fs(mf)
   est_of <- function(v) c(est = unname(v["est"]), se = unname(v["se"]))
 
-  # stage 2: tspa (pooled)
   r_tspa <- tryCatch({ f <- suppressWarnings(tspa("F2 ~ F1", data = fs));
                        est_of(extract_lavaan(f)) },
                      error = function(e) c(est = NA_real_, se = NA_real_))
-  # stage 2: tspa_mx (exact)
   r_mx <- tryCatch({ invisible(capture.output(
                       fx <- suppressWarnings(tspa_mx_model("F2 ~ F1", data = fs))))
                     est_of(extract_mx(fx)) },
                    error = function(e) c(est = NA_real_, se = NA_real_))
-  # gold: WLSMV
   ord <- dat; for (j in colnames(ord)) ord[[j]] <- factor(ord[[j]], ordered = TRUE)
   r_w <- tryCatch({ w <- suppressWarnings(sem(
                       "F1 =~ i1+i2+i3+i4+i5\nF2 =~ i6+i7+i8+i9+i10\nF2 ~ F1",
@@ -145,11 +139,8 @@ run_one <- function(itemtype, skew, n, b) {
                     est_of(extract_lavaan(w)) },
                    error = function(e) c(est = NA_real_, se = NA_real_))
 
-  # stage 1 (local): score each factor from its own 5 items with separate
-  # single-factor fits, then combine the two single-factor results into a
-  # block-diagonal (zero cross-block fsL/fsT) 2-factor result via combine_fs().
-  # This is the "separate" per-construct scoring: each factor score conditions
-  # only on its own items, not on the other factor's (as the joint fit does).
+  # Local scores condition only on their own items; combine_fs() assumes
+  # zero cross-block measurement terms.
   r_lt <- r_lmx <- c(est = NA_real_, se = NA_real_)
   lfs <- tryCatch({
     itype <- if (itemtype == "binary") "2PL" else "graded"
@@ -175,7 +166,6 @@ run_one <- function(itemtype, skew, n, b) {
     rec("tspa_mx_local", unname(r_lmx["est"]), unname(r_lmx["se"]))))
 }
 
-# ------------------------------------------------------------------- loop --
 cells <- expand.grid(itemtype = c("binary", "graded"),
                      skew = c("balanced", "skewed"),
                      n = n_list, stringsAsFactors = FALSE)
@@ -201,8 +191,7 @@ for (start in seq(1L, nrow(tasks), by = chunk)) {
 }
 
 res <- do.call(rbind, res_list)
-# mean marginal item response per condition (a DGP property of the thresholds;
-# computed deterministically from a large representative draw)
+# Approximate each condition's marginal response using a seeded large draw.
 marg_of <- function(itemtype, skew, n = 5000L) {
   set.seed(99L); th <- rnorm(n)
   mean(rowMeans(as.data.frame(gen_items(itemtype, skew, th))))
