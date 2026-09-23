@@ -183,7 +183,7 @@ test_that(
       FUN = function(x) var(x$fs_visual_se),
       FUN.VALUE = numeric(1)
     )
-    for (i in length(test_se)) {
+    for (i in seq_along(test_se)) {
       expect_identical(unname(test_se[i]), 0)
     }
   }
@@ -215,7 +215,7 @@ test_that(
       FUN = function(x) var(x$fs_visual_se),
       FUN.VALUE = numeric(1)
     )
-    for (i in length(test_se)) {
+    for (i in seq_along(test_se)) {
       expect_identical(unname(test_se[i]), 0)
     }
   }
@@ -293,6 +293,7 @@ test_that(
 test_object_fs_multi_2_bar <- get_fs(HolzingerSwineford1939,
                                       hs_model_2,
                                       group = "school",
+                                      method = "Bartlett",
                                       format = "list")
 
 test_that(

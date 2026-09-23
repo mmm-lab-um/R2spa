@@ -1,33 +1,6 @@
-# =====================================================================
-# PLAN 15: tspa_mx_model() auto-derives the measurement inputs (fsL/fsT/fsb)
-# from a get_fs() result when the caller omits se_fs/fsL/fsT/fsb entirely.
-# Explicit arguments always win (D1); constant quantities become fixed
-# numeric cells (D2); per-row (per_obs/mirt_per_obs) and per-pattern
-# (SG FIML) quantities become definition-variable matrices (D3); a
-# provenance gate rejects hand-rolled attributes (D4); the D5 fail-fast
-# replaces the old misleading "'fsL' rows must be named..." error; the
-# existing data-contract guards (incl. the NA-free defvar guard, D6) run on
-# the possibly int_fs_-augmented frame; multigroup (group_col) input is
-# refused (D7).
-#
-# A/B convention (mirrors test-tspa_derived.R): every derived fit is
-# compared against the explicit-argument control fit on the same data, via
-# coef()/vcov(). Derived and control calls build the identical spec and
-# feed the identical column values to OpenMx, so the pairs below agree
-# bit-exactly (expect_identical on unname(coef()) + tight-tolerance
-# coefficient extractions, as in test-tspa_mx.R).
-#
-# q >= 2 off-diagonal defvar models were once pinned at the string level
-# only (implementation finding V3c, plan section 5 item 3): they aborted
-# with "implied covariance not positive definite" on the derived route.
-# The abort was NOT an OpenMx limitation -- it was a '~~' defvar-lookup
-# orientation bug: lavaanify() may present a covariance row with (lhs, rhs)
-# reversed relative to the score order, so a lower-triangle-only fsT (the
-# documented and the derived convention) was not found and the c(1) defvar
-# sentinel leaked into the model as a fixed unit covariance between scores.
-# Fixed in tspa_mx_defvar_col(); the q >= 2 cases (SG FIML per-pattern and
-# mirt 2-factor per-row) are pinned numerically end-to-end below.
-# =====================================================================
+# Derived OpenMx measurement inputs are compared with explicit controls.
+# The q >= 2 cases exercise lower-triangle fsT lookup even when lavaanify()
+# reverses the score pair in a covariance row.
 
 library(lavaan)
 library(lme4)
@@ -42,6 +15,22 @@ mx_path_val <- function(m, from, to, model = "m1") {
 mx_var_val <- function(m, x, model = "m1") {
   v <- c(m$manifestVars, m$latentVars)
   unname(coef(m)[sprintf("%s.S[%d,%d]", model, match(x, v), match(x, v))])
+}
+
+# `paths` is a list of c(from, to) pairs; check_vcov opts into a covariance
+# comparison when both fits expose one.
+mx_ab_equal <- function(fd, fe, paths = NULL, vars = NULL, check_vcov = FALSE) {
+  expect_identical(unname(coef(fd)), unname(coef(fe)))
+  for (p in paths) {
+    expect_equal(mx_path_val(fd, p[1L], p[2L]),
+                 mx_path_val(fe, p[1L], p[2L]), tolerance = 1e-10)
+  }
+  for (x in vars) {
+    expect_equal(mx_var_val(fd, x), mx_var_val(fe, x), tolerance = 1e-10)
+  }
+  if (check_vcov) expect_equal(vcov(fd), vcov(fe), tolerance = 1e-10,
+                               ignore_attr = TRUE)
+  invisible(NULL)
 }
 
 # A copy of a get_fs() frame with the measurement attributes stripped: the
@@ -91,8 +80,8 @@ fit_e2 <- suppressWarnings(tspa_mx_model(model3, data = fs_local3,
                                          fsb = attr(fs_local3, "fsb")))
 
 # --- 3. SG FIML joint, 2-factor, with (fixed, nonzero) factor means --------
-# String/int_fs_ pins only: a full q = 2 per-pattern defvar fit does not
-# optimize in OpenMx 2.22.11 (V3c, see header).
+# The manual matrices pin the derived string and intercept columns as well as
+# the end-to-end fit comparison below.
 mod_hs <- "visual =~ x1 + x2 + x3\nspeed =~ x7 + x8 + x9"
 hs_fiml2 <- HolzingerSwineford1939
 set.seed(1334)
@@ -232,15 +221,8 @@ fit_e9 <- suppressWarnings(tspa_mx_model(model2, data = fs_prod_stripped,
 ########## Tests ##########
 
 test_that("derived SG 2-factor equals the explicit full-triple fit (D2 fixed numeric)", {
-  expect_identical(unname(coef(fit_d1)), unname(coef(fit_e1)))
-  expect_equal(mx_path_val(fit_d1, "ind60", "dem60"),
-               mx_path_val(fit_e1, "ind60", "dem60"), tolerance = 1e-10)
-  expect_equal(mx_var_val(fit_d1, "ind60"),
-               mx_var_val(fit_e1, "ind60"), tolerance = 1e-10)
-  expect_equal(mx_var_val(fit_d1, "dem60"),
-               mx_var_val(fit_e1, "dem60"), tolerance = 1e-10)
-  expect_equal(vcov(fit_d1), vcov(fit_e1), tolerance = 1e-10,
-               ignore_attr = TRUE)
+  mx_ab_equal(fit_d1, fit_e1, paths = list(c("ind60", "dem60")),
+              vars = c("ind60", "dem60"), check_vcov = TRUE)
   # D2 dispatch: the unified plain-matrix attributes derive to fixed numeric
   # matrices (not definition variables), and the frame is returned untouched
   der1 <- R2spa:::tspa_mx_derive_measurement(fs1)
@@ -254,15 +236,10 @@ test_that("derived SG 2-factor equals the explicit full-triple fit (D2 fixed num
 })
 
 test_that("derived local = TRUE 3-factor equals the explicit full-triple fit", {
-  expect_identical(unname(coef(fit_d2)), unname(coef(fit_e2)))
-  expect_equal(mx_path_val(fit_d2, "ind60", "dem60"),
-               mx_path_val(fit_e2, "ind60", "dem60"), tolerance = 1e-10)
-  expect_equal(mx_path_val(fit_d2, "ind60", "dem65"),
-               mx_path_val(fit_e2, "ind60", "dem65"), tolerance = 1e-10)
-  expect_equal(mx_path_val(fit_d2, "dem60", "dem65"),
-               mx_path_val(fit_e2, "dem60", "dem65"), tolerance = 1e-10)
-  expect_equal(vcov(fit_d2), vcov(fit_e2), tolerance = 1e-10,
-               ignore_attr = TRUE)
+  mx_ab_equal(fit_d2, fit_e2,
+              paths = list(c("ind60", "dem60"), c("ind60", "dem65"),
+                           c("dem60", "dem65")),
+              check_vcov = TRUE)
   # D2: the local (compact) attributes are plain matrices with exact-zero
   # cross terms -- derived as fixed numeric cells, no definition variables
   der2 <- R2spa:::tspa_mx_derive_measurement(fs_local3)
@@ -307,18 +284,13 @@ test_that("derived SG FIML q = 2 (per-pattern) end-to-end equals the manual def-
   # lower-triangle-only Tm_fiml, the derived fit must equal the manual
   # character-matrix fit (both previously aborted with a leaked fixed unit
   # covariance whenever lavaanify() presented the pair reversed).
-  expect_identical(unname(coef(fit_d3b)), unname(coef(fit_e3b)))
-  expect_equal(mx_path_val(fit_d3b, "speed", "visual"),
-               mx_path_val(fit_e3b, "speed", "visual"), tolerance = 1e-10)
-  expect_equal(vcov(fit_d3b), vcov(fit_e3b), tolerance = 1e-10,
-               ignore_attr = TRUE)
+  mx_ab_equal(fit_d3b, fit_e3b, paths = list(c("speed", "visual")),
+              check_vcov = TRUE)
 })
 
 test_that("derived SG FIML q = 1 end-to-end equals the manual def-var fit", {
   # the q = 1 (diagonal-only) case (no off-diagonal defvars to look up)
-  expect_identical(unname(coef(fit_d3c)), unname(coef(fit_e3c)))
-  expect_equal(mx_var_val(fit_d3c, "visual"),
-               mx_var_val(fit_e3c, "visual"), tolerance = 1e-10)
+  mx_ab_equal(fit_d3c, fit_e3c, vars = "visual")
 })
 
 test_that("the '~~' defvar lookup is orientation-agnostic for lower-triangle-only fsT", {
@@ -341,9 +313,7 @@ test_that("the '~~' defvar lookup is orientation-agnostic for lower-triangle-onl
 
 test_that("derived local FIML (per_obs, q = 1) equals the manual def-var fit", {
   expect_true(isTRUE(attr(fs_locfiml, "per_obs")))
-  expect_identical(unname(coef(fit_d4a)), unname(coef(fit_e4a)))
-  expect_equal(mx_var_val(fit_d4a, "visual"),
-               mx_var_val(fit_e4a, "visual"), tolerance = 1e-10)
+  mx_ab_equal(fit_d4a, fit_e4a, vars = "visual")
   # the per-row (here all-zero) fsb list still appends int_fs_visual, equal
   # to the fs_indiv(include_intercept = TRUE) column
   der4a <- R2spa:::tspa_mx_derive_measurement(fs_locfiml)
@@ -356,11 +326,8 @@ test_that("derived local FIML (per_obs, q = 1) equals the manual def-var fit", {
 test_that("derived mean-structure CFA (nonzero constant fsb) equals the explicit fsb fit (D2)", {
   b_ms <- attr(fs_ms, "fsb")[[1L]]
   expect_true(any(abs(b_ms) > 0))
-  expect_identical(unname(coef(fit_d5)), unname(coef(fit_e5)))
-  expect_equal(mx_path_val(fit_d5, "ind60", "dem60"),
-               mx_path_val(fit_e5, "ind60", "dem60"), tolerance = 1e-10)
-  expect_equal(vcov(fit_d5), vcov(fit_e5), tolerance = 1e-10,
-               ignore_attr = TRUE)
+  mx_ab_equal(fit_d5, fit_e5, paths = list(c("ind60", "dem60")),
+              check_vcov = TRUE)
   # the constant fsb attribute derives to a plain (fixed numeric) vector
   der5 <- R2spa:::tspa_mx_derive_measurement(fs_ms)
   expect_true(is.numeric(der5$fsb))
@@ -380,15 +347,8 @@ test_that("derived merMod (per-cluster 3-D arrays, no fsb) equals the manual def
   dv <- dv[!is.na(dv)]
   expect_true(all(dv %in% names(fs_mer)))
   expect_true(all(!is.na(fs_mer[, dv, drop = FALSE])))
-  expect_identical(unname(coef(fit_d5c)), unname(coef(fit_e5c)))
-  expect_equal(mx_path_val(fit_d5c, "u0", "u1"),
-               mx_path_val(fit_e5c, "u0", "u1"), tolerance = 1e-10)
-  expect_equal(mx_var_val(fit_d5c, "u0"), mx_var_val(fit_e5c, "u0"),
-               tolerance = 1e-10)
-  expect_equal(mx_var_val(fit_d5c, "u1"), mx_var_val(fit_e5c, "u1"),
-               tolerance = 1e-10)
-  expect_equal(vcov(fit_d5c), vcov(fit_e5c), tolerance = 1e-10,
-               ignore_attr = TRUE)
+  mx_ab_equal(fit_d5c, fit_e5c, paths = list(c("u0", "u1")),
+              vars = c("u0", "u1"), check_vcov = TRUE)
 })
 
 test_that("explicit arguments always win over derivation (D1)", {
@@ -446,9 +406,7 @@ test_that("product-score result: product columns are inert to derivation", {
   expect_identical(conditionMessage(err_d), conditionMessage(err_e))
   # with the product columns dropped (attributes kept), the derived fit
   # equals the explicit-attribute control ...
-  expect_identical(unname(coef(fit_d9)), unname(coef(fit_e9)))
-  expect_equal(mx_path_val(fit_d9, "ind60", "dem60"),
-               mx_path_val(fit_e9, "ind60", "dem60"), tolerance = 1e-10)
+  mx_ab_equal(fit_d9, fit_e9, paths = list(c("ind60", "dem60")))
   # ... and the derived spec is identical with or without the product columns
   expect_identical(derived_model_string(fs_prod, model2),
                    derived_model_string(fs_prod_stripped, model2))
@@ -551,9 +509,7 @@ mirt_na <- suppressWarnings(mirt::mirt(d_na, 1L, verbose = FALSE))
 fs_na <- get_fs(mirt_na)
 
 test_that("derived mirt SG (mirt_per_obs) equals the manual def-var fit", {
-  expect_identical(unname(coef(fit_m_d)), unname(coef(fit_m_e)))
-  expect_equal(mx_var_val(fit_m_d, "F1"), mx_var_val(fit_m_e, "F1"),
-               tolerance = 1e-10)
+  mx_ab_equal(fit_m_d, fit_m_e, vars = "F1")
   # the per-row fsb list appends int_fs_F1, equal to the fs_indiv column
   der_m <- R2spa:::tspa_mx_derive_measurement(fs_mirt)
   expect_identical(der_m$data[["int_fs_F1"]],
@@ -569,32 +525,21 @@ test_that("mirt MG (group column, no group_col attribute) derives as a pooled pe
   expect_true(isTRUE(attr(fs_mirt_mg, "mirt_per_obs")))
   expect_null(attr(fs_mirt_mg, "group_col"))
   expect_true("group" %in% names(fs_mirt_mg))
-  expect_identical(unname(coef(fit_mg_d)), unname(coef(fit_mg_e)))
-  expect_equal(mx_var_val(fit_mg_d, "F1"), mx_var_val(fit_mg_e, "F1"),
-               tolerance = 1e-10)
+  mx_ab_equal(fit_mg_d, fit_mg_e, vars = "F1")
 })
 
 test_that("derived mirt 2-factor (per-row, off-diagonal defvars) equals the manual def-var fit", {
   # The vignette's multidimensional case end-to-end (q = 2 per-row). Before
   # the '~~' lookup fix the derived route aborted ("implied covariance not
   # positive definite") with a leaked fixed unit score covariance.
-  expect_identical(unname(coef(fit_2f_d)), unname(coef(fit_2f_e)))
-  expect_equal(mx_path_val(fit_2f_d, "F1", "F2"),
-               mx_path_val(fit_2f_e, "F1", "F2"), tolerance = 1e-10)
-  expect_equal(mx_var_val(fit_2f_d, "F1"), mx_var_val(fit_2f_e, "F1"),
-               tolerance = 1e-10)
-  expect_equal(mx_var_val(fit_2f_d, "F2"), mx_var_val(fit_2f_e, "F2"),
-               tolerance = 1e-10)
-  expect_equal(vcov(fit_2f_d), vcov(fit_2f_e), tolerance = 1e-10,
-               ignore_attr = TRUE)
+  mx_ab_equal(fit_2f_d, fit_2f_e, paths = list(c("F1", "F2")),
+              vars = c("F1", "F2"), check_vcov = TRUE)
 })
 
 test_that("derived mirt prior_mean (nonzero per-row fsb) equals the explicit int_fs_ fit", {
   dat_pm <- fs_indiv(fs_mirt_pm, include_intercept = TRUE)
   expect_true(any(dat_pm[["int_fs_F1"]] != 0))
-  expect_identical(unname(coef(fit_pm_d)), unname(coef(fit_pm_e)))
-  expect_equal(mx_var_val(fit_pm_d, "F1"), mx_var_val(fit_pm_e, "F1"),
-               tolerance = 1e-10)
+  mx_ab_equal(fit_pm_d, fit_pm_e, vars = "F1")
 })
 
 test_that("a completely-missing row fires the D6 NA guard on the defvar columns", {

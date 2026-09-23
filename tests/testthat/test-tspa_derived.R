@@ -1,16 +1,6 @@
-# PLAN 13: tspa() auto-derives the measurement inputs (fsT/fsL/fsb or se_fs)
-# from a get_fs() result when the caller omits them. Explicit arguments always
-# win; a supplied se_fs suppresses the multi-factor derivation; the provenance
-# gate (resolve_fs_per_row) rejects hand-rolled attributes; every call that
-# reaches the new fail-fast error was erroring before the change.
-#
-# Convention: every "derived" fit is compared against the explicit-argument
-# control fit on the same data. Multi-factor controls pass the FULL explicit
-# triple (fsT + fsL + fsb) so both sides carry an identical free-parameter
-# set (with group =, lavaan auto-enables a mean structure and a no-fsb form
-# estimates the fs_* intercepts freely). The user model string is carried
-# verbatim into tspaModel, so derived and control calls always use the same
-# model object below.
+# Derived tspa() fits are compared with explicit measurement-input controls.
+# Multigroup controls pass fsb too: without it, lavaan frees the score
+# intercepts and the fits no longer have the same parameter set.
 library(lavaan)
 library(lme4)
 

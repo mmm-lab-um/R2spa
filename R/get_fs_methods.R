@@ -160,8 +160,7 @@ get_fs.data.frame <- function(
     model <- paste("f1 =~", paste(ind_names, collapse = " + "))
   }
   if (isTRUE(local) && model_given) {
-    # v1 rejections (PLAN 14, D4): these quantities need cross-latent
-    # information that separate local fits do not provide.
+    # Reject inputs that the separate local-fit path cannot represent.
     if (vfsLT) {
       stop(
         "'vfsLT = TRUE' is not supported with 'local = TRUE': the latents ",
@@ -222,14 +221,14 @@ get_fs.data.frame <- function(
 }
 
 # ---------------------------------------------------------------------------
-# Per-construct ("local") stage-1 scoring (PLAN 14): `get_fs(..., local = TRUE)`.
+# Per-construct stage-1 scoring: `get_fs(..., local = TRUE)`.
 #
 # Each latent is scored from its own local measurement model (the canonical
 # two-stage path analysis setup) instead of one joint multi-factor model.
 # The merged output reproduces the joint layout (columns and attribute
 # shapes) exactly, with exactly-zero cross terms (off-diagonal `_by_`
 # columns, `ecov_*` columns, and `fsT`/`fsL`/`psi` off-diagonals) encoding
-# "no shared measurement model" (D2/D6).
+# "no shared measurement model".
 # ---------------------------------------------------------------------------
 
 # Strict-grammar parser for the local-mode string form: splits a measurement
@@ -1650,23 +1649,12 @@ get_fs.merMod <- function(
     legacy_names = legacy_names
   )
 
-  # NOTE: merMod does NOT route through assemble_fs_blocks(). The shared
-  # assembler assumes one data row per individual case (nrow = n_cases),
-  # filling a template DataFrame by case_idx. merMod's semantics produce
-  # one row per cluster (nrow = n_clusters), because each cluster has a
-  # single EB estimate shared across its cases. Forcing it through the
-  # assembler would produce n_cases rows with repeated values, breaking
-  # backward compatibility with ranef()-aligned output. This is an
-  # intentional architectural exception.
+  # merMod returns one row per cluster; assemble_fs_blocks() would instead
+  # expand each cluster's EB estimate to one row per case.
   aug_list <- lapply(blocks, function(b) {
     augment_fs(b$fs, b$fsT)
   })
-  # Bind at the matrix level rather than via rbind.data.frame: each block is
-  # a 1-row, all-numeric data frame, and rbind.data.frame does expensive
-  # per-frame name/class/factor matching that degrades as the (large) number
-  # of clusters grows. as.matrix() reduces to plain numeric matrices, the
-  # matrix rbind is a single C-level allocation, and as.data.frame() runs
-  # exactly once. augment_fs() remains the single source of column names.
+  # Bind numeric blocks as matrices to avoid per-cluster data-frame dispatch.
   out <- as.data.frame(
     do.call(rbind, lapply(aug_list, `as.matrix`)),
     check.names = FALSE

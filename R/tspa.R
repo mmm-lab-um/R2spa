@@ -491,9 +491,7 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     )
   }
 
-  # PLAN 13: capture before the coercion below (a missing `se_fs` becomes a
-  # 0 x 0 data frame there, so NULL-ness is the "the user supplied se_fs"
-  # signal the measurement-input derivations gate on).
+  # Capture whether se_fs was supplied before NULL becomes an empty frame.
   se_fs_given <- !is.null(se_fs)
 
   if (!is.data.frame(se_fs)) {
@@ -507,17 +505,10 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     stop("Please provide both or none of fsT and fsL.")
   }
 
-  # PLAN 13: derive the measurement inputs from a get_fs() result when the
-  # caller omitted them. Explicit arguments always win (D2); a supplied
-  # se_fs suppresses the multi-factor derivation (D3); with both forms
-  # available and nothing passed, the multi-factor (attribute) form wins
-  # (D4). Derivation fires only for argument values that are NULL, and every
-  # such call errors today (no measurement inputs reach stage 2), so no
-  # currently-working call changes behavior.
+  # Prefer get_fs() attributes when no measurement inputs were supplied;
+  # explicit se_fs retains the single-factor path.
   derived_prov_err <- NULL
-  # PLAN 17: the per-group implied loading recovered in the single-factor
-  # derivation below; set only when se_fs was derived (an explicit se_fs
-  # keeps the unit-loading contract), NULL => unit loading.
+  # NULL means unit loading; only derived single-factor inputs set sf_ld.
   sf_ld <- NULL
   if (is.null(fsT) && is.null(fsL) && !se_fs_given) {
     # Multi-factor derivation: the data's own fsT/fsL (and fsb) attributes

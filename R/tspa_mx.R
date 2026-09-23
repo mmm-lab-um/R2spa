@@ -168,9 +168,7 @@
 tspa_mx_model <- function(model, data, se_fs = NULL, fsL = NULL,
                           fsT = NULL, fsb = NULL, ...) {
   require_openmx()
-  # PLAN 15 (D1): capture before any coercion (mirrors tspa(), R/tspa.R) so
-  # NULL-ness is the "the user supplied this argument" signal the
-  # measurement-input derivation gates on.
+  # Record explicit inputs before deriving measurement attributes.
   se_fs_given <- !is.null(se_fs)
   fsb_given <- !is.null(fsb)
   if (!is.character(model)) {
@@ -196,14 +194,10 @@ tspa_mx_model <- function(model, data, se_fs = NULL, fsL = NULL,
          call. = FALSE)
   }
 
-  # PLAN 15 (D1): explicit measurement inputs always win; derivation fires
-  # only when all four are omitted.
+  # Derive only when all measurement inputs are omitted.
   if (!se_fs_given && is.null(fsL) && is.null(fsT) && !fsb_given) {
     derived <- tspa_mx_derive_measurement(data)
     if (is.null(derived$fsL)) {
-      # D5: fail fast with an actionable message instead of the misleading
-      # "'fsL' rows must be named by the factor-score names." fall-through
-      # in tspa_mx_spec().
       stop(
         "No measurement inputs found for the factor scores in 'data'. ",
         "Please supply one of: (1) 'se_fs' (single-factor), (2) 'fsL' and ",
@@ -272,8 +266,7 @@ tspa_mx_model <- function(model, data, se_fs = NULL, fsL = NULL,
   OpenMx::mxRun(full, ...)
 }
 
-# OpenMx is a Suggests-only dependency; guard the public entry point with a
-# clear, actionable message (never library()/require() in a function body).
+# OpenMx is optional; guard the entry point before using its namespace.
 require_openmx <- function() {
   if (!requireNamespace("OpenMx", quietly = TRUE)) {
     stop(

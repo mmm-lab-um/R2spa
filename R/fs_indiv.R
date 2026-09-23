@@ -1,20 +1,5 @@
-# Individual-specific (per-row) factor-score definition quantities.
-#
-# fs_indiv() expands the per-block fsL/fsT/fsb attributes of a get_fs()
-# result into one long data frame (one row per input row), reusing
-# get_fs() column naming. Row resolution (resolve_fs_per_row()) dispatches
-# on the input shape: lavaan "unified" (single data frame with list-valued
-# attributes), lavaan "list" (named list of per-group data frames with
-# direct attributes), and merMod (one row per cluster with 3-D
-# per-cluster arrays).
-#
-# All per-row consumers -- augment_fs() (R/get_fscore.R), augment_fs2()
-# (R/get_fscore_math.R), fs_indiv(), and the mirt per-obs paths
-# (R/get_fs_methods.R) -- source their per-row se/loadings/error values
-# from the shared value-only helper fs_row_cols() defined below, so there
-# is one source of truth for those quantities. The r2spa column naming is
-# shared through fs_row_colnames(), the naming twin of fs_row_cols();
-# augment_fs2() keeps its own legacy se_*/upper-tri naming on top.
+# fs_row_cols() shares per-row values across get_fs(), fs_indiv(), and
+# augment_lav_predict(); fs_row_colnames() supplies the get_fs() names.
 
 #' Individual-specific (per-row) factor-score definition quantities
 #'
@@ -121,8 +106,6 @@ fs_indiv <- function(fs, include_intercept = FALSE, ...) {
       blk$fsT,
       if (has_int) blk$fsb else NULL
     )
-    # NOTE: 'drop' is not a valid argument in an assignment sub-expression
-    # (extraction only); row-slice assignment below uses the default.
     se_mat[rows_b, ] <- vals[, seq_len(q), drop = FALSE]
     ld_mat[rows_b, ] <-
       vals[, (q + 1L):(q + k_ld), drop = FALSE]

@@ -1,13 +1,7 @@
-########################### Test 2S-PA function ##############################
-
-# Loading packages and functions
+# Stage-2 equivalence and input-shape tests.
 library(lavaan)
 
-########## Single-group example ##########
-
-# Prepare test objects
-
-# Example 1: Single-group with two variables
+# Single-group, two variables
 
 # CFA model
 cfa_single1 <- "
@@ -48,13 +42,9 @@ tspa_single <-
     se_fs = c(ind60 = 0.1213615, dem60 = 0.6756472)
   )
 
-########## Testing section ############
-
-# Class of input
 var_len <- 2
 se <- c(ind60 = 0.1213615, dem60 = 0.6756472)
 
-# The tspa data should be composed of two parts: variable, and se
 test_that(
   "Number of columns in tspa data are multiples of the variable length",
   {
@@ -67,10 +57,6 @@ test_that("Test the data variable names should contain prefix (fs_)", {
   fs_names <- colnames(fs_dat_single)
   expect_true(all(grepl("fs_", fs_names)))
 })
-
-# Class of output
-
-# Parameter estimates
 
 test_that(
   "Regression coefficients of factors are the same for two methods",
@@ -99,14 +85,11 @@ test_that(
   }
 )
 
-# Fit measures
-
 test_that("test if fit indices are the same for two methods", {
   expect_equal(fitmeasures(cfa_single), fitmeasures(tspa_single))
-  # We can add more comparisons of fitting measures by changing the name
 })
 
-# Example 2: Single group with three variables
+# Single-group, three variables
 
 # CFA model
 cfa_3var1 <- '
@@ -152,9 +135,6 @@ tspa_3var <- tspa(
   )
 )
 
-########## Testing section #############
-
-# Standardized parameter estimates
 sem_path_3var <- subset(standardizedSolution(sem_3var),
                         subset = op == "~")
 tspa_path_3var <- subset(standardizedSolution(tspa_3var),
@@ -180,7 +160,6 @@ test_that(
   }
 )
 
-# Variance of factors
 sem_var_3var <- subset(standardizedSolution(sem_3var),
                        subset = op == "~~" &
                          lhs %in% c("ind60", "dem60", "dem65"))
@@ -202,7 +181,7 @@ test_that("test if the se of variance is similar for two methods", {
   )
 })
 
-########## Multi-group example ##########
+# Multigroup
 
 # get factor scores
 fs_dat_visual <- get_fs(HolzingerSwineford1939,
@@ -266,9 +245,6 @@ tspa_multi_list <- tspa(
   group = "school"
 )
 
-########## Testing section #############
-
-# Standardized parameter estimates
 sem_path_multi <- subset(standardizedSolution(sem_multi),
                          subset = op == "~")
 tspa_path_multi <- subset(standardizedSolution(tspa_multi),
@@ -291,14 +267,13 @@ test_that("se of regression coefficients are similar for two methods", {
   )
 })
 
-# Variance of factors
 
 sem_var_multi <- subset(standardizedSolution(sem_multi),
                         subset = op == "~~" &
-                          lhs %in% c("ind60", "dem60", "dem65"))
+                          lhs %in% c("visual", "speed"))
 tspa_var_multi <- subset(standardizedSolution(tspa_multi),
                          subset = op == "~~" &
-                           lhs %in% c("ind60", "dem60", "dem65"))
+                           lhs %in% c("visual", "speed"))
 
 test_that("test if the variance of factor is similar for two methods", {
   expect_equal(

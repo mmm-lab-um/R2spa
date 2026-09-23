@@ -1,42 +1,8 @@
-# Re-integrated 2026-08 into the package (corrected-SE path, incl. the new
-# tspa(corrected_se = TRUE) option); original provenance: quarantined with
-# R/tspa_corrected_se.R (see archive/PLAN_QUARANTINE.md).
-# Provenance:
-#  - tests/testthat/test-tspa_render.R: vcov_corrected() multigroup test
-#    (lines 322-344 as of 2026-08-17) plus mod2g (line 17).
-#  - tests/testthat/test-get_fs_priors.R: vcov_corrected() prior test
-#    (lines 175-205) plus single-group setup (lines 1-18).
-# T1-T8 (standalone vcov_corrected() tests) are the A/B gate for the
-# relocation: their assertions are unchanged since quarantine.
-# T1/T2: globalenv scaffolding removed 2026-08-22 — tspa() records
-# tspa_args (evaluated values), so refits are environment-agnostic; the
-# passing of T1/T2 with fixtures in file scope only IS that regression
-# proof.
-# T3 goldens: the analytic (default-engine) correction, R 4.6.1 / lavaan
-# 0.7-2, re-derived 2026-08-28. The analytic Jacobian is refit-free (no
-# optimizer noise) but NOT BLAS-clean: it solves (I - beta, the implied
-# covariance, and the central-difference Hessian) and calls eigen(), so it
-# is deterministic per BLAS backend but drifts ~1e-8-1e-7 relative across
-# backends (Accelerate vs OpenBLAS; observed on CI 2026-08-30). The
-# tolerance is therefore the cross-BLAS drift floor (1e-4, ~250x the observed
-# max drift of 3.9e-7 on ubuntu OpenBLAS -- margin for the unmeasured macOS
-# Accelerate backend, confirmed across all CI slots), matching the
-# single-threaded-BLAS CI design in .github/workflows/R-CMD-check.yaml, not
-# the per-machine bit-stability floor. (The former FD goldens drifted
-# ~1.6e-3 relative across platforms, hence their looser 1e-2; the analytic
-# engine's ~1e-8-1e-7 drift allows the tighter 1e-4. PLAN 16 D6.)
-# Re-derive: cfa(3-factor joint, PoliticalDemocracy) ->
-# get_fs_lavaan(vfsLT = TRUE) -> tspa("dem60 ~ ind60; dem65 ~ ind60 +
-# dem60") -> vcov_corrected(fit, vfsLT, engine = "analytic") - vcov(fit),
-# read the named elements. Drift protocol: if a lavaan upgrade moves a
-# golden, diff the base fit first — base unchanged but correction moved =>
-# bug in the fix, do NOT update the golden.
-# T4 fixture: boo_joint.RDS = corrected-se vignette bootstrap (R = 1999),
-# labels pinned by the vignette's setNames. The test reads its own committed
-# copy under tests/testthat/ (a snapshot of vignettes/boo_joint.RDS) so it is
-# found in the R CMD check environment, where the vignettes/ source tree is
-# not on the test path; the corrected-se vignette keeps reading
-# vignettes/boo_joint.RDS.
+# Analytic correction goldens (T3) use tolerance 1e-4 for cross-BLAS drift;
+# FD comparisons use 1e-2 because refits add optimizer noise. Recheck the
+# base fit before updating goldens after a lavaan upgrade.
+# T4 reads a committed copy of vignettes/boo_joint.RDS from tests/testthat/,
+# which remains available during R CMD check.
 
 library(lavaan)
 
@@ -66,18 +32,12 @@ tspa_mg <- tspa("visual ~ speed", data = do.call(rbind, fs_mg),
                 fsT = attr(fs_mg, "fsT"), fsL = attr(fs_mg, "fsL"),
                 group = "school")
 
-## Multigroup corrected fit (feeds IT6/IT7/IT8) — built once at file scope
-## to bound cost: each corrected build refits stage 2 ~twice per free
-## fsL/fsT element (~28 refits for this q=2, 2-group case), so doing it
-## per-test would multiply that cost.
+## Build the corrected fit once; the default analytic engine is refit-free.
 tspa_mg_corr <- tspa("visual ~ speed", data = do.call(rbind, fs_mg),
                      fsT = attr(fs_mg, "fsT"), fsL = attr(fs_mg, "fsL"),
                      vfsLT = attr(fs_mg, "vfsLT"), corrected_se = TRUE,
                      group = "school")
-## Standalone multigroup correction (feeds T2/IT6) — computed once for the
-## same cost reason (default engine, now "analytic"). The FD reference for the
-## multigroup A/B and Jacobian-wiring tests (T14/T9) is kept separate
-## (vc_fd_mg below), since the default engine is no longer "fd".
+## Keep a separate FD reference for the multigroup A/B and wiring checks.
 vcov_corr_mg <- vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"))
 vc_fd_mg <- vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"),
                            engine = "fd")
@@ -100,14 +60,8 @@ tspa_joint3 <- tspa("dem60 ~ ind60
                     dem65 ~ ind60 + dem60", data = fs_joint3,
                     fsT = attr(fs_joint3, "fsT"), fsL = attr(fs_joint3, "fsL"))
 
-## PLAN 16 (engine = "analytic", feeds T10-T18, IT9): the T3 saturated fit
-## (tspa_joint3, df = 0) is the primary A/B reference. The FD correction is the
-## expensive side (one stage-2 refit per side of each free fsL/fsT element), so
-## each FD reference is computed once at file scope; the analytic side is
-## refit-free and deterministic (computed in-test). The general path (PLAN 16
-## section 4.3) covers restricted (df > 0), multigroup, and mean-structure
-## models; the D2 gate A/Bs every corrected-SE fixture (saturated, restricted,
-## multigroup, fixed- and free-mean).
+## Cache FD references at file scope; their two refits per fsL/fsT parameter
+## are much costlier than the analytic comparisons run in the tests.
 vc_an_sat <- vcov_corrected(tspa_joint3, vfsLT = attr(fs_joint3, "vfsLT"),
                             engine = "analytic")
 vc_fd_sat <- vcov_corrected(tspa_joint3, vfsLT = attr(fs_joint3, "vfsLT"),
@@ -115,18 +69,13 @@ vc_fd_sat <- vcov_corrected(tspa_joint3, vfsLT = attr(fs_joint3, "vfsLT"),
 tspa_joint3_nsat <- tspa("dem65 ~ ind60", data = fs_joint3,
                          fsT = attr(fs_joint3, "fsT"),
                          fsL = attr(fs_joint3, "fsL"))
-## FD references for the remaining A/B shapes (restricted, fixed-mean prior,
-## 2-factor saturated). The multigroup + free-mean reference (T14) is vc_fd_mg
-## (file scope, explicit engine = "fd"); vcov_corr_mg is the default-engine
-## (analytic) standalone correction used by T2/IT6.
+## FD references for the restricted, fixed-mean prior, and 2-factor shapes.
 vc_fd_nsat <- vcov_corrected(tspa_joint3_nsat,
                              vfsLT = attr(fs_joint3, "vfsLT"), engine = "fd")
 vc_fd_prior <- vcov_corrected(tspa_prior,
                               vfsLT = attr(fs_prior, "vfsLT"), engine = "fd")
 vc_fd_joint2 <- vcov_corrected(tspa_joint2,
                                vfsLT = attr(fs_joint2, "vfsLT"), engine = "fd")
-
-########## Tests ##########
 
 test_that("T1: vcov_corrected() works with prior-adjusted factor scores (no globalenv)", {
   vc <- vcov_corrected(tspa_prior, vfsLT = attr(fs_prior, "vfsLT"))
@@ -139,8 +88,7 @@ test_that("T1: vcov_corrected() works with prior-adjusted factor scores (no glob
 })
 
 test_that("T2: vcov_corrected() runs on an MG fit (no globalenv objects)", {
-  # Precomputed at file scope (vcov_corr_mg) to bound cost — a fresh
-  # vcov_corrected() call here would spend ~28 stage-2 refits per run.
+  # Reuse the analytic correction computed at file scope.
   vc <- vcov_corr_mg
   expect_s3_class(vc, "matrix")
   expect_equal(dim(vc), dim(vcov(tspa_mg)))
@@ -164,12 +112,7 @@ test_that("T3: q = 3 correction is non-zero and matches golden values (B1 guard)
   # the golden is ~17.3, so a threshold 4 orders below it survives
   # golden updates.
   expect_gt(cor["dem60~~dem60", "dem60~~dem60"], 1)
-  # Golden elements (provenance and drift protocol in the file header): the
-  # analytic (default) correction. Deterministic per BLAS backend but not
-  # across backends (the engine's solve()/eigen() + central-difference
-  # Hessian drift ~1e-8-1e-7 relative, see header), so the tolerance is the
-  # cross-BLAS drift floor (1e-4, ~250x the observed max drift of 3.9e-7 on
-  # ubuntu OpenBLAS), not the per-machine bit-stability floor.
+  # Analytic goldens tolerate small cross-BLAS drift (see file header).
   expect_equal(cor["dem60~~dem60", "dem60~~dem60"], 17.3504614099,
                tolerance = 1e-4)
   expect_equal(cor["dem65~dem60", "dem65~dem60"], 1.19612678113,
@@ -491,26 +434,37 @@ test_that("T9: MG Jacobian wiring — independent central differences reproduce 
   expect_equal(cor_pkg, J_test %*% vfsLT %*% t(J_test), tolerance = 1e-4)
 })
 
-########## PLAN 16: engine = "analytic" (refit-free Jacobian) ##########
-## The saturated closed form (PLAN 16, section 2.4) is A/B'd against the
-## finite-difference engine on the T3 saturated fit (the common 2S-PA case)
-## and must agree to the FD's own noise floor. The gate also routes a
-## restricted (df > 0) structural model back to the FD.
+## Compare the analytic engine with cached FD results across five geometries.
+## The fixed-mean prior checks that the score uses the model's implied means;
+## the restricted model checks the analytic general path (df > 0).
+ab_shapes <- list(
+  list(name = "3-factor saturated",  fit = tspa_joint3,      vl = attr(fs_joint3, "vfsLT"), fd = vc_fd_sat),
+  list(name = "restricted (df > 0)", fit = tspa_joint3_nsat, vl = attr(fs_joint3, "vfsLT"), fd = vc_fd_nsat),
+  list(name = "MG + free mean",      fit = tspa_mg,          vl = attr(fs_mg, "vfsLT"), fd = vc_fd_mg),
+  list(name = "fixed-mean prior",    fit = tspa_prior,       vl = attr(fs_prior, "vfsLT"), fd = vc_fd_prior),
+  list(name = "2-factor saturated",  fit = tspa_joint2,      vl = attr(fs_joint2, "vfsLT"), fd = vc_fd_joint2)
+)
 
-test_that("T10: engine = 'analytic' matches the FD engine on the saturated fit", {
-  expect_equal(vc_an_sat, vc_fd_sat, tolerance = 1e-2)
-  # The analytic correction is non-trivial, symmetric, and PSD.
-  expect_gt(sum((vc_an_sat - vcov(tspa_joint3))^2), 0)
-  expect_equal(vc_an_sat, t(vc_an_sat), tolerance = 1e-10)
+test_that("T10: engine = 'analytic' matches the FD engine on every A/B shape", {
+  for (s in ab_shapes) {
+    va <- vcov_corrected(s$fit, vfsLT = s$vl, engine = "analytic")
+    # FD refit noise requires a wider tolerance than the analytic goldens.
+    expect_equal(va, s$fd, tolerance = 1e-2, label = s$name)
+    expect_true(all(is.finite(va)), label = s$name)
+    expect_equal(dim(va), dim(vcov(s$fit)), label = s$name)
+    expect_equal(va, t(va), tolerance = 1e-10, label = s$name)
+    expect_gt(sum((va - vcov(s$fit))^2), 0, label = s$name)
+  }
 })
 
-test_that("T11: engine = 'analytic' is deterministic (bit-identical, no refits)", {
-  # No finite differences and no optimizer jitter, so the result reproduces
-  # bit-for-bit (the FD engine is only deterministic to ~1e-8 cross-run).
-  expect_identical(
-    vcov_corrected(tspa_joint3, vfsLT = attr(fs_joint3, "vfsLT"),
-                   engine = "analytic"),
-    vc_an_sat)
+test_that("T11: the analytic engine is run-to-run bit-identical (per backend) on every A/B shape", {
+  # Identical on one BLAS backend; numerical drift is covered by T3's tolerance.
+  for (s in ab_shapes) {
+    expect_identical(
+      vcov_corrected(s$fit, vfsLT = s$vl, engine = "analytic"),
+      vcov_corrected(s$fit, vfsLT = s$vl, engine = "analytic"),
+      label = s$name)
+  }
 })
 
 test_that("T12: engine = 'analytic' honours which_free exactly as the FD", {
@@ -557,56 +511,6 @@ test_that("T13: the analytic path covers saturated and restricted (general) mode
   expect_equal(dim(vc_nsat), dim(vcov(tspa_joint3_nsat)))
 })
 
-test_that("T14: engine = 'analytic' matches the FD on the multigroup + free-mean fit", {
-  va <- vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"), engine = "analytic")
-  # vc_fd_mg is the file-scope explicit-"fd" MG correction (the A/B reference).
-  expect_equal(va, vc_fd_mg, tolerance = 1e-2)
-  expect_equal(dim(va), dim(vcov(tspa_mg)))
-  expect_true(all(is.finite(va)))
-  expect_equal(va, t(va), tolerance = 1e-10)
-})
-
-test_that("T15: engine = 'analytic' matches the FD on the restricted (non-saturated) fit", {
-  # df > 0 -> the general path (section 4.3), not the saturated closed form.
-  va <- vcov_corrected(tspa_joint3_nsat, vfsLT = attr(fs_joint3, "vfsLT"),
-                       engine = "analytic")
-  expect_equal(va, vc_fd_nsat, tolerance = 1e-2)
-  expect_true(all(is.finite(va)))
-})
-
-test_that("T16: engine = 'analytic' matches the FD on the fixed-mean (prior) fit", {
-  # tspa_prior carries FIXED score means (fsb). The analytic engine must read
-  # the model's implied means from the partable (est$nu), not assume zero:
-  # otherwise d = xbar - mu is nonzero and a spurious mean-coupling term
-  # corrupts the cov-param score (the 4.2% vs 0.95% regression this guards).
-  va <- vcov_corrected(tspa_prior, vfsLT = attr(fs_prior, "vfsLT"),
-                       engine = "analytic")
-  expect_equal(va, vc_fd_prior, tolerance = 1e-2)
-  expect_true(all(is.finite(va)))
-})
-
-test_that("T17: engine = 'analytic' matches the FD on the 2-factor saturated fit", {
-  va <- vcov_corrected(tspa_joint2, vfsLT = attr(fs_joint2, "vfsLT"),
-                       engine = "analytic")
-  expect_equal(va, vc_fd_joint2, tolerance = 1e-2)
-  expect_true(all(is.finite(va)))
-})
-
-test_that("T18: the analytic engine is run-to-run bit-identical (per backend) on every A/B shape", {
-  # No refits and no RNG -> the corrected vcov is a pure function of the base
-  # fit + vfsLT, so repeated calls on the same machine/BLAS are bit-identical
-  # (the property the FD lacks). This is per-backend: across BLAS backends the
-  # result drifts ~1e-8-1e-7 relative (see the T3 header), not bit-stable.
-  expect_identical(
-    vcov_corrected(tspa_joint3_nsat, vfsLT = attr(fs_joint3, "vfsLT"),
-                   engine = "analytic"),
-    vcov_corrected(tspa_joint3_nsat, vfsLT = attr(fs_joint3, "vfsLT"),
-                   engine = "analytic"))
-  expect_identical(
-    vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"), engine = "analytic"),
-    vcov_corrected(tspa_mg, vfsLT = attr(fs_mg, "vfsLT"), engine = "analytic"))
-})
-
 test_that("T19: the analytic engine falls back to FD for a non-ML estimator", {
   # The analytic score is the unweighted normal-ML score. A non-ML estimator
   # (here MLR: the ML likelihood with robust SEs) changes the objective the
@@ -637,4 +541,3 @@ test_that("IT9: in-place corrected_se = TRUE, engine = 'analytic' matches the FD
   # T10: standalone analytic == standalone FD to 1e-2).
   expect_equal(vcov(fa), vc_fd_sat, tolerance = 1e-2)
 })
-
