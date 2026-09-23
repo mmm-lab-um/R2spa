@@ -507,6 +507,10 @@ tspa_mx_resolve_se_fs <- function(se_fs, data) {
     stop("'se_fs' must be a named numeric vector (fixed SEs) or a named ",
          "character vector (definition-variable SE columns).", call. = FALSE)
   }
+  # Sources are validated against the ORIGINAL data columns (not the working
+  # copy, which grows as squared columns are appended), so an internally
+  # generated working column can never be mistaken for a user source.
+  orig_cols <- names(data)
   data2 <- data
   for (nm in names(se_fs)) {
     col <- unname(se_fs[nm])
@@ -514,22 +518,28 @@ tspa_mx_resolve_se_fs <- function(se_fs, data) {
       stop("'se_fs' entry '", nm,
            "' must name a non-empty column of 'data'.", call. = FALSE)
     }
-    if (!col %in% names(data2)) {
+    if (!col %in% orig_cols) {
       stop("'se_fs' definition-variable column '", col,
            "' is not a column of 'data'.", call. = FALSE)
     }
-    if (!is.numeric(data2[[col]])) {
+    if (!is.numeric(data[[col]])) {
       stop("'se_fs' definition-variable column '", col,
            "' must be numeric.", call. = FALSE)
     }
-    if (anyNA(data2[[col]])) {
+    if (anyNA(data[[col]])) {
       stop("'se_fs' definition-variable column '", col,
            "' contains NA; definition variables must be complete for every row.",
            call. = FALSE)
     }
+    # A working column name unique against every existing and already-appended
+    # column, so a real data column is never overwritten.
     se2col <- paste0(col, "_R2spa_se2")
-    if (se2col %in% names(data2)) se2col <- paste0(col, "_R2spa_se2_", nm)
-    data2[[se2col]] <- data2[[col]]^2
+    k <- 1L
+    while (se2col %in% names(data2)) {
+      se2col <- paste0(col, "_R2spa_se2_", k)
+      k <- k + 1L
+    }
+    data2[[se2col]] <- data[[col]]^2
     se_fs[nm] <- se2col
   }
   list(se_fs = se_fs, data = data2)

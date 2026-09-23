@@ -360,6 +360,20 @@ test_that("T12: tspa_mx_resolve_se_fs resolves fixed vs definition-variable se_f
   # a non-numeric, non-character se_fs is rejected
   expect_error(R2spa:::tspa_mx_resolve_se_fs(factor(c("x", "y")), d),
                "must be a named")
+  # collision: pre-existing working-column-shaped columns must not be clobbered
+  d_col <- data.frame(foo = c(1, 2),
+                      foo_R2spa_se2 = c(10, 20),
+                      foo_R2spa_se2_a = c(30, 40))
+  r_col <- R2spa:::tspa_mx_resolve_se_fs(c(a = "foo"), d_col)
+  expect_equal(r_col$data$foo_R2spa_se2, c(10, 20))
+  expect_equal(r_col$data$foo_R2spa_se2_a, c(30, 40))
+  expect_equal(r_col$data[[r_col$se_fs[["a"]]]], c(1^2, 2^2))
+  # a source must be an ORIGINAL column, not one appended earlier in the loop
+  d_chain <- data.frame(foo = c(1, 2), bar = c(3, 4))
+  expect_error(
+    R2spa:::tspa_mx_resolve_se_fs(c(a = "foo", b = "foo_R2spa_se2"), d_chain),
+    "not a column"
+  )
 })
 
 test_that("T13: character se_fs is still mutually exclusive with fsL/fsT", {
