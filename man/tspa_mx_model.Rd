@@ -31,12 +31,19 @@ needed to obtain them. \code{\link[=fs_indiv]{fs_indiv()}} on a \code{\link[=get
 the equivalent fully explicit table. Definition-variable columns must
 be numeric and free of \code{NA}.}
 
-\item{se_fs}{A named numeric vector of standard errors (one per latent) for
-the single-score-per-latent case; implies fixed unit loadings and error
-variances \code{se_fs^2}. An explicit \code{se_fs} always wins over derivation;
-when omitted (along with \code{fsL}, \code{fsT}, and \code{fsb}), the measurement
-inputs are derived from a \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see
-Details).}
+\item{se_fs}{Standard errors for the single-score-per-latent case, one per
+latent, named by latent name. Either (a) a named numeric vector of fixed
+SEs (the \code{k}-th latent's error variance is \code{se_fs[k]^2}), or (b) a named
+character vector whose entries name per-observation SE columns of \code{data}
+(the square root of the measurement error); the model then uses the
+column's square, \code{(data[, col])^2}, as that latent's error variance via an
+OpenMx definition variable. In form (b) the fitted model's data gains one
+working column per named SE column, \verb{<col>_R2spa_se2} (holding
+\code{data[, col]^2}; it is inert except as a definition-variable source).
+Both forms imply fixed unit loadings. An
+explicit \code{se_fs} always wins over derivation; when omitted (along with
+\code{fsL}, \code{fsT}, and \code{fsb}), the measurement inputs are derived from a
+\code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see Details).}
 
 \item{fsL}{A \verb{q x p} loading matrix including cross-loadings: rows = score
 names (\verb{fs_<latent>}), columns = latent names. The matrix must be
@@ -170,6 +177,13 @@ tspa_mx_model("dem60 ~ ind60; dem60 + ind60 ~ 1",
                nrow = 2, dimnames = list(c("fs_ind60", "fs_dem60"),
                                          c("fs_ind60", "fs_dem60"))),
   fsb = c(fs_ind60 = "int_fs_ind60", fs_dem60 = "int_fs_dem60"))
+
+## se_fs shorthand for the unit-loading case above: the named entries point
+## at per-row SE (sqrt of measurement error) columns of the fs_indiv()
+## table; the model uses their square as each score's error variance.
+tspa_mx_model("dem60 ~ ind60; dem60 + ind60 ~ 1",
+  data = dat,
+  se_fs = c(ind60 = "fs_ind60_se", dem60 = "fs_dem60_se"))
 }
 }
 \seealso{

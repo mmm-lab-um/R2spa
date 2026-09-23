@@ -291,3 +291,102 @@ test_that("mean-structure convention: same model, latent vs score mean split", {
   # ...and OpenMx pins the score's own (residual) mean at zero:
   expect_equal(unname(m$M$values[1, match("fs_a", v)]), 0)
 })
+
+# --- se_fs definition variables (per-row SE columns) -------------------------
+# A character se_fs names per-observation SE (sqrt of measurement error)
+# columns of `data`; the model uses their square as each score's error variance.
+# It is the unit-loading shorthand for the fsT route, so it must equal the fsT
+# fit that references the per-row ev_ (error variance) columns -- and, for
+# complete data, the fixed-se_fs fit. (fs_indiv documents fs_<f>_se as the
+# square root of the per-row fsT diagonal, i.e. sqrt(ev_fs_<f>); see
+# R/fs_indiv.R, so se^2 == ev_.)
+test_that("T10: se_fs definition variables (per-row SE) match the fsT ev_ route", {
+  Lh <- `dimnames<-`(diag(2), list(c("fs_visual", "fs_speed"),
+                                   c("visual", "speed")))
+  Th <- matrix(c("ev_fs_visual", NA, NA, "ev_fs_speed"), nrow = 2,
+               dimnames = list(c("fs_visual", "fs_speed"),
+                               c("fs_visual", "fs_speed")))
+  bh <- c(fs_visual = "int_fs_visual", fs_speed = "int_fs_speed")
+  m_dv  <- suppressWarnings(tspa_mx_model("visual ~ speed", data = dat_hs,
+                                          se_fs = c(visual = "fs_visual_se",
+                                                     speed = "fs_speed_se")))
+  m_ref <- suppressWarnings(tspa_mx_model("visual ~ speed", data = dat_hs,
+                                      fsL = Lh, fsT = Th, fsb = bh))
+  expect_equal(mx_path_val(m_dv, "speed", "visual"),
+               mx_path_val(m_ref, "speed", "visual"), tolerance = 1e-6)
+  expect_equal(mx_var_val(m_dv, "visual"),
+               mx_var_val(m_ref, "visual"), tolerance = 1e-6)
+  expect_equal(mx_var_val(m_dv, "speed"),
+               mx_var_val(m_ref, "speed"), tolerance = 1e-6)
+})
+
+test_that("T11: se_fs definition variables (constant SE) match the fixed fit", {
+  se_fixed <- c(ind60 = mean(dat2$fs_ind60_se),
+                dem60 = mean(dat2$fs_dem60_se))
+  m_dv <- suppressWarnings(tspa_mx_model(model2, data = dat2,
+                                         se_fs = c(ind60 = "fs_ind60_se",
+                                                    dem60 = "fs_dem60_se")))
+  m_fx <- suppressWarnings(tspa_mx_model(model2, data = dat2, se_fs = se_fixed))
+  expect_equal(mx_path_val(m_dv, "ind60", "dem60"),
+               mx_path_val(m_fx, "ind60", "dem60"), tolerance = 1e-6)
+  expect_equal(mx_var_val(m_dv, "ind60"),
+               mx_var_val(m_fx, "ind60"), tolerance = 1e-6)
+  expect_equal(mx_var_val(m_dv, "dem60"),
+               mx_var_val(m_fx, "dem60"), tolerance = 1e-6)
+})
+
+test_that("T12: tspa_mx_resolve_se_fs resolves fixed vs definition-variable se_fs", {
+  d <- data.frame(fs_a = c(1, 2, 3), se_a = c(0.1, 0.2, 0.3),
+                  se_b = c(0.4, 0.5, 0.6))
+  # numeric (fixed) passes through unchanged
+  r_fx <- R2spa:::tspa_mx_resolve_se_fs(c(a = 0.1, b = 0.4), d)
+  expect_equal(r_fx$se_fs, c(a = 0.1, b = 0.4))
+  expect_identical(r_fx$data, d)
+  # character (dv): each entry is rewritten to a squared working column
+  r_dv <- R2spa:::tspa_mx_resolve_se_fs(c(a = "se_a", b = "se_b"), d)
+  expect_equal(r_dv$se_fs, c(a = "se_a_R2spa_se2", b = "se_b_R2spa_se2"))
+  expect_equal(r_dv$data$se_a_R2spa_se2, c(0.1^2, 0.2^2, 0.3^2))
+  expect_equal(r_dv$data$se_b_R2spa_se2, c(0.4^2, 0.5^2, 0.6^2))
+  # the original columns are left untouched
+  expect_equal(r_dv$data$se_a, c(0.1, 0.2, 0.3))
+  # NULL passes through
+  expect_identical(R2spa:::tspa_mx_resolve_se_fs(NULL, d)$data, d)
+  # validation errors name the offending column
+  expect_error(R2spa:::tspa_mx_resolve_se_fs(c(a = "nope"), d), "not a column")
+  d_char <- d; d_char$se_a <- as.character(d_char$se_a)
+  expect_error(R2spa:::tspa_mx_resolve_se_fs(c(a = "se_a"), d_char), "must be numeric")
+  d_na <- d; d_na$se_a[1] <- NA
+  expect_error(R2spa:::tspa_mx_resolve_se_fs(c(a = "se_a"), d_na), "contains NA")
+  # a non-numeric, non-character se_fs is rejected
+  expect_error(R2spa:::tspa_mx_resolve_se_fs(factor(c("x", "y")), d),
+               "must be a named")
+  # collision: pre-existing working-column-shaped columns must not be clobbered
+  d_col <- data.frame(foo = c(1, 2),
+                      foo_R2spa_se2 = c(10, 20),
+                      foo_R2spa_se2_a = c(30, 40))
+  r_col <- R2spa:::tspa_mx_resolve_se_fs(c(a = "foo"), d_col)
+  expect_equal(r_col$data$foo_R2spa_se2, c(10, 20))
+  expect_equal(r_col$data$foo_R2spa_se2_a, c(30, 40))
+  expect_equal(r_col$data[[r_col$se_fs[["a"]]]], c(1^2, 2^2))
+  # a source must be an ORIGINAL column, not one appended earlier in the loop
+  d_chain <- data.frame(foo = c(1, 2), bar = c(3, 4))
+  expect_error(
+    R2spa:::tspa_mx_resolve_se_fs(c(a = "foo", b = "foo_R2spa_se2"), d_chain),
+    "not a column"
+  )
+  # two latents sharing one SE column get two distinct working columns (same values)
+  d_sh <- data.frame(fs_a = 1:3, fs_b = 1:3, se_a = c(0.1, 0.2, 0.3))
+  r_sh <- R2spa:::tspa_mx_resolve_se_fs(c(a = "se_a", b = "se_a"), d_sh)
+  expect_false(any(duplicated(r_sh$se_fs)))
+  expect_identical(unname(r_sh$data[[r_sh$se_fs[1L]]]),
+                   unname(r_sh$data[[r_sh$se_fs[2L]]]))
+})
+
+test_that("T13: character se_fs is still mutually exclusive with fsL/fsT", {
+  expect_error(
+    tspa_mx_model(model2, data = dat2,
+                  se_fs = c(ind60 = "fs_ind60_se", dem60 = "fs_dem60_se"),
+                  fsL = L2),
+    "either 'se_fs' or"
+  )
+})
