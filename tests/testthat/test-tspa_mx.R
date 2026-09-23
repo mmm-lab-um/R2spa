@@ -321,12 +321,12 @@ test_that("T10: se_fs definition variables (per-row SE) match the fsT ev_ route"
 })
 
 test_that("T11: se_fs definition variables (constant SE) match the fixed fit", {
-  se2_col <- c(ind60 = mean(dat2$fs_ind60_se),
-              dem60 = mean(dat2$fs_dem60_se))
+  se_fixed <- c(ind60 = mean(dat2$fs_ind60_se),
+                dem60 = mean(dat2$fs_dem60_se))
   m_dv <- suppressWarnings(tspa_mx_model(model2, data = dat2,
-                                          se_fs = c(ind60 = "fs_ind60_se",
-                                             dem60 = "fs_dem60_se")))
-   m_fx <- suppressWarnings(tspa_mx_model(model2, data = dat2, se_fs = se2_col))
+                                         se_fs = c(ind60 = "fs_ind60_se",
+                                                    dem60 = "fs_dem60_se")))
+  m_fx <- suppressWarnings(tspa_mx_model(model2, data = dat2, se_fs = se_fixed))
   expect_equal(mx_path_val(m_dv, "ind60", "dem60"),
                mx_path_val(m_fx, "ind60", "dem60"), tolerance = 1e-6)
   expect_equal(mx_var_val(m_dv, "ind60"),
@@ -374,6 +374,12 @@ test_that("T12: tspa_mx_resolve_se_fs resolves fixed vs definition-variable se_f
     R2spa:::tspa_mx_resolve_se_fs(c(a = "foo", b = "foo_R2spa_se2"), d_chain),
     "not a column"
   )
+  # two latents sharing one SE column get two distinct working columns (same values)
+  d_sh <- data.frame(fs_a = 1:3, fs_b = 1:3, se_a = c(0.1, 0.2, 0.3))
+  r_sh <- R2spa:::tspa_mx_resolve_se_fs(c(a = "se_a", b = "se_a"), d_sh)
+  expect_false(any(duplicated(r_sh$se_fs)))
+  expect_identical(unname(r_sh$data[[r_sh$se_fs[1L]]]),
+                   unname(r_sh$data[[r_sh$se_fs[2L]]]))
 })
 
 test_that("T13: character se_fs is still mutually exclusive with fsL/fsT", {

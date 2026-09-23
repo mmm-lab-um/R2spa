@@ -37,7 +37,10 @@ SEs (the \code{k}-th latent's error variance is \code{se_fs[k]^2}), or (b) a nam
 character vector whose entries name per-observation SE columns of \code{data}
 (the square root of the measurement error); the model then uses the
 column's square, \code{(data[, col])^2}, as that latent's error variance via an
-OpenMx definition variable. Both forms imply fixed unit loadings. An
+OpenMx definition variable. In form (b) the fitted model's data gains one
+working column per named SE column, \verb{<col>_R2spa_se2} (holding
+\code{data[, col]^2}; it is inert except as a definition-variable source).
+Both forms imply fixed unit loadings. An
 explicit \code{se_fs} always wins over derivation; when omitted (along with
 \code{fsL}, \code{fsT}, and \code{fsb}), the measurement inputs are derived from a
 \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see Details).}

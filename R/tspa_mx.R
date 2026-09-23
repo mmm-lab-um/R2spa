@@ -85,7 +85,10 @@
 #'   character vector whose entries name per-observation SE columns of `data`
 #'   (the square root of the measurement error); the model then uses the
 #'   column's square, `(data[, col])^2`, as that latent's error variance via an
-#'   OpenMx definition variable. Both forms imply fixed unit loadings. An
+#'   OpenMx definition variable. In form (b) the fitted model's data gains one
+#'   working column per named SE column, `<col>_R2spa_se2` (holding
+#'   `data[, col]^2`; it is inert except as a definition-variable source).
+#'   Both forms imply fixed unit loadings. An
 #'   explicit `se_fs` always wins over derivation; when omitted (along with
 #'   `fsL`, `fsT`, and `fsb`), the measurement inputs are derived from a
 #'   [get_fs()] result passed as `data` (see Details).
@@ -519,6 +522,17 @@ tspa_mx_resolve_se_fs <- function(se_fs, data) {
            "' must name a non-empty column of 'data'.", call. = FALSE)
     }
     if (!col %in% orig_cols) {
+      # a numeric-looking entry that is not a column usually means a mixed
+      # fixed/column se_fs (c() coerces the whole vector to character, so the
+      # fixed value is now indistinguishable from a column name).
+      if (!is.na(suppressWarnings(as.numeric(col)))) {
+        stop("'se_fs' entry '", nm, "' has value '", col,
+             "', which is not a column of 'data'. A numeric value is treated ",
+             "as a fixed SE only when every entry is numeric; a mixed ",
+             "fixed/column se_fs is not supported. Use all fixed SEs (numeric) ",
+             "or all column names (character), or the fsL/fsT route.",
+             call. = FALSE)
+      }
       stop("'se_fs' definition-variable column '", col,
            "' is not a column of 'data'.", call. = FALSE)
     }

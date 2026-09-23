@@ -31,6 +31,13 @@
   `*_by_*`/`ev_*`/`ecov_*` columns (one row per cluster, exact
   non-pooled correction); `merMod` results carry no `fsb`, so the score
   intercepts stay fixed at zero.
+- `tspa_mx_model()`'s `se_fs` now also accepts a named character vector
+  whose entries name per-observation SE columns of `data` (the square root
+  of the measurement error); each such latent's error variance becomes
+  `(data[, col])^2`, attached as an OpenMx definition variable, making the
+  unit-loading per-row case a one-line `se_fs` shorthand. A squared working
+  column `<col>_R2spa_se2` is appended to the model data. The previous form
+  (a named numeric vector of fixed SEs) is unchanged.
 - Product factor-score indicators now carry fixed measurement-error
   covariances in the stage-2 model: products sharing a factor score (e.g.
   `xm` and `xz`) have correlated measurement errors (the shared score's
