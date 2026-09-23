@@ -79,12 +79,16 @@
 #'   needed to obtain them. [`fs_indiv()`] on a [get_fs()] result produces
 #'   the equivalent fully explicit table. Definition-variable columns must
 #'   be numeric and free of `NA`.
-#' @param se_fs A named numeric vector of standard errors (one per latent) for
-#'   the single-score-per-latent case; implies fixed unit loadings and error
-#'   variances `se_fs^2`. An explicit `se_fs` always wins over derivation;
-#'   when omitted (along with `fsL`, `fsT`, and `fsb`), the measurement
-#'   inputs are derived from a [get_fs()] result passed as `data` (see
-#'   Details).
+#' @param se_fs Standard errors for the single-score-per-latent case, one per
+#'   latent, named by latent name. Either (a) a named numeric vector of fixed
+#'   SEs (the `k`-th latent's error variance is `se_fs[k]^2`), or (b) a named
+#'   character vector whose entries name per-observation SE columns of `data`
+#'   (the square root of the measurement error); the model then uses the
+#'   column's square, `(data[, col])^2`, as that latent's error variance via an
+#'   OpenMx definition variable. Both forms imply fixed unit loadings. An
+#'   explicit `se_fs` always wins over derivation; when omitted (along with
+#'   `fsL`, `fsT`, and `fsb`), the measurement inputs are derived from a
+#'   [get_fs()] result passed as `data` (see Details).
 #' @param fsL A `q x p` loading matrix including cross-loadings: rows = score
 #'   names (`fs_<latent>`), columns = latent names. The matrix must be
 #'   uniformly numeric (every cell a fixed loading) or uniformly character
@@ -149,6 +153,13 @@
 #'                nrow = 2, dimnames = list(c("fs_ind60", "fs_dem60"),
 #'                                          c("fs_ind60", "fs_dem60"))),
 #'   fsb = c(fs_ind60 = "int_fs_ind60", fs_dem60 = "int_fs_dem60"))
+#'
+#' ## se_fs shorthand for the unit-loading case above: the named entries point
+#' ## at per-row SE (sqrt of measurement error) columns of the fs_indiv()
+#' ## table; the model uses their square as each score's error variance.
+#' tspa_mx_model("dem60 ~ ind60; dem60 + ind60 ~ 1",
+#'   data = dat,
+#'   se_fs = c(ind60 = "fs_ind60_se", dem60 = "fs_dem60_se"))
 #' }
 
 tspa_mx_model <- function(model, data, se_fs = NULL, fsL = NULL,
@@ -211,6 +222,16 @@ tspa_mx_model <- function(model, data, se_fs = NULL, fsL = NULL,
     fsT <- derived$fsT
     fsb <- derived$fsb
     data <- derived$data
+  }
+
+  # se_fs definition variables: a character entry is a per-row SE (the square
+  # root of the measurement error) column; the RAM model needs its square as the
+  # error variance, so append a squared working column and point the entry at
+  # it (numeric fixed SEs pass through unchanged).
+  if (!is.null(se_fs)) {
+    resolved_se_fs <- tspa_mx_resolve_se_fs(se_fs, data)
+    se_fs <- resolved_se_fs$se_fs
+    data <- resolved_se_fs$data
   }
 
   spec <- tspa_mx_spec(se_fs, fsL, fsT, fsb)
@@ -469,22 +490,81 @@ tspa_mx_align_scores <- function(T, S, arg) {
   T <- T[, colnames = S, drop = FALSE]
 }
 
+# se_fs definition variables: a character entry names a per-observation SE
+# column of `data` (the square root of the measurement error). The RAM model
+# needs the error VARIANCE, and an OpenMx definition variable is assigned the
+# referenced column's value directly (no squaring op), so append a squared
+# working column (cf. the int_fs_* columns the derivation route appends) and
+# point the entry at it. Numeric entries (fixed SEs) pass through unchanged.
+tspa_mx_resolve_se_fs <- function(se_fs, data) {
+  if (is.null(se_fs) || length(se_fs) == 0L) {
+    return(list(se_fs = se_fs, data = data))
+  }
+  if (is.numeric(se_fs)) {
+    return(list(se_fs = se_fs, data = data))
+  }
+  if (!is.character(se_fs)) {
+    stop("'se_fs' must be a named numeric vector (fixed SEs) or a named ",
+         "character vector (definition-variable SE columns).", call. = FALSE)
+  }
+  data2 <- data
+  for (nm in names(se_fs)) {
+    col <- unname(se_fs[nm])
+    if (is.na(col) || !nzchar(col)) {
+      stop("'se_fs' entry '", nm,
+           "' must name a non-empty column of 'data'.", call. = FALSE)
+    }
+    if (!col %in% names(data2)) {
+      stop("'se_fs' definition-variable column '", col,
+           "' is not a column of 'data'.", call. = FALSE)
+    }
+    if (!is.numeric(data2[[col]])) {
+      stop("'se_fs' definition-variable column '", col,
+           "' must be numeric.", call. = FALSE)
+    }
+    if (anyNA(data2[[col]])) {
+      stop("'se_fs' definition-variable column '", col,
+           "' contains NA; definition variables must be complete for every row.",
+           call. = FALSE)
+    }
+    se2col <- paste0(col, "_R2spa_se2")
+    if (se2col %in% names(data2)) se2col <- paste0(col, "_R2spa_se2_", nm)
+    data2[[se2col]] <- data2[[col]]^2
+    se_fs[nm] <- se2col
+  }
+  list(se_fs = se_fs, data = data2)
+}
+
 tspa_mx_spec <- function(se_fs, fsL, fsT, fsb) {
   if (!is.null(se_fs)) {
     if (is.null(names(se_fs)) || anyNA(names(se_fs))) {
       stop("'se_fs' must be named by latent name.", call. = FALSE)
     }
-    se <- as.numeric(se_fs)
-    if (anyNA(se)) {
-      stop("'se_fs' must not contain NA: every latent needs a known ",
-           "factor-score SE.", call. = FALSE)
-    }
     V <- names(se_fs)
     S <- paste0("fs_", V)
+    # unit loadings (fixed) -- the single-score-per-latent se_fs convention
     Lm <- matrix(NA_real_, length(V), length(V), dimnames = list(S, V)); diag(Lm) <- 1
-    Tm <- matrix(NA_real_, length(V), length(V), dimnames = list(S, S)); diag(Tm) <- se^2
     L <- tspa_mx_cells(Lm, "fsL")
-    T <- tspa_mx_cells(Tm, "fsT")
+    # error variance: a numeric se_fs is a fixed SE (value se^2); a character
+    # se_fs (post tspa_mx_resolve_se_fs) points at the per-row squared-SE
+    # working columns. Built by hand so fixed and definition-variable cells
+    # coexist in one table (tspa_mx_cells() enforces uniform type).
+    Tv <- matrix(NA_real_, length(V), length(V), dimnames = list(S, S))
+    Tc <- matrix(NA_character_, length(V), length(V), dimnames = list(S, S))
+    if (is.numeric(se_fs)) {
+      se <- as.numeric(se_fs)
+      if (anyNA(se)) {
+        stop("'se_fs' must not contain NA: every latent needs a known ",
+             "factor-score SE.", call. = FALSE)
+      }
+      diag(Tv) <- se^2
+    } else if (is.character(se_fs)) {
+      diag(Tc) <- unname(se_fs)
+    } else {
+      stop("'se_fs' must be numeric (fixed SEs) or character (definition-",
+           "variable SE columns).", call. = FALSE)
+    }
+    T <- list(vals = Tv, coln = Tc)
   } else {
     fsL <- tspa_mx_unwrap(fsL)
     fsT <- tspa_mx_unwrap(fsT)
