@@ -228,14 +228,18 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
    user-fixed structural slopes alongside free ones (PLAN 12: `out_idx` free-position anchor
    + β-dimnames fallback for fixed cells). Threads the corrected covariance, so a
    `tspa(corrected_se = TRUE)` fit reports corrected grand-standardized SEs.
-11. **`tspa_mx.R`** (~610 lines) — `tspa_mx_model()`, the OpenMx stage-2 route (exact, no
-   pooling); PLAN 15 `tspa_mx_derive_measurement()` auto-derives the measurement inputs from
-   a `get_fs()` result (per-row/per-pattern quantities become definition-variable matrices
-   over the result's own `_by_`/`ev_`/`ecov_` columns; `int_fs_*` intercept columns from the
-    `fsb` attribute); `tspa_mx_defvar_col()` handles `lavaanify()`'s reversed `~~`
-    orientation; `se_fs` also accepts a named character vector of per-row SE columns
-    (squared into `<col>_R2spa_se2` working definition variables by
-    `tspa_mx_resolve_se_fs()`, PR #96).
+ 11. **`tspa_mx.R`** (~795 lines) — `tspa_mx_model()`, the OpenMx stage-2 route (exact, no
+    pooling); PLAN 15 `tspa_mx_derive_measurement()` auto-derives the measurement inputs from
+    a `get_fs()` result (per-row/per-pattern quantities become definition-variable matrices
+    over the result's own `_by_`/`ev_`/`ecov_` columns; `int_fs_*` intercept columns from the
+     `fsb` attribute); `tspa_mx_defvar_col()` handles `lavaanify()`'s reversed `~~`
+     orientation; `se_fs` also accepts a named character vector of per-row SE columns
+     (squared into `<col>_R2spa_se2` working definition variables by
+     `tspa_mx_resolve_se_fs()`, PR #96); fixed numeric `fsb` score intercepts (including an
+     explicit zero) are emitted as fixed score means in `tspa_mx_model_string()` —
+     previously silently dropped, which left the score means on the unidentifiable mean
+     split (PR #98); `fsb = NULL` omits the constraint (auto-seeded fixed-zero under a
+     structural mean model, free raw-data means otherwise).
 
 `.quarantine/R/` no longer exists (both of its files were deleted in 2026-08):
 `get_fs_int.R` (latent interaction) was removed and replaced by
