@@ -20,7 +20,7 @@ joint-model `compute_fs_prod()` / `get_fs(product = )` (2026-08, branch
 measurement-error covariances in the stage-2 model.
 
 ## Repository Facts
-- ~8,000 lines of R across 12 files in `R/`; 27 test files in `tests/testthat/`.
+- 13 R files in `R/`; 30 test files and one shared test helper in `tests/testthat/`.
 - `.quarantine/` — quarantined consumers of `get_fs()`/`tspa()` (`tests/` — only `_snaps/`
   remains; `vignettes/`; the `R/` subdirectory was deleted when its last files were
   re-integrated or removed), excluded from the package build via `^\.quarantine$` in `.Rbuildignore`.
@@ -50,10 +50,14 @@ measurement-error covariances in the stage-2 model.
    `vignette`; provenance: `archive/BRANCH_SALVAGE_2026-08-27.md`). Both directories
    are ignored for development.
   - **Actively developed** — intensive 2026-08 re-integration + plan work (PLAN 06–16).
-     Version 0.0.5 is "developmental". Suite
-    ~4,464 expectations passing, 0 fail; `R CMD check` (as-cran, `--no-manual` on this
-    LaTeX-less machine) **0/0/0** (the URL-404 NOTE was cleared by removing the stale
-    pre-rename URL; no title-case NOTE fires) as of 2026-08-30.
+     Version 0.0.5 is "developmental". Suite ~4,537 expectations passing, 0 fail
+     (one existing negative-latent-variance warning); `R CMD check` (as-cran,
+     `--no-manual` on this LaTeX-less machine) **0/0/0** as of 2026-09-24.
+     PR #97 fixed false-green tests (multigroup factor variance, Bartlett
+     fixture, scalar loops), shared mirt identities and repeated A/B checks,
+     and removed stale or redundant comments. `R/lavaan_compat.R` owns the
+     partable/matrix-view compatibility layer and vcov write; other modules
+     still inspect some lavaan views and `@Data` slots directly (see its header).
 - Target dev environment: Linux (WSL/Ubuntu-like), R 4.6.1.
 - No `TODO`/`FIXME`/`HACK` markers in the codebase.
 - No `library()`/`require()` in function bodies — only in roxygen `@examples` blocks.
