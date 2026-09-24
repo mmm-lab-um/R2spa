@@ -68,11 +68,15 @@ always wins.}
 order), uniformly numeric (every entry fixed) or uniformly character
 (every entry a definition-variable column name); mixing fixed values and
 column names is not supported.
-\code{NULL} (default) fixes all score intercepts at zero.
-Or omitted, in which case the value is derived from the \code{fsb} attribute
-of a \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see Details); the derivation
-omits it --- fixed zero intercepts --- when the result carries no \code{fsb}
-attribute.}
+\code{NULL} (the default) omits an explicit score-intercept constraint: with
+a structural mean model the score intercepts are auto-seeded at zero;
+without one, raw-data FIML adds free score means. Supply a numeric zero
+to fix an intercept at zero regardless of the structural syntax.
+When \code{fsb} is omitted together with \code{se_fs}, \code{fsL}, and \code{fsT}, its value
+is derived from the \code{fsb} attribute of a \code{\link[=get_fs]{get_fs()}} result passed as
+\code{data} (see Details): numeric intercepts stay fixed and per-unit
+intercepts use appended \verb{int_fs_*} definition-variable columns. An
+explicit \code{fsb} always wins.}
 
 \item{...}{Additional arguments passed on to \code{\link[OpenMx:mxRun]{OpenMx::mxRun()}}
 (e.g. \code{intervals = TRUE}).}
@@ -85,11 +89,11 @@ work as usual.
 Fit a two-stage path analysis (2S-PA) model in OpenMx. This is the OpenMx
 counterpart of \code{\link[=tspa]{tspa()}}: the structural path model is expressed on the
 (true) latent factors, each factor score is a single indicator with known
-measurement error, and --- unlike \code{lavaan::tspa()} --- the measurement
+measurement error, and --- unlike \code{\link[=tspa]{tspa()}} --- the measurement
 quantities (loadings / error variances / intercepts) may be fixed
-per-group constants \emph{or} per-observation definition-variable columns.
+constants \emph{or} per-observation definition-variable columns.
 The per-row definition-variable form is the exact (non-pooled) correction
-that \code{lavaan::tspa(reduce = )} only approximates.
+that \code{\link[=tspa]{tspa()}} (with \verb{reduce = }) only approximates.
 }
 \details{
 The internal design is a single-level RAM model (no sub-model, no \code{umx}):
@@ -116,10 +120,10 @@ per-cluster quantities (\code{merMod} results: 3-D \code{fsL}/\code{fsT} arrays,
 row per cluster), and per-pattern quantities (single-group FIML, keyed
 by \code{fs_pattern$label}) become definition-variable matrices referencing
 the result's own \verb{*_by_*}, \verb{ev_*}, and \verb{ecov_*} columns. A \code{merMod}
-result carries no \code{fsb} attribute, so its score intercepts stay fixed
-at zero. A non-\code{NULL} \code{fsb} attribute appends \verb{int_fs_*} intercept
+result carries no \code{fsb} attribute, so its score intercepts use the default
+mean handling. A per-unit \code{fsb} attribute appends \verb{int_fs_*} intercept
 columns to a working copy of \code{data} (the \code{fs_indiv(include_intercept = TRUE)}
-equivalent); \code{NULL} keeps the default fixed-zero intercepts. Unlike
+equivalent); a constant numeric \code{fsb} is fixed directly. Unlike
 \code{\link[=tspa]{tspa()}} (whose \verb{reduce = } argument pools per-unit quantities),
 there is no pooling here --- the OpenMx route is exact-or-fail. A
 multigroup result (the \code{group_col} attribute) is refused with the
@@ -135,18 +139,15 @@ pre-existing limitation that affects the explicit-argument route too).
 
 \subsection{Mean structure}{
 
-Both routes fit the same model, so the covariance/structural quantities
-(paths, latent variances/covariances, and their SEs) agree to optimizer
-tolerance. The two differ only in the unidentifiable split of the mean
-structure between the corrected latents and their (observed) factor-score
-indicators: \code{\link[=tspa]{tspa()}} fixes the exogenous latent mean at zero and lets the
-factor-score mean estimate the data value, whereas this OpenMx route fixes
-the score residual means at zero and estimates the latent means (the
-latent mean carries the data value). Read the means accordingly --- compare
-the two routes on the covariance quantities, not on how the mean is split
-between latent and indicator. (In the no-mean-structure case the
-difference is flat: the split is arbitrary and only the total is
-identifiable.)
+When both routes specify the same mean structure, their covariance and
+structural quantities (paths, latent variances/covariances, and their SEs)
+agree to optimizer tolerance. Without a known score intercept, only the
+total observed mean is identified: \code{\link[=tspa]{tspa()}} and this OpenMx route may
+report different splits between latent and score means. An explicit numeric
+\code{fsb} fixes each score intercept, including zero; a character \code{fsb} fixes
+it per observation through a definition variable. With fixed score
+intercepts and an identified mean structure, compare implied means rather
+than an endogenous latent's structural intercept alone.
 }
 }
 \note{
@@ -172,7 +173,7 @@ tspa_mx_model("dem60 ~ ind60; dem60 + ind60 ~ 1",
                  "dem60_by_fs_ind60", "dem60_by_fs_dem60"),
                nrow = 2, dimnames = list(c("fs_ind60", "fs_dem60"),
                                          c("ind60", "dem60"))),
-  fsT = matrix(c("ev_fs_ind60", "ecov_fs_ind60_fs_dem60", NA,
+  fsT = matrix(c("ev_fs_ind60", "ecov_fs_dem60_fs_ind60", NA,
                  "ev_fs_dem60"),
                nrow = 2, dimnames = list(c("fs_ind60", "fs_dem60"),
                                          c("fs_ind60", "fs_dem60"))),

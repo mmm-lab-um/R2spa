@@ -180,6 +180,9 @@
     * Rename `vc` to `ev` (error variance-covariance) for better consistency
 
 ## Bug Fixes
+- `tspa_mx_model()` now applies fixed numeric `fsb` score intercepts (including
+  zero). Previously it silently omitted them while accepting the argument;
+  per-observation definition-variable intercepts were unaffected.
 - Single-factor two-stage path analysis on a `cbind()`'d shrinkage-score
   `get_fs()` result (with no explicit `se_fs`) no longer silently uses a
   unit factor-score loading (which biased the structural coefficient); the
@@ -202,13 +205,15 @@
   wrong rows.
 
 ## Documentation
-- Documented the mean-structure convention difference between `tspa()`
-  (lavaan, which fixes the exogenous latent mean at zero and estimates the
-  factor-score mean) and `tspa_mx_model()` (OpenMx, which fixes the score
-  residual means at zero and estimates the latent means): the two routes fit
-  the same model, so only the unidentifiable mean split differs — compare on
-  the covariance quantities. Noted in both functions' docs, the OpenMx
-  vignette, and a regression test.
+- Corrected the `tspa_mx_model()` explicit `fsT` example's error-covariance
+  column name, clarified the single-group and score-intercept semantics, and
+  removed redundant `mxRun()` calls from the OpenMx and missing-data vignettes:
+  `tspa_mx_model()` already returns a fitted model.
+- Documented how `tspa()` and `tspa_mx_model()` can split an unidentified
+  observed mean differently when the score intercept is unspecified. With
+  fixed score intercepts and an identified mean structure, compare implied
+  means; otherwise compare covariance quantities. Noted in both functions'
+  docs, the OpenMx vignette, and a regression test.
 - Updated vignettes for:
     * tspa-growth-vignette (#50)
     * missing-data (#79) — re-integrated and modernized: the per-row

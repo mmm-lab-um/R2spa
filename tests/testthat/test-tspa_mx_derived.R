@@ -16,6 +16,10 @@ mx_var_val <- function(m, x, model = "m1") {
   v <- c(m$manifestVars, m$latentVars)
   unname(coef(m)[sprintf("%s.S[%d,%d]", model, match(x, v), match(x, v))])
 }
+mx_mean_val <- function(m, x, model = "m1") {
+  v <- c(m$manifestVars, m$latentVars)
+  unname(m$M$values[1L, match(x, v)])
+}
 
 # `paths` is a list of c(from, to) pairs; check_vcov opts into a covariance
 # comparison when both fits expose one.
@@ -160,6 +164,30 @@ fit_e5 <- suppressWarnings(tspa_mx_model(model2, data = fs_ms,
                                          fsL = attr(fs_ms, "fsL"),
                                          fsT = attr(fs_ms, "fsT"),
                                          fsb = attr(fs_ms, "fsb")))
+# --- 5d. Fixed-numeric-fsb regression fixtures: defvar control + reference --
+# The defvar control pins the score intercepts row-wise through the int_fs_*
+# columns (the route that honors fsb), so a fixed-numeric fit that ignores
+# fsb cannot equal it on the score-mean cells. The lavaan tspa() fit is the
+# independent-optimizer reference: it fixes the score intercepts at fsb;
+# the structural mean model makes it comparable to OpenMx.
+dat_ms <- fs_indiv(fs_ms, include_intercept = TRUE)
+Lm_ms <- matrix(c("ind60_by_fs_ind60", "ind60_by_fs_dem60",
+                  "dem60_by_fs_ind60", "dem60_by_fs_dem60"),
+                nrow = 2L,
+                dimnames = list(c("fs_ind60", "fs_dem60"),
+                                c("ind60", "dem60")))
+Tm_ms <- matrix(c("ev_fs_ind60", "ecov_fs_dem60_fs_ind60", NA,
+                  "ev_fs_dem60"),
+                nrow = 2L,
+                dimnames = list(c("fs_ind60", "fs_dem60"),
+                                c("fs_ind60", "fs_dem60")))
+bm_ms <- c(fs_ind60 = "int_fs_ind60", fs_dem60 = "int_fs_dem60")
+fit_ms_dv <- suppressWarnings(tspa_mx_model(model2, data = dat_ms,
+                                            fsL = Lm_ms, fsT = Tm_ms,
+                                            fsb = bm_ms))
+ref_ms <- suppressWarnings(tspa(
+  model = "dem60 ~ ind60; ind60 + dem60 ~ 1", data = fs_ms
+))
 
 # --- 5c. merMod (per-cluster 3-D fsL/fsT arrays; no fsb attached) -----------
 fs_mer <- get_fs(lmer(Reaction ~ Days + (Days | Subject), sleepstudy))
@@ -233,6 +261,25 @@ test_that("derived SG 2-factor equals the explicit full-triple fit (D2 fixed num
     model2, R2spa:::tspa_mx_spec(NULL, der1$fsL, der1$fsT, der1$fsb)
   )
   expect_false(any(grepl("data\\.", strsplit(s1, "\n")[[1L]])))
+})
+
+test_that("a fixed zero fsb keeps the score-intercept RAM cells fixed at zero", {
+  # fs1 (no mean structure) carries a zero fsb attribute; the derivation must
+  # pass the zero vector through (not drop it as absent) ...
+  der1 <- R2spa:::tspa_mx_derive_measurement(fs1)
+  expect_equal(unname(der1$fsb), c(0, 0), tolerance = 0)
+  # ... and both routes fix (not free) the score-mean cells at zero: a free
+  # cell rides the unidentifiable mean split instead of honoring the
+  # specified (zero) intercepts.
+  scores <- c("fs_ind60", "fs_dem60")
+  for (fit in list(fit_d1, fit_e1)) {
+    v <- c(fit$manifestVars, fit$latentVars)
+    for (i in seq_along(scores)) {
+      j <- match(scores[i], v)
+      expect_false(sprintf("m1.M[1,%d]", j) %in% names(coef(fit)))
+      expect_equal(mx_mean_val(fit, scores[i]), 0, tolerance = 1e-10)
+    }
+  }
 })
 
 test_that("derived local = TRUE 3-factor equals the explicit full-triple fit", {
@@ -332,6 +379,70 @@ test_that("derived mean-structure CFA (nonzero constant fsb) equals the explicit
   der5 <- R2spa:::tspa_mx_derive_measurement(fs_ms)
   expect_true(is.numeric(der5$fsb))
   expect_equal(unname(der5$fsb), unname(b_ms), tolerance = 0)
+})
+
+test_that("a fixed nonzero numeric fsb is honored in the RAM model (score-intercept cells)", {
+  b_ms <- attr(fs_ms, "fsb")[[1L]]
+  scores <- c("fs_ind60", "fs_dem60")
+  # both the derived and the explicit numeric route must fix (not free) the
+  # score-mean cells at the specified intercepts; a free cell rides the
+  # unidentifiable mean split and ignores fsb (the regression this guards).
+  for (fit in list(fit_d5, fit_e5)) {
+    v <- c(fit$manifestVars, fit$latentVars)
+    for (i in seq_along(scores)) {
+      j <- match(scores[i], v)
+      expect_false(sprintf("m1.M[1,%d]", j) %in% names(coef(fit)))
+      expect_equal(mx_mean_val(fit, scores[i]), unname(b_ms[i]),
+                   tolerance = 1e-10)
+    }
+  }
+  # with the score means fixed, the latent means are identified and recover
+  # the stage-1 fixture's fixed latent means (ind60 ~ 3*1, dem60 ~ 4*1 in
+  # the CFA above; fsb is the intercept that makes the scores reproduce them).
+  for (fit in list(fit_d5, fit_e5)) {
+    expect_equal(mx_mean_val(fit, "ind60"), 3, tolerance = 1e-6)
+    # The M cell for endogenous dem60 is its structural intercept; its
+    # marginal mean also includes the regression on ind60.
+    expect_equal(mx_mean_val(fit, "dem60") +
+                   mx_path_val(fit, "ind60", "dem60") *
+                   mx_mean_val(fit, "ind60"), 4, tolerance = 1e-6)
+  }
+})
+
+test_that("a fixed numeric fsb equals the defvar int_fs_ route and the lavaan reference", {
+  b_ms <- attr(fs_ms, "fsb")[[1L]]
+  # cross-route A/B (fixed numeric vs definition-variable int_fs_): the same
+  # model, so the free parameters agree to optimizer tolerance and the score
+  # mean cells agree at the fixed value.
+  for (fit in list(fit_d5, fit_e5)) {
+    expect_equal(mx_path_val(fit, "ind60", "dem60"),
+                 mx_path_val(fit_ms_dv, "ind60", "dem60"), tolerance = 1e-6)
+    for (x in c("ind60", "dem60")) {
+      expect_equal(mx_var_val(fit, x), mx_var_val(fit_ms_dv, x),
+                   tolerance = 1e-6)
+    }
+    for (i in c("fs_ind60", "fs_dem60")) {
+      expect_equal(mx_mean_val(fit, i), mx_mean_val(fit_ms_dv, i),
+                   tolerance = 1e-10)
+    }
+  }
+  # The lavaan mean-structure reference must itself carry the supplied fixed
+  # score intercepts; otherwise agreement on structural paths is vacuous.
+  pt <- lavaan::partable(ref_ms)
+  for (i in seq_along(b_ms)) {
+    r <- which(pt$lhs == names(b_ms)[i] & pt$op == "~1")
+    expect_length(r, 1L)
+    expect_equal(pt$free[r], 0, tolerance = 0)
+    expect_equal(pt$est[r], unname(b_ms[i]), tolerance = 1e-10)
+  }
+  # the structural (covariance) quantities agree with the independent lavaan
+  # optimizer.
+  expect_equal(mx_path_val(fit_d5, "ind60", "dem60"),
+               as.numeric(coef(ref_ms)["dem60~ind60"]), tolerance = 1e-4)
+  expect_equal(mx_var_val(fit_d5, "ind60"),
+               as.numeric(coef(ref_ms)["ind60~~ind60"]), tolerance = 1e-4)
+  expect_equal(mx_var_val(fit_d5, "dem60"),
+               as.numeric(coef(ref_ms)["dem60~~dem60"]), tolerance = 1e-4)
 })
 
 test_that("derived merMod (per-cluster 3-D arrays, no fsb) equals the manual def-var fit", {

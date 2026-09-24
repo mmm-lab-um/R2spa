@@ -60,11 +60,9 @@ attributes of the `get_fs()` output. The score columns (`fs_ind60`,
 in `data` / the model string.
 
 ```{r, eval = have_openmx}
-tspa_mx <- tspa_mx_model(model = "dem60 ~ ind60", data = fs_dat,
-                         fsL = attr(fs_dat, "fsL"),
-                         fsT = attr(fs_dat, "fsT"))
-# Run OpenMx
-tspa_mx_fit <- mxRun(tspa_mx)
+tspa_mx_fit <- tspa_mx_model(model = "dem60 ~ ind60", data = fs_dat,
+                             fsL = attr(fs_dat, "fsL"),
+                             fsT = attr(fs_dat, "fsT"))
 # Summarize the results
 summary(tspa_mx_fit)
 ```
@@ -97,28 +95,19 @@ parameterEstimates(tspa_fit, standardized = TRUE)
 OpenMx
 
 ```{r, eval = have_openmx}
-tspa_mx <- tspa_mx_model(model = "dem60 ~ ind60\ndem60 + ind60 ~ 1",
-                         data = fs_dat)
-# We recently supported dropping fsL, fsT, and fsb when they can
-# be derived from the get_fs() result's attributes. So we skip
-# tspa_mx_model(...,     fsL = attr(fs_dat, "fsL"),
-#                        fsT = attr(fs_dat, "fsT"),
-#                        fsb = attr(fs_dat, "fsb"))
-# Run OpenMx
-tspa_mx_fit <- mxRun(tspa_mx)
+tspa_mx_fit <- tspa_mx_model(model = "dem60 ~ ind60\ndem60 + ind60 ~ 1",
+                             data = fs_dat)
+# fsL, fsT, and fsb are derived from the get_fs() result's attributes.
 # Summarize the results
 summary(tspa_mx_fit)
 ```
 
-The two routes fit the same model, so the path, variance, and covariance
-estimates (and their SEs) agree. They differ only in the unidentifiable split
-of the mean structure between the corrected latents and their (observed)
-factor-score indicators: `tspa()` fixes the exogenous latent mean at zero and
-lets the factor-score mean estimate the data value, whereas
-`tspa_mx_model()` fixes the score residual means at zero and estimates the
-latent means (the latent mean carries the data value). Read the means
-accordingly — compare the two routes on the covariance quantities, not on how
-the mean is split.
+The two routes agree on covariance and structural quantities when given the
+same mean structure. Without known score intercepts, the split of the observed
+mean between latent and score is unidentifiable and the routes can report
+different splits. Here `get_fs()` supplies `fsb` as a fixed score intercept;
+with the structural mean model above, compare implied means rather than the
+intercept of an endogenous latent alone.
 
 ## Compare to joint model
 
@@ -256,10 +245,8 @@ cross_load <- matrix(c("rel_fs1", NA, NA, "rel_fs2"), nrow = 2) |>
     `dimnames<-`(list(c("fs1", "fs2"), c("f1", "f2")))
 err_cov <- matrix(c("ev_fs1", NA, NA, "ev_fs2"), nrow = 2) |>
     `dimnames<-`(rep(list(c("fs1", "fs2")), 2))
-tspa_mx <- tspa_mx_model(model = "f2 ~ f1\nf2 + f1 ~ 1",
-                         data = fs_eap, fsL = cross_load, fsT = err_cov)
-# Run OpenMx
-tspa_mx_fit <- mxRun(tspa_mx)
+tspa_mx_fit <- tspa_mx_model(model = "f2 ~ f1\nf2 + f1 ~ 1",
+                             data = fs_eap, fsL = cross_load, fsT = err_cov)
 # Summarize the results
 summary(tspa_mx_fit)
 ```
@@ -328,9 +315,7 @@ fs_dat <- get_fs(mfit)
 # covariances become definition variables referencing its own
 # *_by_*/ev_*/ecov_* columns, and the int_fs_* score-intercept columns are
 # appended from the fsb attribute (the fs_indiv() round-trip, now automatic):
-tspa_mx2 <- tspa_mx_model(model = "F2 ~ F1\nF2 + F1 ~ 1", data = fs_dat)
-# Run OpenMx
-tspa_mx2_fit <- mxRun(tspa_mx2)
+tspa_mx2_fit <- tspa_mx_model(model = "F2 ~ F1\nF2 + F1 ~ 1", data = fs_dat)
 # Summarize the results
 summary(tspa_mx2_fit)
 ```
