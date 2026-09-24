@@ -3,11 +3,11 @@
 #' Fit a two-stage path analysis (2S-PA) model in OpenMx. This is the OpenMx
 #' counterpart of [tspa()]: the structural path model is expressed on the
 #' (true) latent factors, each factor score is a single indicator with known
-#' measurement error, and --- unlike `lavaan::tspa()` --- the measurement
+#' measurement error, and --- unlike [tspa()] --- the measurement
 #' quantities (loadings / error variances / intercepts) may be fixed
-#' per-group constants \emph{or} per-observation definition-variable columns.
+#' constants \emph{or} per-observation definition-variable columns.
 #' The per-row definition-variable form is the exact (non-pooled) correction
-#' that `lavaan::tspa(reduce = )` only approximates.
+#' that [tspa()] (with `reduce = `) only approximates.
 #'
 #' The internal design is a single-level RAM model (no sub-model, no `umx`):
 #' the lavaan structural string is parsed with [lavaan::lavaanify()], the
@@ -34,10 +34,10 @@
 #' row per cluster), and per-pattern quantities (single-group FIML, keyed
 #' by `fs_pattern$label`) become definition-variable matrices referencing
 #' the result's own `*_by_*`, `ev_*`, and `ecov_*` columns. A `merMod`
-#' result carries no `fsb` attribute, so its score intercepts stay fixed
-#' at zero. A non-`NULL` `fsb` attribute appends `int_fs_*` intercept
+#' result carries no `fsb` attribute, so its score intercepts use the default
+#' mean handling. A per-unit `fsb` attribute appends `int_fs_*` intercept
 #' columns to a working copy of `data` (the `fs_indiv(include_intercept = TRUE)`
-#' equivalent); `NULL` keeps the default fixed-zero intercepts. Unlike
+#' equivalent); a constant numeric `fsb` is fixed directly. Unlike
 #' [tspa()] (whose `reduce = ` argument pools per-unit quantities),
 #' there is no pooling here --- the OpenMx route is exact-or-fail. A
 #' multigroup result (the `group_col` attribute) is refused with the
@@ -52,18 +52,15 @@
 #'
 #' ## Mean structure
 #'
-#' Both routes fit the same model, so the covariance/structural quantities
-#' (paths, latent variances/covariances, and their SEs) agree to optimizer
-#' tolerance. The two differ only in the unidentifiable split of the mean
-#' structure between the corrected latents and their (observed) factor-score
-#' indicators: [tspa()] fixes the exogenous latent mean at zero and lets the
-#' factor-score mean estimate the data value, whereas this OpenMx route fixes
-#' the score residual means at zero and estimates the latent means (the
-#' latent mean carries the data value). Read the means accordingly --- compare
-#' the two routes on the covariance quantities, not on how the mean is split
-#' between latent and indicator. (In the no-mean-structure case the
-#' difference is flat: the split is arbitrary and only the total is
-#' identifiable.)
+#' When both routes specify the same mean structure, their covariance and
+#' structural quantities (paths, latent variances/covariances, and their SEs)
+#' agree to optimizer tolerance. Without a known score intercept, only the
+#' total observed mean is identified: [tspa()] and this OpenMx route may
+#' report different splits between latent and score means. An explicit numeric
+#' `fsb` fixes each score intercept, including zero; a character `fsb` fixes
+#' it per observation through a definition variable. With fixed score
+#' intercepts and an identified mean structure, compare implied means rather
+#' than an endogenous latent's structural intercept alone.
 #'
 #' @param model A character string describing the structural path model in
 #'   `lavaan` syntax, using the **latent** (factor) names. Phase 1 restricts
@@ -113,11 +110,15 @@
 #'   order), uniformly numeric (every entry fixed) or uniformly character
 #'   (every entry a definition-variable column name); mixing fixed values and
 #'   column names is not supported.
-#'   `NULL` (default) fixes all score intercepts at zero.
-#'   Or omitted, in which case the value is derived from the `fsb` attribute
-#'   of a [get_fs()] result passed as `data` (see Details); the derivation
-#'   omits it --- fixed zero intercepts --- when the result carries no `fsb`
-#'   attribute.
+#'   `NULL` (the default) omits an explicit score-intercept constraint: with
+#'   a structural mean model the score intercepts are auto-seeded at zero;
+#'   without one, raw-data FIML adds free score means. Supply a numeric zero
+#'   to fix an intercept at zero regardless of the structural syntax.
+#'   When `fsb` is omitted together with `se_fs`, `fsL`, and `fsT`, its value
+#'   is derived from the `fsb` attribute of a [get_fs()] result passed as
+#'   `data` (see Details): numeric intercepts stay fixed and per-unit
+#'   intercepts use appended `int_fs_*` definition-variable columns. An
+#'   explicit `fsb` always wins.
 #' @param ... Additional arguments passed on to [`OpenMx::mxRun()`]
 #'   (e.g. `intervals = TRUE`).
 #' @return A fitted `OpenMx` `MxModel`. `coef()`, `vcov()`, and `summary()`
@@ -151,7 +152,7 @@
 #'                  "dem60_by_fs_ind60", "dem60_by_fs_dem60"),
 #'                nrow = 2, dimnames = list(c("fs_ind60", "fs_dem60"),
 #'                                          c("ind60", "dem60"))),
-#'   fsT = matrix(c("ev_fs_ind60", "ecov_fs_ind60_fs_dem60", NA,
+#'   fsT = matrix(c("ev_fs_ind60", "ecov_fs_dem60_fs_ind60", NA,
 #'                  "ev_fs_dem60"),
 #'                nrow = 2, dimnames = list(c("fs_ind60", "fs_dem60"),
 #'                                          c("fs_ind60", "fs_dem60"))),
@@ -620,8 +621,12 @@ tspa_mx_spec <- function(se_fs, fsL, fsT, fsb) {
     colnames(b) <- S
     b <- tspa_mx_cells(b, "fsb")
   } else {
+    # Absence, not zero: the spec's fixed-value slot must stay NA so
+    # tspa_mx_model_string() emits no mean line (an explicit fsb = 0 keeps
+    # its user-fixed c(0) row). With a structural mean model, lavaanify()
+    # auto-seeds a fixed-zero score mean; otherwise need_mean adds a free one.
     b <- list(
-      vals = matrix(0, 1L, length(S), dimnames = list(NULL, S)),
+      vals = matrix(NA_real_, 1L, length(S), dimnames = list(NULL, S)),
       coln = matrix(NA_character_, 1L, length(S), dimnames = list(NULL, S))
     )
   }
@@ -678,12 +683,15 @@ tspa_mx_model_string <- function(model, spec) {
       if (!is.na(cv)) lines <- c(lines, paste0(S[i], " ~~ ", cv, " * ", S[j]))
     }
   }
-  # Score means are modelled only as per-row definition-variable columns; a
-  # fixed/absent mean leaves the observed score mean at its data value.
+  # Score means: an explicit fixed value (a "c(<b>)" row; user-fixed, so
+  # the user == 0 auto-seed release in tspa_mx_paths() never re-frees it,
+  # even at b = 0) or a per-row definition-variable column (the "c(1)"
+  # sentinel, overlaid with the data label in tspa_mx_paths()). An absent
+  # fsb (NULL) emits nothing: a structural mean model auto-seeds fixed-zero
+  # score means; without one lav_to_mx_ram() adds free raw-data means.
   for (i in seq_along(S)) {
-    if (!is.na(spec$b$coln[1L, i]) && nzchar(spec$b$coln[1L, i])) {
-      lines <- c(lines, paste0(S[i], " ~ c(1) * 1"))
-    }
+    cv <- tspa_mx_cellval(spec$b$vals, spec$b$coln, 1L, i)
+    if (!is.na(cv)) lines <- c(lines, paste0(S[i], " ~ ", cv, " * 1"))
   }
 
   paste(c(model, paste(lines, collapse = "\n")), collapse = "\n")
