@@ -189,10 +189,11 @@
 #'            When omitted, `fsT` is derived from the `fsT` attribute of a
 #'            [get_fs()] result passed as `data` (see `Details`); an
 #'            explicit `fsT` always wins.
-#' @param fsL A matrix of loadings and cross-loadings from the
-#'            latent variables to the factor scores `fs`, which
-#'            can be obtained from the output of [get_fs()] using
-#'            `attr()` with the argument `which = "fsL"`.
+#' @param fsL The score-on-latent loading matrix (`q x p`, rows = the factor
+#'            scores `fs`, columns = the latent variables): the coefficient of
+#'            the latents in `fs = fsb + fsL %*% eta + error`, including
+#'            cross-loadings. It can be obtained from the output of [get_fs()]
+#'            using `attr()` with the argument `which = "fsL"`.
 #'            For details see the Multi-Factor Measurement Model vignette:
 #'            `vignette("multiple-factors", package = "R2spa")`.
 #'            As with `fsT`, per-pattern (FIML missing data), per-cluster
@@ -1129,6 +1130,61 @@ resolve_group_fsb <- function(fsb, labels) {
   }
 }
 
+# Check that a non-flat LIST fsb names exactly one entry per group. A wrong
+# count would otherwise fall through and be applied as a shared/per-pattern
+# value to every group (the wrong intercepts), so it is rejected up front. A
+# flat constant is a shared per-score intercept, not a per-group list, and is
+# exempt. (PLAN 18.)
+check_fsb_group_count <- function(fsb, n_grp) {
+  if (is.list(fsb) && !is_flat_fsb_const(fsb) && length(fsb) != n_grp) {
+    stop(
+      "the explicit 'fsb' list has length ", length(fsb), " but the model has ",
+      n_grp, " group", if (n_grp == 1L) "" else "s", "; supply one intercept ",
+      "vector per group (or a single constant vector shared by all groups).",
+      call. = FALSE
+    )
+  }
+  invisible(NULL)
+}
+
+# Normalize an explicit `fsb` for the (multi)group stage-2 schema into a list
+# of one intercept vector per group, in the data's group order (the order of
+# `T_list`/`L_list`, whose names are the group labels). A flat constant vector
+# is broadcast to every group (a shared intercept); a per-group list is checked
+# for the right count (check_fsb_group_count()) and resolved against the group
+# labels (order-independent when fully named, positional when unnamed); anything
+# else is rejected. Mirrors the per-unit path's broadcast/resolve so an explicit
+# fsb can never be misread as a shorter per-group list or silently applied to
+# the wrong group. (PLAN 18.)
+normalize_fsb_groups <- function(fsb, ngroup, glabels) {
+  labeled <- !is.null(glabels) && any(nzchar(glabels))
+  if (is_flat_fsb_const(fsb)) {
+    out <- vector("list", ngroup)
+    if (labeled) names(out) <- glabels
+    for (g in seq_len(ngroup)) out[[g]] <- fsb
+    return(out)
+  }
+  if (is.list(fsb)) {
+    check_fsb_group_count(fsb, ngroup)
+    if (labeled) return(resolve_group_fsb(fsb, glabels))
+    if (any(!is.na(names(fsb)) & nzchar(names(fsb)))) {
+      stop(
+        "the explicit 'fsb' is named but the model's groups have no labels to ",
+        "match against; pass 'fsT'/'fsL' as a named list (by group label) so a ",
+        "named 'fsb' can be matched, or pass an unnamed 'fsb' to match by ",
+        "position.",
+        call. = FALSE
+      )
+    }
+    return(fsb)
+  }
+  stop(
+    "'fsb' must be a numeric vector (one intercept per score) or a list of ",
+    "one intercept vector per group.",
+    call. = FALSE
+  )
+}
+
 # Replace the per-unit fsT/fsL/fsb attributes of a get_fs() result with the
 # caller's explicitly supplied values (PLAN 18): the supplied values carry the
 # same per-unit shape as the attributes (a per-group list of one matrix/vector
@@ -1181,6 +1237,8 @@ override_fs_unit_attrs <- function(fs, fsT, fsL, fsb) {
     # aligned with the elements; a shared constant (or a single-group value)
     # is applied to every element. Each element's value is then broadcast
     # within its own per-unit structure when it is a constant.
+    n_grp <- length(fs)
+    check_fsb_group_count(fsb, n_grp)
     for (i in seq_along(fs)) {
       el <- fs[[i]]
       if (!is.null(fsT) && is.list(fsT) && length(fsT) == length(fs)) {
@@ -1217,6 +1275,7 @@ override_fs_unit_attrs <- function(fs, fsT, fsL, fsb) {
     if (is_mg) {
       n_grp <- length(tmpl)
       labels <- names(tmpl)
+      check_fsb_group_count(fsb, n_grp)
       per_group_list <- is.list(fsb) && length(fsb) == n_grp &&
         !is_flat_fsb_const(fsb)
       resolved <- if (per_group_list) resolve_group_fsb(fsb, labels) else NULL
@@ -1994,7 +2053,13 @@ tspa_schema_mf <- function(model, fsT, fsL, fsb, prods = NULL,
     }
   }
   if (!is.null(fsb)) {
-    B_list <- if (is.list(fsb)) fsb else list(fsb)
+    # Normalize the caller's explicit fsb to a per-group list aligned with
+    # T_list/L_list (one intercept vector per group, in group order): a flat
+    # constant is broadcast to every group, a per-group list is resolved
+    # against the group labels (order-independent when named, positional when
+    # unnamed) and checked for the right count, mirroring the per-unit path.
+    # (PLAN 18.)
+    B_list <- normalize_fsb_groups(fsb, ngroup, names(T_list))
     for (i in seq_along(fs)) {
       lab <- paste0("__r2spa_int", i, "__")
       for (g in seq_len(ngroup)) {

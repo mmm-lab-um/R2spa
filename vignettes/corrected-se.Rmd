@@ -18,6 +18,11 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
+# numDeriv (numeric-Jacobian demo) and boot (bootstrap comparison, echo-only
+# chunks) are optional Suggests; guard the chunks that need them so the
+# vignette knits whether or not they are installed.
+have_numderiv <- requireNamespace("numDeriv", quietly = TRUE)
+have_boot     <- requireNamespace("boot", quietly = TRUE)
 ```
 
 This vignette shows how to obtain Taylor-series corrected standard errors in 2S-PA, accounting for the uncertainty in the weights for obtaining the factor scores. It is described in [this paper](https://doi.org/10.1007/s00181-020-01942-z).
@@ -25,7 +30,9 @@ This vignette shows how to obtain Taylor-series corrected standard errors in 2S-
 The second-stage estimation treats as known the loading matrix and the error covariance matrix of the factor scores as indicators of the true latent variables. However, those are estimates based on the first-stage measurement model. When the sample size is large and/or the reliability of the factor scores is high, the uncertainty in the estimated loading and error covariance matrix is generally negligible. Otherwise, a first-order correction on the standard errors of the second-stage estimation is possible, as illustrated below.
 
 > **Optional dependencies.** The numeric-Jacobian demonstration uses
-> `numDeriv` (a `Suggests`, loaded up front); it is installed automatically
+> `numDeriv` and the bootstrap comparison uses `boot` (both `Suggests`). They
+> are loaded up front when available, and the dependent chunks are skipped when
+> not, so the vignette builds without them; both are installed automatically
 > during `R CMD check`.
 
 > **What is — and is not — corrected.** The correction is *partial by
@@ -52,8 +59,8 @@ where $V_{\gamma}$ is the naive covariance matrix of the structural parameter es
 ```{r load-pkg, message = FALSE}
 library(lavaan)
 library(R2spa)
-library(numDeriv)
-library(boot)
+if (have_numderiv) library(numDeriv)
+if (have_boot)     library(boot)
 ```
 
 This example is based on the `PoliticalDemocracy` dataset, from the lavaan tutorial (<https://lavaan.ugent.be/tutorial/sem.html>), also used as an example in Bollen (1989).
@@ -140,6 +147,11 @@ tspa_est_std <- function(ld_ev) {
   keep_dem_ind(standardizedSolution(tfit))$est.std
 }
 tspa_est_std(c(ld[c(1, 4)], ev[c(1, 4)]))
+```
+
+The numeric-Jacobian check below is guarded by the `numDeriv` availability flag, so it is skipped when the package is not installed:
+
+```{r, eval = have_numderiv}
 # Jacobian of the standardized coefficient w.r.t. (loadings, error variances)
 jac_std <- numDeriv::jacobian(tspa_est_std,
                               x = c(ld[c(1, 4)], ev[c(1, 4)]))
@@ -428,8 +440,12 @@ ld_ev0 <- c(attr(fs_dat, which = "fsL")[[1]],
             attr(fs_dat, which = "fsT")[[1]][c(1:3, 5:6, 9)],
             attr(fs_dat, which = "fsT")[[2]][c(1:3, 5:6, 9)])
 tspa_est_std(ld_ev0)
+```
+
+The same numeric-Jacobian check for the multigroup model (`numDeriv`-guarded):
+
+```{r, eval = have_numderiv}
 jac <- numDeriv::jacobian(tspa_est_std, x = ld_ev0)
 v0 <- lavInspect(tspa_fit, "vcov.std.lv")[c(1:3, 10:12), c(1:3, 10:12)]
 sqrt(diag(jac %*% vldev %*% t(jac)) / diag(v0))
-
 ```

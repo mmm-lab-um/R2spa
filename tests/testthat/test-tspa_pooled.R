@@ -683,6 +683,55 @@ test_that("tspa(): a per-group constant fsb is broadcast within each group (FIML
          fsb = part_fsb),
     "only partially named"
   )
+  # a per-group list with the wrong number of entries is rejected up front
+  # (it must not be broadcast to every group / applied to the wrong intercepts)
+  expect_error(
+    tspa("visual ~ speed", data = fs_fiml_2f_mg, group = "school",
+         fsb = list(c(2, 3))),
+    "has length 1 but the model has 2 groups"
+  )
+})
+
+test_that("tspa(): explicit fsb for a complete-data multigroup result (schema path)", {
+  # Complete-data MG has plain per-group matrix lists (no per-unit pooling), so
+  # the fsb broadcast/resolve happens in the stage-2 schema, not in
+  # pool_per_unit(). A flat constant is broadcast to every group; a per-group
+  # list is resolved by group label (order-independent) and a wrong count is
+  # rejected. (PLAN 18; mirrors the per-unit path.)
+  fit_mg_cd <- suppressWarnings(
+    cfa(hs_model_2f, data = HolzingerSwineford1939, group = "school")
+  )
+  fs_cd <- get_fs(fit_mg_cd)
+  glabs <- names(attr(fs_cd, "fsT"))
+  expect_length(glabs, 2L)
+  m <- "visual ~ speed"
+
+  # (a) flat constant fsb -> broadcast to both groups (one value per group)
+  fit_a <- suppressWarnings(
+    tspa(m, data = fs_cd, group = "school", fsb = c(fs_visual = 2, fs_speed = 3))
+  )
+  ma <- attr(fit_a, "tspaModel")
+  expect_match(ma, "fs_visual ~ c\\(2, 2\\) \\* 1")
+  expect_match(ma, "fs_speed ~ c\\(3, 3\\) \\* 1")
+
+  # (b) reordered NAMED per-group list -> resolved by label, not position
+  pg <- setNames(list(c(fs_visual = 2, fs_speed = 3),
+                      c(fs_visual = 4, fs_speed = 5)), glabs)
+  exp_vis <- c(pg[[glabs[1L]]][1L], pg[[glabs[2L]]][1L])
+  exp_spe <- c(pg[[glabs[1L]]][2L], pg[[glabs[2L]]][2L])
+  fit_b <- suppressWarnings(
+    tspa(m, data = fs_cd, group = "school", fsb = pg[c(2L, 1L)])
+  )
+  mb <- attr(fit_b, "tspaModel")
+  expect_match(mb, paste0("fs_visual ~ c\\(", exp_vis[1L], ", ", exp_vis[2L], "\\) \\* 1"))
+  expect_match(mb, paste0("fs_speed ~ c\\(", exp_spe[1L], ", ", exp_spe[2L], "\\) \\* 1"))
+
+  # (c) mismatched-count per-group list -> rejected
+  expect_error(
+    tspa(m, data = fs_cd, group = "school",
+         fsb = list(c(fs_visual = 2, fs_speed = 3))),
+    "has length 1 but the model has 2 groups"
+  )
 })
 
 test_that("tspa(): explicit per-unit fsT/fsL are pooled, not replaced by the attributes (FIML and merMod)", {

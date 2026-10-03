@@ -137,13 +137,10 @@ The numbers are quite different from the generating values.
 ### Process 1
 
 `tspa_mx_model()` already fits the model and returns the fitted `OpenMx`
-model, so it can be summarized directly. The explicit `mxRun()` below is a
-redundant refit kept only to show the `OpenMx` workflow.
+model, so it can be summarized directly (no separate `mxRun()` is needed).
 
 ```{r, eval = have_openmx}
-tspa1_mx <- tspa_mx_model(model = "u0 ~~ u1\nu0 + u1 ~ 1", data = fs_dat1)
-# tspa1_mx is already fitted; mxRun() here is a redundant refit
-tspa1_mx_fit <- mxRun(tspa1_mx)
+tspa1_mx_fit <- tspa_mx_model(model = "u0 ~~ u1\nu0 + u1 ~ 1", data = fs_dat1)
 # Summarize the results
 summary(tspa1_mx_fit)
 ```
@@ -173,9 +170,7 @@ $$ -->
 ### Process 2
 
 ```{r, eval = have_openmx}
-tspa2_mx <- tspa_mx_model(model = "u0 ~~ u1\nu0 + u1 ~ 1", data = fs_dat2)
-# Already fitted by tspa_mx_model(); mxRun() is a redundant refit
-tspa2_mx_fit <- mxRun(tspa2_mx)
+tspa2_mx_fit <- tspa_mx_model(model = "u0 ~~ u1\nu0 + u1 ~ 1", data = fs_dat2)
 # Summarize the results
 summary(tspa2_mx_fit)
 ```
@@ -212,14 +207,12 @@ err_cov <- matrix(c("ev_fs_u0_1", "ecov_fs_u1_fs_u0_1", NA, NA,
                     NA, NA, "ev_fs_u0_2", "ecov_fs_u1_fs_u0_2",
                     NA, NA, "ecov_fs_u1_fs_u0_2", "ev_fs_u1_2"), nrow = 4) |>
      `dimnames<-`(rep(list(c("fs_u0_1", "fs_u1_1", "fs_u0_2", "fs_u1_2")), 2))
-tspa3_mx <- tspa_mx_model(
+tspa3_mx_fit <- tspa_mx_model(
     model = "u0_1 ~~ u1_1 + u0_2 + u1_2\n
              u1_1 ~~ u0_2 + u1_2\n
              u0_2 ~~ u1_2\n
              u0_1 + u1_1 + u0_2 + u1_2 ~ 1",
     data = fs_dat, fsL = cross_load, fsT = err_cov)
-# Already fitted by tspa_mx_model(); mxRun() is a redundant refit
-tspa3_mx_fit <- mxRun(tspa3_mx)
 # Summarize the results
 summary(tspa3_mx_fit)
 ```

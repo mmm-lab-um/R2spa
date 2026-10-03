@@ -1,6 +1,6 @@
 # PLAN 18 — Usability first batch: P1 correctness + doc/vignette fixes + onboarding
 
-Status: **not started** (2026-10-03)
+Status: **implemented** (2026-10-03)
 Source: usability review of the package (API ease-of-use + vignette coverage). This is the
 first implementation batch. The full S3 score-result class refactor is **deferred** (see end).
 

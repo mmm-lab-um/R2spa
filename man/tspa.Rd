@@ -69,10 +69,11 @@ When omitted, \code{fsT} is derived from the \code{fsT} attribute of a
 \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see \code{Details}); an
 explicit \code{fsT} always wins.}
 
-\item{fsL}{A matrix of loadings and cross-loadings from the
-latent variables to the factor scores \code{fs}, which
-can be obtained from the output of \code{\link[=get_fs]{get_fs()}} using
-\code{attr()} with the argument \code{which = "fsL"}.
+\item{fsL}{The score-on-latent loading matrix (\verb{q x p}, rows = the factor
+scores \code{fs}, columns = the latent variables): the coefficient of
+the latents in \code{fs = fsb + fsL \%*\% eta + error}, including
+cross-loadings. It can be obtained from the output of \code{\link[=get_fs]{get_fs()}}
+using \code{attr()} with the argument \code{which = "fsL"}.
 For details see the Multi-Factor Measurement Model vignette:
 \code{vignette("multiple-factors", package = "R2spa")}.
 As with \code{fsT}, per-pattern (FIML missing data), per-cluster
