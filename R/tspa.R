@@ -138,8 +138,16 @@
 #' `lavaan::update()` works on it as it does on a hand-written
 #' `lavaan::sem()` fit. In particular
 #' `update(fit, meanstructure = TRUE)` re-fits the stage-2 model with a
-#' mean structure, equivalent to calling `tspa(..., meanstructure = TRUE)`
-#' from the start.
+#' mean structure.
+#'
+#' Note that `update()` re-runs only the *stored* stage-2 `lavaan::sem()`
+#' model. The rendered measurement model (the fixed `fsT`/`fsL`/`fsb` terms)
+#' is preserved because it is inlined in the model string, but the R2spa
+#' post-fit steps are \emph{not} re-applied: an `update()` of a
+#' `corrected_se = TRUE` fit does not carry the corrected covariance, and the
+#' R2spa attributes (`tspa_args`, `tspa_corrected`, `tspaModel`, `pooled_fs`,
+#' ...) are not copied to the updated fit. To recover them, re-call `tspa()`
+#' (with the same arguments) instead of `update()`.
 #'
 #' @param model A string variable describing the structural path model,
 #'              in \code{lavaan} syntax.
@@ -150,11 +158,14 @@
 #'              for a `cbind()`'d frame whose attributes `cbind()` drops,
 #'              the `fs_<v>`/`fs_<v>_se` score columns for a
 #'              single-factor fit (see `Details`).
-#' @param reliability A numeric vector representing the reliability indexes
-#'                    of each latent factor. Currently \code{tspa()} does not
-#'                    support the reliability argument. Please use \code{se}.
-#' @param se Deprecated to avoid conflict with the argument of the same name
-#'           in [lavaan::lavaan()].
+#' @param reliability Not supported: supplying a non-\code{NULL} value is an
+#'                    error. Correct for measurement error with \code{se_fs}
+#'                    (the factor-score standard errors) instead.
+#' @param se Forwarded to \code{lavaan::sem()} as its \code{se} argument (the
+#'           standard-error type: \code{"standard"}, \code{"robust"},
+#'           \code{"boot"}, ...). It does \emph{not} take factor-score
+#'           standard errors — supply those via \code{se_fs} (numeric
+#'           score-SE usage through this argument is deprecated).
 #' @param se_fs A numeric vector representing the standard errors of each
 #'              factor score variable for single-group 2S-PA. A list or data
 #'              frame storing the standard errors of each group in each latent
@@ -178,12 +189,13 @@
 #'            When omitted, `fsT` is derived from the `fsT` attribute of a
 #'            [get_fs()] result passed as `data` (see `Details`); an
 #'            explicit `fsT` always wins.
-#' @param fsL A matrix of loadings and cross-loadings from the
-#'            latent variables to the factor scores `fs`, which
-#'            can be obtained from the output of [get_fs()] using
-#'            `attr()` with the argument `which = "fsL"`.
+#' @param fsL The score-on-latent loading matrix (`q x p`, rows = the factor
+#'            scores `fs`, columns = the latent variables): the coefficient of
+#'            the latents in `fs = fsb + fsL %*% eta + error`, including
+#'            cross-loadings. It can be obtained from the output of [get_fs()]
+#'            using `attr()` with the argument `which = "fsL"`.
 #'            For details see the Multi-Factor Measurement Model vignette:
-#'            `vignette("Multi-Factor Measurement Model", package = "R2spa")`.
+#'            `vignette("multiple-factors", package = "R2spa")`.
 #'            As with `fsT`, per-pattern (FIML missing data), per-cluster
 #'            (merMod), and per-observation (mirt) values are supported and
 #'            reduced per group by `reduce`; the pooled (not the nested)
@@ -294,13 +306,13 @@
 #'         errors, for multigroup fits as well as single-group ones.
 #'
 #' @seealso
-#' - `vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")` for an end-to-end walkthrough.
-#' - `vignette("Multi-Factor Measurement Model", package = "R2spa")` for multi-factor measurement models.
-#' - `vignette("Linear Growth Modeling with Two-Stage Path Analysis", package = "R2spa")` for growth models.
-#' - `vignette("2S-PA with Missing Data", package = "R2spa")` for missing data (`missing = "fiml"`).
-#' - `vignette("Product factor-score indicators (latent interactions)", package = "R2spa")` for `product = TRUE`.
-#' - `vignette("Corrected Standard Errors", package = "R2spa")` for `corrected_se = TRUE`.
-#' - `vignette("Scoring Methods and SE Correction in 2S-PA: A Simulation Study", package = "R2spa")` for a simulation comparison of scoring methods and SE correction.
+#' - `vignette("R2spa", package = "R2spa")` for an end-to-end walkthrough.
+#' - `vignette("multiple-factors", package = "R2spa")` for multi-factor measurement models.
+#' - `vignette("tspa-growth-vignette", package = "R2spa")` for growth models.
+#' - `vignette("missing-data", package = "R2spa")` for missing data (`missing = "fiml"`).
+#' - `vignette("product-factor-scores", package = "R2spa")` for `product = TRUE`.
+#' - `vignette("corrected-se", package = "R2spa")` for `corrected_se = TRUE`.
+#' - `vignette("sim-scoring-se", package = "R2spa")` for a simulation comparison of scoring methods and SE correction.
 #'
 #' @export
 #'
@@ -493,13 +505,26 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
 
   # Capture whether se_fs was supplied before NULL becomes an empty frame.
   se_fs_given <- !is.null(se_fs)
+  # Capture whether fsb was supplied before derivation: an explicit fsb
+  # always wins over the data's fsb attribute (PLAN 18).
+  fsb_given <- !missing(fsb)
 
   if (!is.data.frame(se_fs)) {
     se_fs <- as.data.frame(as.list(se_fs))
   }
-  if (ncol(se_fs) > 0L &&
-      any(vapply(se_fs, function(x) !is.numeric(x), logical(1)))) {
-    stop("'se_fs' must contain numeric standard errors.", call. = FALSE)
+  if (ncol(se_fs) > 0L) {
+    if (any(vapply(se_fs, function(x) !is.numeric(x), logical(1)))) {
+      stop("'se_fs' must contain numeric standard errors.", call. = FALSE)
+    }
+    # Negative SEs would be squared into positive (wrong) error variances and
+    # NA/Inf would propagate silently into the fixed variance terms.
+    se_vals <- unlist(se_fs, use.names = FALSE)
+    if (any(!is.finite(se_vals) | se_vals < 0)) {
+      stop(
+        "'se_fs' standard errors must be finite and non-negative.",
+        call. = FALSE
+      )
+    }
   }
   if (xor(is.null(fsT), is.null(fsL))) {
     stop("Please provide both or none of fsT and fsL.")
@@ -533,7 +558,11 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
       if (isTRUE(prov)) {
         fsT <- attr_T
         fsL <- attr_L
-        fsb <- attr(data, "fsb") # may be NULL (merMod has none)
+        # Derive fsb only when not supplied: an explicit fsb always wins
+        # over the data's fsb attribute (PLAN 18).
+        if (!fsb_given) {
+          fsb <- attr(data, "fsb") # may be NULL (merMod has none)
+        }
       } else {
         derived_prov_err <- prov
       }
@@ -595,7 +624,12 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     if (is_per_unit_fs(fsT, fsL,
                        mirt_per_obs = isTRUE(attr(data, "mirt_per_obs")) ||
                          isTRUE(attr(data, "per_obs")))) {
-      pooled <- pool_per_unit(data, reduce, have_int = !is.null(fsb))
+      # The supplied per-unit values (derived from the data's attributes
+      # when not explicit) are threaded into the pooling as overrides, so
+      # an explicit fsT/fsL/fsb is pooled, not replaced by the attributes
+      # (PLAN 18).
+      pooled <- pool_per_unit(data, reduce, have_int = !is.null(fsb),
+                              fsT = fsT, fsL = fsL, fsb = fsb)
       fsT <- pooled$fsT
       fsL <- pooled$fsL
       if (!is.null(fsb)) {
@@ -666,11 +700,14 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
     # FIML per-pattern se pooling (PLAN 09): a get_fs() result fitted with
     # missing data carries per-observation `fs_<v>_se` columns that vary
     # within a group, which a single (per-group) `se_fs` row cannot
-    # represent. Detect within-group se variation and, when it fires,
-    # replace `se_fs` with the per-group reduction of the per-row se
-    # columns. A group whose se column is constant within the group gives
-    # no signal, so complete-data (homogeneous) behavior is unchanged, and
-    # data without the se columns (not a get_fs() result) is left as-is.
+    # represent. This runs only for the DERIVED se_fs (the user omitted
+    # `se_fs`): an explicit `se_fs` is used as-is, even when the per-row
+    # columns vary within a group (PLAN 18). Detect within-group se
+    # variation and, when it fires, replace `se_fs` with the per-group
+    # reduction of the per-row se columns. A group whose se column is
+    # constant within the group gives no signal, so complete-data
+    # (homogeneous) behavior is unchanged, and data without the se columns
+    # (not a get_fs() result) is left as-is.
     # A list of per-group data frames (a get_fs(format = "list") result)
     # is coerced to a single frame first: lavaan's data= must be a
     # data.frame. The coercion lives here rather than at the top of
@@ -694,7 +731,8 @@ tspa <- function(model, data, reliability = NULL, se = "standard",
         sf_group_col <- "group"
       }
     }
-    if (!is.null(sf_group_col) && sf_group_col %in% names(data) &&
+    if (!se_fs_given &&
+        !is.null(sf_group_col) && sf_group_col %in% names(data) &&
         !is.null(se_fs) && nrow(se_fs) > 0 && ncol(se_fs) > 0) {
       se_cols <- paste0("fs_", colnames(se_fs), "_se")
       if (all(se_cols %in% names(data))) {
@@ -1017,6 +1055,259 @@ is_per_unit_fs <- function(fsT, fsL, mirt_per_obs = FALSE) {
     (mirt_per_obs && is.list(fsT) && length(fsT) > 1L)
 }
 
+# A flat (one-dimensional) numeric fsb is a constant per-score intercept --
+# the same value for every row/pattern/group -- as opposed to a per-unit fsb
+# (a list or array matching the data's own per-unit structure, one intercept
+# vector per pattern/cluster/row).
+is_flat_fsb_const <- function(fsb) {
+  is.numeric(fsb) && !is.list(fsb) && !is.array(fsb)
+}
+
+# The number of per-score intercepts (the number of scores), descending
+# through the per-unit list structure to a leaf vector.
+fsb_leaf_len <- function(x) {
+  if (is.list(x) && !is.matrix(x) && length(x) > 0L) {
+    return(fsb_leaf_len(x[[1L]]))
+  }
+  if (is.numeric(x)) return(length(x))
+  NA_integer_
+}
+
+# Broadcast a constant per-score intercept (`const`, a flat named vector) to
+# the per-unit structure of `cur` (the data's own fsb attribute): every
+# non-NA leaf (one pattern / group / row intercept vector) is replaced by
+# `const`, while all-NA leaves (fully-missing units) keep their NA intercept.
+# The list structure (per-pattern, per-group, per-row, and the ""-wrapped
+# single-group form) is walked recursively, preserving names.
+broadcast_fsb_const <- function(const, cur) {
+  if (is.null(cur)) return(const)
+  if (is.list(cur) && !is.matrix(cur)) {
+    return(lapply(cur, function(x) broadcast_fsb_const(const, x)))
+  }
+  if (is.numeric(cur) && length(const) > 0L &&
+      length(cur) == length(const) && all(is.na(cur))) {
+    return(cur)
+  }
+  const
+}
+
+# Resolve a per-group fsb list against the data's group labels, returning a
+# list in the data's group order. A fully named list is matched by label
+# (order-independent, so a reordered named list is not silently swapped); an
+# unnamed one is matched positionally. Duplicate group names, names that do
+# not match the data's groups, and partially named lists are rejected. (PLAN
+# 18.)
+resolve_group_fsb <- function(fsb, labels) {
+  n <- length(labels)
+  nm <- names(fsb)
+  n_named <- sum(!is.na(nm) & nzchar(nm))
+  if (n_named == n) {
+    if (anyDuplicated(nm) > 0L) {
+      dup <- unique(nm[duplicated(nm)])
+      stop(
+        "the explicit 'fsb' lists duplicate group names (",
+        paste(dup, collapse = ", "), ").",
+        call. = FALSE
+      )
+    }
+    if (!setequal(nm, labels)) {
+      stop(
+        "the explicit 'fsb' group names (", paste(nm, collapse = ", "),
+        ") do not match the data's groups (",
+        paste(labels, collapse = ", "), ").",
+        call. = FALSE
+      )
+    }
+    fsb[labels]
+  } else if (n_named > 0L) {
+    stop(
+      "the explicit 'fsb' must be either fully named (one group label per ",
+      "element) or unnamed (matched by position); it is only partially named.",
+      call. = FALSE
+    )
+  } else {
+    fsb
+  }
+}
+
+# Check that a non-flat LIST fsb names exactly one entry per group. A wrong
+# count would otherwise fall through and be applied as a shared/per-pattern
+# value to every group (the wrong intercepts), so it is rejected up front. A
+# flat constant is a shared per-score intercept, not a per-group list, and is
+# exempt. (PLAN 18.)
+check_fsb_group_count <- function(fsb, n_grp) {
+  if (is.list(fsb) && !is_flat_fsb_const(fsb) && length(fsb) != n_grp) {
+    stop(
+      "the explicit 'fsb' list has length ", length(fsb), " but the model has ",
+      n_grp, " group", if (n_grp == 1L) "" else "s", "; supply one intercept ",
+      "vector per group (or a single constant vector shared by all groups).",
+      call. = FALSE
+    )
+  }
+  invisible(NULL)
+}
+
+# Normalize an explicit `fsb` for the (multi)group stage-2 schema into a list
+# of one intercept vector per group, in the data's group order (the order of
+# `T_list`/`L_list`, whose names are the group labels). A flat constant vector
+# is broadcast to every group (a shared intercept); a per-group list is checked
+# for the right count (check_fsb_group_count()) and resolved against the group
+# labels (order-independent when fully named, positional when unnamed); anything
+# else is rejected. Mirrors the per-unit path's broadcast/resolve so an explicit
+# fsb can never be misread as a shorter per-group list or silently applied to
+# the wrong group. (PLAN 18.)
+normalize_fsb_groups <- function(fsb, ngroup, glabels, n_scores) {
+  # A per-score intercept vector must name exactly one value per score; a
+  # shorter one indexes to NA (e.g. fsb = 0 on a two-score model) and lavaan
+  # would silently free the missing score intercepts. (PLAN 18.)
+  check_fsb_score_len <- function(x, what) {
+    if (length(x) != n_scores) {
+      stop(
+        "the explicit ", what, " 'fsb' has length ", length(x), " but there ",
+        "are ", n_scores, " score", if (n_scores == 1L) "" else "s", " (one ",
+        "intercept per score is required).",
+        call. = FALSE
+      )
+    }
+  }
+  labeled <- !is.null(glabels) && any(nzchar(glabels))
+  if (is_flat_fsb_const(fsb)) {
+    check_fsb_score_len(fsb, "shared")
+    out <- vector("list", ngroup)
+    if (labeled) names(out) <- glabels
+    for (g in seq_len(ngroup)) out[[g]] <- fsb
+    return(out)
+  }
+  if (is.list(fsb)) {
+    check_fsb_group_count(fsb, ngroup)
+    for (g in seq_along(fsb)) check_fsb_score_len(fsb[[g]], "per-group")
+    if (labeled) return(resolve_group_fsb(fsb, glabels))
+    if (any(!is.na(names(fsb)) & nzchar(names(fsb)))) {
+      stop(
+        "the explicit 'fsb' is named but the model's groups have no labels to ",
+        "match against; pass 'fsT'/'fsL' as a named list (by group label) so a ",
+        "named 'fsb' can be matched, or pass an unnamed 'fsb' to match by ",
+        "position.",
+        call. = FALSE
+      )
+    }
+    return(fsb)
+  }
+  stop(
+    "'fsb' must be a numeric vector (one intercept per score) or a list of ",
+    "one intercept vector per group.",
+    call. = FALSE
+  )
+}
+
+# Replace the per-unit fsT/fsL/fsb attributes of a get_fs() result with the
+# caller's explicitly supplied values (PLAN 18): the supplied values carry the
+# same per-unit shape as the attributes (a per-group list of one matrix/vector
+# per pattern, a 3-D per-cluster array, or a flat per-row list), so replacing
+# the attributes before resolution makes the resolver read the supplied values
+# instead of the data's own. A constant (flat) fsb is the exception: it is one
+# intercept per score, shared by every unit, so it is broadcast across the
+# data's own per-unit structure rather than misread as a per-pattern list. The
+# data's rows and every other attribute are untouched.
+override_fs_unit_attrs <- function(fs, fsT, fsL, fsb) {
+  # The unified single-group result wraps its fsT/fsL/fsb attributes in a
+  # length-1 list named "" and the resolver unwraps them with [[1]]; a
+  # plain matrix/vector override for such a wrapped attribute is wrapped
+  # the same way so the resolver reads it as one value, not its first
+  # element.
+  wrap_like <- function(cur, val) {
+    if (is.list(cur) && length(cur) == 1L &&
+        !is.null(names(cur)) && names(cur) == "" &&
+        !is.list(val)) {
+      return(structure(list(val), names = ""))
+    }
+    val
+  }
+  # Apply one group's supplied fsb value to that group's own per-unit
+  # structure (`cur_g`). A flat constant vector is broadcast over the group's
+  # patterns (one intercept per score, shared by every pattern); a per-pattern
+  # list -- or a flat vector on single-pattern data, whose structure is a plain
+  # vector -- replaces the structure directly. (PLAN 18: an explicit fsb always
+  # wins, but a constant must not be misread as a per-pattern list of
+  # intercepts.)
+  apply_group_fsb <- function(val, cur_g) {
+    if (is_flat_fsb_const(val) && is.list(cur_g)) {
+      ll <- fsb_leaf_len(cur_g)
+      if (!is.na(ll) && ll != length(val)) {
+        stop(
+          "the explicit constant 'fsb' has length ", length(val), " but the ",
+          "per-score intercepts have length ", ll, " (one per score); a ",
+          "constant explicit 'fsb' must name exactly one intercept per score.",
+          call. = FALSE
+        )
+      }
+      broadcast_fsb_const(val, cur_g)
+    } else {
+      wrap_like(cur_g, val)
+    }
+  }
+  if (is.list(fs) && !is.data.frame(fs)) {
+    # list format: the per-group attributes sit on each group element, one
+    # element per group (positional). A per-group fsb override is a list
+    # aligned with the elements; a shared constant (or a single-group value)
+    # is applied to every element. Each element's value is then broadcast
+    # within its own per-unit structure when it is a constant.
+    n_grp <- length(fs)
+    check_fsb_group_count(fsb, n_grp)
+    for (i in seq_along(fs)) {
+      el <- fs[[i]]
+      if (!is.null(fsT) && is.list(fsT) && length(fsT) == length(fs)) {
+        attr(el, "fsT") <- wrap_like(attr(el, "fsT"), fsT[[i]])
+      }
+      if (!is.null(fsL) && is.list(fsL) && length(fsL) == length(fs)) {
+        attr(el, "fsL") <- wrap_like(attr(el, "fsL"), fsL[[i]])
+      }
+      if (!is.null(fsb)) {
+        val_i <- if (is.list(fsb) && length(fsb) == length(fs)) {
+          resolve_group_fsb(fsb, names(fs))[[i]]
+        } else {
+          fsb
+        }
+        attr(el, "fsb") <- apply_group_fsb(val_i, attr(el, "fsb"))
+      }
+      fs[[i]] <- el
+    }
+    return(fs)
+  }
+  if (!is.null(fsT)) attr(fs, "fsT") <- wrap_like(attr(fs, "fsT"), fsT)
+  if (!is.null(fsL)) attr(fs, "fsL") <- wrap_like(attr(fs, "fsL"), fsL)
+  if (!is.null(fsb)) {
+    tmpl <- attr(fs, "fsb")
+    # A multigroup template is a per-group list (more than one entry, or a
+    # single entry not named ""); a single-group one is wrapped in a length-1
+    # "" list (one "group"). A per-obs (per-row) result carries a per-row list
+    # -- not a per-group list -- and is handled as one value (broadcast over
+    # the rows), so it is excluded from the multigroup walk.
+    is_per_obs <- isTRUE(attr(fs, "per_obs")) ||
+      isTRUE(attr(fs, "mirt_per_obs"))
+    is_mg <- is.list(tmpl) && !is_per_obs &&
+      !(length(tmpl) == 1L && !is.null(names(tmpl)) && names(tmpl) == "")
+    if (is_mg) {
+      n_grp <- length(tmpl)
+      labels <- names(tmpl)
+      check_fsb_group_count(fsb, n_grp)
+      per_group_list <- is.list(fsb) && length(fsb) == n_grp &&
+        !is_flat_fsb_const(fsb)
+      resolved <- if (per_group_list) resolve_group_fsb(fsb, labels) else NULL
+      new_b <- vector("list", n_grp)
+      names(new_b) <- labels
+      for (gi in seq_len(n_grp)) {
+        val_gi <- if (per_group_list) resolved[[gi]] else fsb
+        new_b[[gi]] <- apply_group_fsb(val_gi, tmpl[[gi]])
+      }
+      attr(fs, "fsb") <- new_b
+    } else {
+      attr(fs, "fsb") <- apply_group_fsb(fsb, tmpl)
+    }
+  }
+  fs
+}
+
 # Pool one get_fs() result (`fs`) to a single representative fsT/fsL/fsb
 # per group. `reduce` is "mean" (default; the mean of PSD matrices is PSD)
 # or "median" (element-wise; may break PSD, guarded by a warning). Returns
@@ -1029,7 +1320,16 @@ is_per_unit_fs <- function(fsT, fsL, mirt_per_obs = FALSE) {
 # mirt's level order, which can differ); otherwise each component is a
 # single matrix/vector (SG FIML, merMod). The returned shapes are exactly
 # what the existing stage-2 schema accepts.
-pool_per_unit <- function(fs, reduce, have_int) {
+#
+# `fsT`/`fsL`/`fsb` (all optional, PLAN 18) are the caller's explicitly
+# supplied per-unit values: when present they replace the data's own
+# attributes (override_fs_unit_attrs()) before resolution, so the pooled
+# values come from the supplied values rather than the attributes.
+pool_per_unit <- function(fs, reduce, have_int, fsT = NULL, fsL = NULL,
+                          fsb = NULL) {
+  if (!is.null(fsT) || !is.null(fsL) || !is.null(fsb)) {
+    fs <- override_fs_unit_attrs(fs, fsT, fsL, fsb)
+  }
   resolved <- resolve_fs_per_row(fs)
   # Effective per-row grouping. lavaan/merMod carry it in the resolved
   # structure; mirt per-obs does not (resolve_per_obs() always sets the
@@ -1768,7 +2068,13 @@ tspa_schema_mf <- function(model, fsT, fsL, fsb, prods = NULL,
     }
   }
   if (!is.null(fsb)) {
-    B_list <- if (is.list(fsb)) fsb else list(fsb)
+    # Normalize the caller's explicit fsb to a per-group list aligned with
+    # T_list/L_list (one intercept vector per group, in group order): a flat
+    # constant is broadcast to every group, a per-group list is resolved
+    # against the group labels (order-independent when named, positional when
+    # unnamed) and checked for the right count, mirroring the per-unit path.
+    # (PLAN 18.)
+    B_list <- normalize_fsb_groups(fsb, ngroup, names(T_list), length(fs))
     for (i in seq_along(fs)) {
       lab <- paste0("__r2spa_int", i, "__")
       for (g in seq_len(ngroup)) {

@@ -161,6 +161,75 @@ test_that("missing data format=list: attributes sit directly on the data frame",
   expect_equal(length(fp$label), nrow(fsl))
 })
 
+test_that("fully-missing rows at leading/middle/trailing positions are preserved (SG)", {
+  # One output row per model-frame row: fully-missing cases (no scorable
+  # pattern) keep their position with NA score/SE/_by_/ev columns and a NA
+  # fs_pattern label (PLAN 18 row preservation).
+  na_row <- hs[1, , drop = FALSE]
+  na_row[7:9] <- list(NA)
+  hs_ext <- rbind(
+    na_row,
+    hs[1:15, , drop = FALSE],
+    na_row,
+    hs[16:nrow(hs), , drop = FALSE],
+    na_row
+  )
+  na_pos <- c(1L, 17L, nrow(hs_ext))
+  fit <- suppressWarnings(cfa(visual_model, data = hs_ext, missing = "fiml"))
+  fs <- get_fs(fit)
+  expect_equal(nrow(fs), nrow(hs_ext))
+  labels <- attr(fs, "fs_pattern")[[1]]$label
+  # the three appended rows are NA (the file's `hs` may add its own
+  # natural fully-missing rows; the exp_lab comparison below covers all)
+  expect_true(all(na_pos %in% which(is.na(labels))))
+  for (r in na_pos) {
+    expect_true(all(is.na(unlist(fs[r, ]))))
+  }
+  # scorable rows keep their usual pattern labels (and non-NA scores)
+  exp_lab <- vapply(seq_len(nrow(hs_ext)), function(r) {
+    label_for_row(hs_ext[r, , drop = FALSE])
+  }, character(1))
+  expect_equal(labels, exp_lab)
+  expect_true(all(!is.na(fs$fs_visual[!is.na(exp_lab)])))
+})
+
+test_that("fully-missing row at the END of one group is preserved (MG)", {
+  # Clean data (the file's `hs` carries injected missingness, which would add
+  # its own fully-missing rows): only the appended row is unscoreable.
+  clean <- HolzingerSwineford1939
+  na_row <- clean[1, , drop = FALSE]
+  na_row[7:9] <- list(NA)
+  na_row$school <- "Grant-White"
+  mg <- rbind(clean, na_row)
+  fit <- suppressWarnings(cfa(visual_model, data = mg, group = "school",
+                             missing = "fiml"))
+  fs <- get_fs(fit)
+  expect_equal(nrow(fs), nrow(mg))
+  expect_equal(table(fs$school), table(mg$school))
+  fp <- attr(fs, "fs_pattern")
+  for (g in names(fp)) {
+    exp_n <- sum(mg$school == g)
+    expect_equal(length(fp[[g]]$label), exp_n)
+    if (g == "Grant-White") {
+      expect_equal(which(is.na(fp[[g]]$label)), exp_n)
+    } else {
+      expect_false(anyNA(fp[[g]]$label))
+    }
+  }
+})
+
+test_that("augment_lav_predict() keeps one row per case, matching get_fs()", {
+  na_row <- hs[1, , drop = FALSE]
+  na_row[7:9] <- list(NA)
+  hs_ext <- rbind(hs, na_row)
+  fit <- suppressWarnings(cfa(visual_model, data = hs_ext, missing = "fiml"))
+  aug <- augment_lav_predict(fit)
+  fs <- get_fs(fit)
+  expect_equal(nrow(aug), nrow(hs_ext))
+  expect_equal(aug$fs_visual, fs$fs_visual, tolerance = 1e-10)
+  expect_true(all(is.na(aug[nrow(aug), ])))
+})
+
 test_that("complete data keeps plain-matrix attributes and one-pattern fs_pattern", {
   fit <- cfa(visual_model, data = HolzingerSwineford1939)
   fs <- get_fs(fit)

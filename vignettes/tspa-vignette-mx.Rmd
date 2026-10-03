@@ -1,6 +1,8 @@
 ---
 title: "2S-PA with OpenMx and IRT (mirt)"
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    toc: true
 vignette: >
   %\VignetteIndexEntry{2S-PA with OpenMx and IRT (mirt)}
   %\VignetteEngine{knitr::rmarkdown}
@@ -29,6 +31,10 @@ Two-stage path analysis (2S-PA) can be fit with `OpenMx` as well as the
 default `lavaan` backend. `tspa_mx_model()` takes a `lavaan`-style structural
 model string plus the (per-row) factor-score loading / error information from
 `get_fs()` and returns a fitted `OpenMx` RAM model.
+
+> **Optional dependencies.** The stage-2 `OpenMx` chunks require `OpenMx` and
+> the IRT sections require `mirt` (both `Suggests`); those chunks are skipped
+> when the relevant package is not installed.
 
 # With a Linear Factor Model
 
@@ -178,8 +184,10 @@ round(c(score.mean.default = mean(fs$fs_F1),
         score.mean.prior2  = mean(fse$fs_F1)), 4)
 ```
 
-Under mirt's default zero-mean prior every `fsb` is zero (the scores are mean
-zero); with `prior_mean = c(F1 = 2)` they are non-zero and differ by row. These
+Under mirt's default zero-mean prior every `fsb` (score-intercept) value is
+zero — the *prior/model* mean of the latent is zero — although the realized
+scores (and their sample mean, printed above) are generally not. With
+`prior_mean = c(F1 = 2)` the `fsb` values are non-zero and differ by row. These
 `fsb` values are exactly what `tspa_mx_model()` reads as its score-intercept row
 ("With Mean Structure" above).
 
@@ -218,8 +226,11 @@ these scores ($\tilde \eta_i$ for person $i$):
 
 - Standard error (SE, from software output) = $\sqrt{V(\eta) (1 - \rho_{\tilde \eta, i})}$, where $\rho_{\tilde \eta, i}$ is the reliability of $\tilde \eta_i$
 - Loading of $\tilde \eta_i$ on $\eta$ is equal to $\rho_{\tilde \eta, i}$ = $1 - \text{SE}^2 / V(\eta)$
-- Standard error of measurement for $\tilde \eta_i$ is equal to $\rho_{\tilde \eta, i} \text{SE}$
-- Based on the above, the total variance of $\tilde \eta_i$ is also $\rho_{\tilde \eta, i}$.
+- Measurement-error *variance* of $\tilde \eta_i$ is equal to $\rho_{\tilde \eta, i} \text{SE}^2$ (so its SEM is $\sqrt{\rho_{\tilde \eta, i}}\,\text{SE}$)
+- Based on the above, the total variance of $\tilde \eta_i$ is also $\rho_{\tilde \eta, i}$ — which, together with $\rho = 1 - \text{SE}^2 / V(\eta)$ collapsing to $1 - \text{SE}^2$, requires the unit-prior-variance assumption $V(\eta) = 1$ (mirt's default).
+
+The code below relies on that unit-prior-variance assumption: `rel = 1 - se^2`
+and `ev = se^2 * (1 - se^2) = rel * se^2`.
 
 ```{r, eval = have_mirt}
 # Combine into data set

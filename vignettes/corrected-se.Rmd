@@ -1,6 +1,8 @@
 ---
 title: "Corrected Standard Errors"
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    toc: true
 vignette: >
   %\VignetteIndexEntry{Corrected Standard Errors}
   %\VignetteEngine{knitr::rmarkdown}
@@ -16,11 +18,33 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
+# numDeriv (numeric-Jacobian demo) and boot (bootstrap comparison, echo-only
+# chunks) are optional Suggests; guard the chunks that need them so the
+# vignette knits whether or not they are installed.
+have_numderiv <- requireNamespace("numDeriv", quietly = TRUE)
+have_boot     <- requireNamespace("boot", quietly = TRUE)
 ```
 
 This vignette shows how to obtain Taylor-series corrected standard errors in 2S-PA, accounting for the uncertainty in the weights for obtaining the factor scores. It is described in [this paper](https://doi.org/10.1007/s00181-020-01942-z).
 
 The second-stage estimation treats as known the loading matrix and the error covariance matrix of the factor scores as indicators of the true latent variables. However, those are estimates based on the first-stage measurement model. When the sample size is large and/or the reliability of the factor scores is high, the uncertainty in the estimated loading and error covariance matrix is generally negligible. Otherwise, a first-order correction on the standard errors of the second-stage estimation is possible, as illustrated below.
+
+> **Optional dependencies.** The numeric-Jacobian demonstration uses
+> `numDeriv` and the bootstrap comparison uses `boot` (both `Suggests`). They
+> are loaded up front when available, and the dependent chunks are skipped when
+> not, so the vignette builds without them; both are installed automatically
+> during `R CMD check`.
+
+> **What is — and is not — corrected.** The correction is *partial by
+> design*. It propagates only the *sampling* uncertainty of the stage-1
+> estimates of `fsL` (loadings / cross-loadings) and `fsT` (the score
+> error variance-covariance, including its off-diagonals). It does **not**
+> account for the sampling uncertainty of the factor-score *values* (the
+> `fs_<name>` columns fitted in stage 2), their standard errors (`se_fs`), or
+> the score intercepts (`fsb`) — these are held fixed. The two-stage
+> approximation also treats the two stages as independent, so the
+> cross-covariance between the stage-1 estimates and the stage-2 data is not
+> modelled.
 
 ## First-order correction for SE
 
@@ -35,8 +59,8 @@ where $V_{\gamma}$ is the naive covariance matrix of the structural parameter es
 ```{r load-pkg, message = FALSE}
 library(lavaan)
 library(R2spa)
-library(numDeriv)
-library(boot)
+if (have_numderiv) library(numDeriv)
+if (have_boot)     library(boot)
 ```
 
 This example is based on the `PoliticalDemocracy` dataset, from the lavaan tutorial (<https://lavaan.ugent.be/tutorial/sem.html>), also used as an example in Bollen (1989).
@@ -75,6 +99,13 @@ fs_dat <- data.frame(
 vldev <- block_diag(vldev1, vldev2)[c(1, 3, 2, 4), c(1, 3, 2, 4)]
 ```
 
+The block-diagonal `vldev` above is an *approximation*: the two single-factor
+models are fit to the same subjects, so their loading/error-variance estimates
+are sampled-correlated, but `block_diag()` sets that cross-model covariance to
+zero. It is the conventional choice for the separate-measurement-models setup
+and is exact in the limit of independent samples. (A joint multi-factor model
+estimates the cross-covariance in a single `vfsLT`; see the next section.)
+
 ```{r}
 # 2S-PA
 # Assemble loadings
@@ -94,7 +125,7 @@ vcov(tspa_fit)
 sqrt(diag(vc_cor))
 ```
 
-The `engine` argument of `vcov_corrected()` (and of `tspa(corrected_se = TRUE)`) selects how the Jacobian is evaluated. The default `"analytic"` evaluates it refit-free and deterministically as an influence-function closed form (PLAN 16, sections 2.4 and 4.3), $J = -H^{-1} C$ with $H$ and $C$ obtained by central-differencing the analytic log-likelihood score; it covers single- and multi-group models, saturated and restricted (df > 0) structural models, and mean-structure models, and is a pure function of the base fit + `vfsLT` (bit-reproducible, no refits). `"fd"` (central finite differences, one stage-2 refit on each side of each free element) is retained as the A/B reference and the transparent fallback for a shape the analytic form cannot handle. The two agree to the finite-difference noise floor whenever `"analytic"` applies.
+The `engine` argument of `vcov_corrected()` (and of `tspa(corrected_se = TRUE)`) selects how the Jacobian is evaluated. The default `"analytic"` evaluates it refit-free and deterministically as an influence-function closed form, $J = -H^{-1} C$ with $H$ (the log-likelihood Hessian over the free parameters) and $C$ (the cross-derivative with respect to the fixed `fsL`/`fsT`) obtained by central-differencing the analytic log-likelihood score; it covers single- and multi-group models, saturated and restricted (df > 0) structural models, and mean-structure models, and is a pure function of the base fit + `vfsLT` (bit-reproducible, no refits). `"fd"` (central finite differences, one stage-2 refit on each side of each free element) is retained as the A/B reference and the transparent fallback for a shape the analytic form cannot handle. The two agree to the finite-difference noise floor whenever `"analytic"` applies.
 
 Standardized solution
 
@@ -116,6 +147,11 @@ tspa_est_std <- function(ld_ev) {
   keep_dem_ind(standardizedSolution(tfit))$est.std
 }
 tspa_est_std(c(ld[c(1, 4)], ev[c(1, 4)]))
+```
+
+The numeric-Jacobian check below is guarded by the `numDeriv` availability flag, so it is skipped when the package is not installed:
+
+```{r, eval = have_numderiv}
 # Jacobian of the standardized coefficient w.r.t. (loadings, error variances)
 jac_std <- numDeriv::jacobian(tspa_est_std,
                               x = c(ld[c(1, 4)], ev[c(1, 4)]))
@@ -404,8 +440,12 @@ ld_ev0 <- c(attr(fs_dat, which = "fsL")[[1]],
             attr(fs_dat, which = "fsT")[[1]][c(1:3, 5:6, 9)],
             attr(fs_dat, which = "fsT")[[2]][c(1:3, 5:6, 9)])
 tspa_est_std(ld_ev0)
+```
+
+The same numeric-Jacobian check for the multigroup model (`numDeriv`-guarded):
+
+```{r, eval = have_numderiv}
 jac <- numDeriv::jacobian(tspa_est_std, x = ld_ev0)
 v0 <- lavInspect(tspa_fit, "vcov.std.lv")[c(1:3, 10:12), c(1:3, 10:12)]
 sqrt(diag(jac %*% vldev %*% t(jac)) / diag(v0))
-
 ```

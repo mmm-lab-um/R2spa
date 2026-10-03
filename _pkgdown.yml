@@ -2,3 +2,71 @@ url: https://mmm-lab-um.github.io/R2spa/
 template:
   bootstrap: 5
 
+reference:
+  - title: "Core two-stage estimation"
+    contents:
+    - tspa
+    - tspa_mx_model
+    - get_fs
+    - get_fs_lavaan
+    - get_fs_lmer
+  - title: "Factor-score computation"
+    contents:
+    - compute_fscore
+    - compute_fs_prod
+    - fs_indiv
+    - augment_lav_predict
+    - combine_fs
+    - fs_to_group_list
+  - title: "SE correction & standardization"
+    contents:
+    - vcov_corrected
+    - grand_standardized_solution
+  - title: "Utilities"
+    contents:
+    - block_diag
+
+articles:
+  - title: "Getting started"
+    desc: >
+      The canonical two-stage workflow and worked model examples.
+    contents:
+    - R2spa
+  - title: "Scoring strategies"
+    desc: >
+      How the stage-1 factor scores and their measurement quantities are
+      assembled, for single- and multi-factor measurement models.
+    contents:
+    - scoring-matrices
+    - multiple-factors
+  - title: "Missing data & groups"
+    desc: >
+      Per-row scoring under missing data, and grouped (clustered / random-effects)
+      data.
+    contents:
+    - missing-data
+    - multilevel
+  - title: "Inference: SEs & standardization"
+    desc: >
+      Corrected standard errors for the stage-2 path and grand-standardized
+      coefficients.
+    contents:
+    - corrected-se
+    - correction-error
+    - gr-std-coef
+  - title: "Extensions"
+    desc: >
+      Product (latent-interaction) indicators, the OpenMx / IRT (mirt) route,
+      linear growth, and EFA scores.
+    contents:
+    - product-factor-scores
+    - tspa-vignette-mx
+    - tspa-growth-vignette
+    - efa-score
+  - title: "Theory & simulation evidence"
+    desc: >
+      Simulation studies comparing scoring methods, SE correction, and
+      categorical (IRT) items against gold-standard references.
+    contents:
+    - sim-scoring-se
+    - sim-categorical-irt

@@ -60,7 +60,8 @@ names to the items included in each factor's sum score.
 loadings. See \code{\link[=get_fs]{get_fs()}} for the full description.}
 }
 \value{
-An N x p matrix of factor scores.
+An N x q matrix of factor scores (one row per observation in
+\code{y}, one column per latent factor).
 }
 \description{
 Compute factor scores

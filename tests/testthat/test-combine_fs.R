@@ -58,6 +58,13 @@ if (have_mirt) {
   fmirt1f_short <- get_fs(
     suppressWarnings(mirt::mirt(mirt_items[1:50, 1:3, drop = FALSE], 1))
   )
+  # a multigroup mirt result: carries a literal `group` column but NO
+  # group_col attribute (the MG signal combine_fs must reject)
+  fmirt_mg <- get_fs(suppressWarnings(mirt::multipleGroup(
+    mirt_items[, 1:3, drop = FALSE], 1,
+    group = factor(rep(c("A", "B"), c(150L, n_hs - 150L))),
+    verbose = FALSE
+  )))
 }
 
 # ===========================================================================
@@ -235,6 +242,19 @@ test_that("T9: a multi-group (list-of-groups) result is rejected, not misread as
   expect_error(combine_fs(mg), "multi-group")
   # a plain list of single-group results (no group_col) still combines
   expect_identical(combine_fs(list(f_vis, f_qua)), comb_vq)
+})
+
+# ===========================================================================
+test_that("T9b: a multi-group mirt result (literal group column) is rejected", {
+  # A multigroup mirt result carries a literal `group` column but NO
+  # group_col attribute (unlike unified lavaan MG). combine_fs must reject
+  # it on the group column, not silently treat it as single-group.
+  skip_if_not_installed("mirt")
+  expect_true("group" %in% names(fmirt_mg))
+  expect_null(attr(fmirt_mg, "group_col"))
+  expect_error(combine_fs(list(fmirt_mg, f_vis)), "single-group inputs only")
+  # cbind-style form hits the same guard
+  expect_error(combine_fs(fmirt_mg, f_vis), "single-group inputs only")
 })
 
 # ===========================================================================

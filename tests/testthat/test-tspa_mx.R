@@ -197,7 +197,17 @@ test_that("guards: incomplete or mistyped measurement inputs are rejected", {
   # NA in se_fs (an NA error variance would otherwise yield a RED-status fit)
   expect_error(
     tspa_mx_model(model2, data = fsd2, se_fs = c(ind60 = NA, dem60 = 0.6756472)),
-    "must not contain NA"
+    "finite and non-negative"
+  )
+  # Inf in se_fs
+  expect_error(
+    tspa_mx_model(model2, data = fsd2, se_fs = c(ind60 = Inf, dem60 = 0.6756472)),
+    "finite and non-negative"
+  )
+  # negative in se_fs (would square into a positive, wrong error variance)
+  expect_error(
+    tspa_mx_model(model2, data = fsd2, se_fs = c(ind60 = -0.2, dem60 = 0.6756472)),
+    "finite and non-negative"
   )
   t_ok <- matrix(c(0.25, 0, 0, 0.4), nrow = 2,
                  dimnames = list(c("fs_ind60", "fs_dem60"),
@@ -356,7 +366,14 @@ test_that("T12: tspa_mx_resolve_se_fs resolves fixed vs definition-variable se_f
   d_char <- d; d_char$se_a <- as.character(d_char$se_a)
   expect_error(R2spa:::tspa_mx_resolve_se_fs(c(a = "se_a"), d_char), "must be numeric")
   d_na <- d; d_na$se_a[1] <- NA
-  expect_error(R2spa:::tspa_mx_resolve_se_fs(c(a = "se_a"), d_na), "contains NA")
+  expect_error(R2spa:::tspa_mx_resolve_se_fs(c(a = "se_a"), d_na),
+               "finite and non-negative")
+  d_inf <- d; d_inf$se_a[1] <- Inf
+  expect_error(R2spa:::tspa_mx_resolve_se_fs(c(a = "se_a"), d_inf),
+               "finite and non-negative")
+  d_neg <- d; d_neg$se_a[1] <- -0.1
+  expect_error(R2spa:::tspa_mx_resolve_se_fs(c(a = "se_a"), d_neg),
+               "finite and non-negative")
   # a non-numeric, non-character se_fs is rejected
   expect_error(R2spa:::tspa_mx_resolve_se_fs(factor(c("x", "y")), d),
                "must be a named")

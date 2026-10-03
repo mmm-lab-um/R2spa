@@ -84,7 +84,8 @@ single-factor column-join that the \code{\link[=tspa]{tspa()}} \code{se_fs} deri
 around.
 
 \strong{Scope (v1).} Single-group inputs only: a multi-group result (a list of
-per-group data frames, or a unified frame with a \code{group_col}) is rejected.
+per-group data frames, a unified frame with a \code{group_col}, or a
+multi-group mirt frame carrying a literal \code{group} column) is rejected.
 \code{lme4} inputs are one row per cluster, so align them on the cluster id.
 }
 \examples{

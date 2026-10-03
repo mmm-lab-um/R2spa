@@ -156,6 +156,18 @@
   is intentional and unchanged.
 
 ## Improvements
+- Explicit measurement inputs are now always honored in `tspa()`: a supplied
+  `fsT`/`fsL`/`fsb`/`se_fs` overrides the auto-derivation from a `get_fs()`
+  result's attributes (explicit-argument-wins), so a hand-specified measurement
+  quantity is never silently discarded in favour of a derived one.
+- `fs_indiv()` and `compute_fs_prod()` now detect a reordering or subsetting of
+  a `get_fs()` result and stop with a row-safety message (comparing the carried
+  `fs_*_se` columns against `sqrt(diag(fsT))`), instead of silently pairing
+  scores with mismatched per-row measurement quantities.
+- `get_fs.mirt()` now rejects unsupported `...` options with a message naming
+  them, and `tspa()` / `tspa_mx_model()` reject `se_fs` entries that are
+  non-finite or negative, instead of propagating them into the stage-2 model.
+
 - The stage-2 model string attached to `tspa()` fits (the `tspaModel`
   attribute) is now rendered with normalized operator spacing (`lhs =~ rhs`,
   `lhs ~~ rhs`) and without `c()` for single-value fixed statements (e.g.
@@ -180,6 +192,11 @@
     * Rename `vc` to `ev` (error variance-covariance) for better consistency
 
 ## Bug Fixes
+- Fully-missing rows (a construct with no observed indicator) are now
+  preserved in `get_fs()` output instead of dropped, so
+  `nrow(get_fs(fit)) == nrow(data)`; the affected score columns are `NA` and
+  the per-row measurement quantities reflect the observed pattern (single- and
+  multi-group `lavaan` fits).
 - `tspa_mx_model()` now applies fixed numeric `fsb` score intercepts (including
   zero). Previously it silently omitted them while accepting the argument;
   per-observation definition-variable intercepts were unaffected.
@@ -205,6 +222,18 @@
   wrong rows.
 
 ## Documentation
+- The README now leads with the canonical workflow (`get_fs(..., local = TRUE)`
+  on one multi-factor model → `tspa()` with auto-derived `se_fs` → the
+  standardized structural rows), links the pkgdown site and the getting-started
+  article, and notes the optional `OpenMx`/`mirt` dependencies; the pkgdown
+  reference and article sections are curated into learner-task groups.
+- Added a table of contents and one-line optional-dependency notes to the
+  longer vignettes (`corrected-se`, `tspa-vignette-mx`, `missing-data`), a
+  worked pooled `tspa()` route to the missing-data vignette, and corrected
+  `vignette()` topic lookups, the `std.lv` note, the sum-score corrected-SE
+  description, the grand-standardization equation, and the `multilevel`
+  error-generation bug (`e2` was drawn over the wrong cluster index).
+
 - Corrected the `tspa_mx_model()` explicit `fsT` example's error-covariance
   column name, clarified the single-group and score-intercept semantics, and
   removed redundant `mxRun()` calls from the OpenMx and missing-data vignettes:

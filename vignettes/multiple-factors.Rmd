@@ -39,7 +39,7 @@ $$
   \end{aligned}
 $$
 
-If we consider $\tilde{\boldsymbol \eta}$ as indicators of $\boldsymbol \eta$, we can see that $\boldsymbol{\nu}_\tilde{\boldsymbol{\eta}} = (\mathbf{I} - \mathbf{A}\boldsymbol{\Lambda}) \boldsymbol{\alpha}$ is the intercept, $\boldsymbol{\Lambda}_\tilde{\boldsymbol{\eta}} = \mathbf{A}\boldsymbol{\Lambda}$ is the $q$ $\times$ $q$ loading matrix, and $\boldsymbol{\Theta}_\tilde{\boldsymbol{\eta}} = \mathbf{A}\boldsymbol{\varepsilon}$ is the error covariance matrix.
+If we consider $\tilde{\boldsymbol \eta}$ as indicators of $\boldsymbol \eta$, we can see that $\boldsymbol{\nu}_\tilde{\boldsymbol{\eta}} = (\mathbf{I} - \mathbf{A}\boldsymbol{\Lambda}) \boldsymbol{\alpha}$ is the intercept, $\boldsymbol{\Lambda}_\tilde{\boldsymbol{\eta}} = \mathbf{A}\boldsymbol{\Lambda}$ is the $q$ $\times$ $q$ loading matrix, and $\mathbf{A}\boldsymbol{\varepsilon}$ is the error vector, whose covariance $\boldsymbol{\Theta}_\tilde{\boldsymbol{\eta}} = \mathbf{A}\boldsymbol{\Theta}\mathbf{A}^\top$ (with $\boldsymbol{\Theta} = \mathrm{Var}(\boldsymbol{\varepsilon})$) is the error covariance matrix of the scores.
 
 We can see that $\boldsymbol{\Lambda}_\tilde{\boldsymbol{\eta}}$ is generally not diagonal, as the following shows:
 

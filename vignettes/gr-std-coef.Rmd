@@ -2,7 +2,7 @@
 title: "Grand Standardized Coefficients"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{gr-std-coef}
+  %\VignetteIndexEntry{Grand Standardized Coefficients}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -56,7 +56,7 @@ R2spa:::veta(fit_est$beta, psi = fit_est$psi)
 The standardized estimates in the $\mathbf{B}$ matrix are obtained as
 
 $$
-\mathbf{B}_s = \mathbf{S}_\eta^{-1} \mathbf{B} \mathbf{S}_\eta^{-1}
+\mathbf{B}_s = \mathbf{S}_\eta^{-1} \mathbf{B} \mathbf{S}_\eta
 $$
 
 where $\mathbf{S}_\eta$ is a diagonal matrix containing the square root of the diagonal elements of $\mathrm{Var}(\mathbf{\eta})$
