@@ -261,12 +261,15 @@ fs_row_colnames <- function(fsL, fsT) {
 # columns, so the per-block quantities computed downstream would be
 # assigned to the wrong observations. Every carried per-row column (score
 # SEs, cross-loadings, error (co)variances) was emitted by fs_row_cols()
-# from each row's own block, so comparing the FULL set -- not just the
-# diagonal SEs, which two patterns can share while their cross-loadings or
-# off-diagonal error covariances differ -- against the row's own block
-# detects any such drift. Skipped when the input carries none of the
-# columns (hand-rolled fixtures) or the expected names cannot be derived,
-# to avoid false positives.
+# from each row's own block, so comparing them against the row's own block
+# detects any such drift. Every measurement column the input carries is
+# compared -- not just the SEs, which two patterns can share while their
+# cross-loadings or off-diagonal error covariances differ -- so the check
+# stays meaningful even after the user drops some columns: only the columns
+# that remain are compared, each kept paired with its own block-derived
+# value. Skipped only when the input carries none of the columns
+# (hand-rolled fixtures) or the expected names cannot be derived, to avoid
+# false positives.
 check_fs_row_alignment <- function(fs, resolved) {
   n <- resolved$n
   # A row-subsetted data frame keeps its full-length fs_pattern labels, so
@@ -274,7 +277,7 @@ check_fs_row_alignment <- function(fs, resolved) {
   if (length(resolved$pattern_idx) != n) {
     stop(fs_row_alignment_message(), call. = FALSE)
   }
-  # Full carried-quantity names (se + cross-loadings + error (co)variances)
+  # Canonical carried-quantity names (se + cross-loadings + error (co)variances)
   # from the first block's fsL/fsT (identical shape across blocks).
   blk1 <- resolved$blocks[[1L]]
   nm <- fs_row_colnames(blk1$fsL, blk1$fsT)
@@ -282,7 +285,16 @@ check_fs_row_alignment <- function(fs, resolved) {
   if (length(cnames) == 0L) {
     return(invisible(NULL))
   }
-  carried <- fs_qty_carried(fs, cnames)
+  # Compare only the measurement columns the input actually carries (a user
+  # may have dropped some); each keeps its own correspondence with the
+  # block-derived row through its position in cnames. Skip the value check
+  # only when none of the columns remain (hand-rolled input).
+  have <- cnames[cnames %in% fs_carried_names(fs)]
+  if (length(have) == 0L) {
+    return(invisible(NULL))
+  }
+  jidx <- match(have, cnames)
+  carried <- fs_qty_carried(fs, have)
   if (is.null(carried)) {
     return(invisible(NULL))
   }
@@ -300,9 +312,9 @@ check_fs_row_alignment <- function(fs, resolved) {
     # The block's full se + cross-loading + error (co)variance row, in the
     # same column order as cnames (fs_row_cols() with fsb = NULL).
     exp_row <- fs_row_cols(one_row, blk$fsL, blk$fsT, NULL)[1L, , drop = FALSE]
-    for (j in seq_along(cnames)) {
+    for (j in seq_along(have)) {
       x <- carried[rows_b, j]
-      y <- exp_row[1L, j]
+      y <- exp_row[1L, jidx[j]]
       ok <- is.na(x) == is.na(y) &
         (is.na(x) | abs(x - y) <= 1e-8 * max(1, abs(y)))
       if (!all(ok)) {
@@ -325,9 +337,21 @@ fs_row_alignment_message <- function() {
   )
 }
 
+# The column names the input carries: the data-frame names (a named list of
+# data frames -> the columns present in every frame, so a comparison is well
+# defined across all of them).
+fs_carried_names <- function(fs) {
+  if (is.data.frame(fs)) {
+    return(names(fs))
+  }
+  Reduce(intersect, lapply(fs, names))
+}
+
 # The input's carried per-row quantities as a numeric matrix with one
 # column per `cnames` entry (row order = the resolved rows), or NULL when
-# any of the columns is absent (hand-rolled input: skip the check).
+# any of the columns is absent. The caller passes only columns already known
+# to be present (via fs_carried_names()), so this returns non-NULL in
+# practice; the NULL branch is defensive.
 fs_qty_carried <- function(fs, cnames) {
   if (is.data.frame(fs)) {
     if (!all(cnames %in% names(fs))) {

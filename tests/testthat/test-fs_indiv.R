@@ -515,6 +515,48 @@ test_that("fs_indiv() guard: equal-SE patterns with different error covariances 
                "reordered or subset after scoring")
 })
 
+test_that("fs_indiv() guard: dropping one loading column still detects a cross-pattern swap", {
+  # Regression (PLAN 18): the guard must compare the measurement columns that
+  # REMAIN after the user drops some, not skip entirely because one is missing
+  # (the earlier all-or-nothing check disabled the guard on a single dropped
+  # column, letting a cross-pattern swap slip through). A two-factor FIML
+  # result has multiple patterns with differing per-pattern SEs; removing one
+  # cross-loading column must leave the check able to catch a row swap via the
+  # remaining columns, through both public entry points.
+  d <- HolzingerSwineford1939
+  set.seed(7712)
+  d$x2[!rbinom(nrow(d), 1L, 0.6)] <- NA
+  d$x7[!rbinom(nrow(d), 1L, 0.6)] <- NA
+  fit_2f <- suppressWarnings(
+    cfa("visual =~ x1 + x2 + x3\n speed =~ x7 + x8 + x9",
+        data = d, missing = "fiml")
+  )
+  fs_2f <- get_fs(fit_2f)
+  # [[col]] <- NULL (not fs[, j]): column subsetting via [, ] drops the
+  # row-specific attributes (fs_pattern / fsT / fsL) the guard relies on.
+  expect_true("visual_by_fs_visual" %in% names(fs_2f))
+  fs_drop <- fs_2f
+  fs_drop[["visual_by_fs_visual"]] <- NULL
+  # two rows from patterns with different SEs (deterministic)
+  se <- unname(fs_drop[["fs_visual_se"]])
+  i <- 1L
+  j <- which(round(se, 8L) != round(se[i], 8L))[1L]
+  expect_true(!is.na(j))
+  perm <- seq_len(nrow(fs_drop))
+  perm[c(i, j)] <- c(j, i)
+  fs_swap <- fs_drop[perm, , drop = FALSE]
+  # aligned (one column dropped): the guard is silent for both entry points
+  expect_no_error(fs_indiv(fs_drop))
+  expect_no_error(suppressWarnings(compute_fs_prod(fs_drop, "visual:speed")))
+  # swapped: the remaining SE columns moved with the rows while the pattern
+  # labels stayed put, so the guard fires through both public functions
+  expect_error(fs_indiv(fs_swap), "reordered or subset after scoring")
+  expect_error(
+    suppressWarnings(compute_fs_prod(fs_swap, "visual:speed")),
+    "reordered or subset after scoring"
+  )
+})
+
 test_that("fs_indiv(): an unmodified result passes the guard (no false positive)", {
   # The fixture used throughout this file is a fresh get_fs() result; the
   # carried SE columns agree with the per-block fsT, so the guard is silent
