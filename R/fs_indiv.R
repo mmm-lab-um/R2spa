@@ -262,14 +262,14 @@ fs_row_colnames <- function(fsL, fsT) {
 # assigned to the wrong observations. Every carried per-row column (score
 # SEs, cross-loadings, error (co)variances) was emitted by fs_row_cols()
 # from each row's own block, so comparing them against the row's own block
-# detects any such drift. Every measurement column the input carries is
-# compared -- not just the SEs, which two patterns can share while their
-# cross-loadings or off-diagonal error covariances differ -- so the check
-# stays meaningful even after the user drops some columns: only the columns
-# that remain are compared, each kept paired with its own block-derived
-# value. Skipped only when the input carries none of the columns
-# (hand-rolled fixtures) or the expected names cannot be derived, to avoid
-# false positives.
+# detects any such drift. Each block is checked against the measurement
+# columns its OWN group carries (not the intersection across groups, so a
+# column dropped from one group does not disable the check in another),
+# and every column that remains is compared -- not just the SEs, which two
+# patterns can share while their cross-loadings or off-diagonal error
+# covariances differ. Skipped only when a block's group carries none of the
+# columns (hand-rolled fixtures) or the expected names cannot be derived,
+# to avoid false positives.
 check_fs_row_alignment <- function(fs, resolved) {
   n <- resolved$n
   # A row-subsetted data frame keeps its full-length fs_pattern labels, so
@@ -285,36 +285,54 @@ check_fs_row_alignment <- function(fs, resolved) {
   if (length(cnames) == 0L) {
     return(invisible(NULL))
   }
-  # Compare only the measurement columns the input actually carries (a user
-  # may have dropped some); each keeps its own correspondence with the
-  # block-derived row through its position in cnames. Skip the value check
-  # only when none of the columns remain (hand-rolled input).
-  have <- cnames[cnames %in% fs_carried_names(fs)]
-  if (length(have) == 0L) {
-    return(invisible(NULL))
-  }
-  jidx <- match(have, cnames)
-  carried <- fs_qty_carried(fs, have)
-  if (is.null(carried)) {
-    return(invisible(NULL))
-  }
+  one_row <- matrix(0, 1L, 1L)
+  # Full block-derived rows (one per block), canonical column order = cnames.
+  exp_rows <- vapply(
+    resolved$blocks,
+    function(blk) fs_row_cols(one_row, blk$fsL, blk$fsT, NULL)[1L, ],
+    numeric(length(cnames))
+  )
   rows_by_block <- split(
     seq_len(n),
     factor(resolved$pattern_idx, levels = seq_along(resolved$blocks))
   )
-  one_row <- matrix(0, 1L, 1L)
+  # One group per data frame: a single data frame is the whole input, a list
+  # input one frame per group. Each keeps the columns IT carries, so a column
+  # dropped from one group does not disable the check in another.
+  is_list <- !is.data.frame(fs)
+  if (is_list) {
+    grp_keys <- names(fs)
+    grp_rows <- split(seq_len(n), resolved$group_vals)
+    grp_df <- fs
+  } else {
+    grp_keys <- "__all__"
+    grp_rows <- list("__all__" = seq_len(n))
+    grp_df <- list("__all__" = fs)
+  }
+  grp_have <- setNames(
+    lapply(grp_keys, function(g) cnames[cnames %in% names(grp_df[[g]])]),
+    grp_keys
+  )
+  grp_carry <- setNames(lapply(grp_keys, function(g) {
+    h <- grp_have[[g]]
+    if (length(h) == 0L) NULL else as.matrix(grp_df[[g]][, h, drop = FALSE])
+  }), grp_keys)
   for (b in seq_along(resolved$blocks)) {
     rows_b <- rows_by_block[[b]]
     if (length(rows_b) == 0L) {
       next
     }
-    blk <- resolved$blocks[[b]]
-    # The block's full se + cross-loading + error (co)variance row, in the
-    # same column order as cnames (fs_row_cols() with fsb = NULL).
-    exp_row <- fs_row_cols(one_row, blk$fsL, blk$fsT, NULL)[1L, , drop = FALSE]
+    grp_key <- if (is_list) resolved$group_vals[rows_b[1L]] else "__all__"
+    have <- grp_have[[grp_key]]
+    if (length(have) == 0L) {
+      next
+    }
+    jidx <- match(have, cnames)
+    lrows <- match(rows_b, grp_rows[[grp_key]])
+    carried <- grp_carry[[grp_key]]
     for (j in seq_along(have)) {
-      x <- carried[rows_b, j]
-      y <- exp_row[1L, jidx[j]]
+      x <- carried[lrows, j]
+      y <- exp_rows[jidx[j], b]
       ok <- is.na(x) == is.na(y) &
         (is.na(x) | abs(x - y) <= 1e-8 * max(1, abs(y)))
       if (!all(ok)) {
@@ -335,34 +353,6 @@ fs_row_alignment_message <- function() {
     "re-score the subset with get_fs() before calling ",
     "fs_indiv()/compute_fs_prod()."
   )
-}
-
-# The column names the input carries: the data-frame names (a named list of
-# data frames -> the columns present in every frame, so a comparison is well
-# defined across all of them).
-fs_carried_names <- function(fs) {
-  if (is.data.frame(fs)) {
-    return(names(fs))
-  }
-  Reduce(intersect, lapply(fs, names))
-}
-
-# The input's carried per-row quantities as a numeric matrix with one
-# column per `cnames` entry (row order = the resolved rows), or NULL when
-# any of the columns is absent. The caller passes only columns already known
-# to be present (via fs_carried_names()), so this returns non-NULL in
-# practice; the NULL branch is defensive.
-fs_qty_carried <- function(fs, cnames) {
-  if (is.data.frame(fs)) {
-    if (!all(cnames %in% names(fs))) {
-      return(NULL)
-    }
-    return(as.matrix(fs[, cnames, drop = FALSE]))
-  }
-  if (!all(vapply(fs, function(df) all(cnames %in% names(df)), logical(1)))) {
-    return(NULL)
-  }
-  do.call(rbind, lapply(fs, function(df) as.matrix(df[, cnames, drop = FALSE])))
 }
 
 # Resolve a get_fs() result into (a) the score data frame, (b) one

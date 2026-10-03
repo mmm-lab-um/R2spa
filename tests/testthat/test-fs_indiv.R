@@ -557,6 +557,61 @@ test_that("fs_indiv() guard: dropping one loading column still detects a cross-p
   )
 })
 
+test_that("fs_indiv() guard: a column dropped from one group does not disable another group's check", {
+  # Regression (PLAN 18): for a multigroup list input each group must be
+  # checked against the measurement columns IT carries, not the intersection
+  # across groups. A distinguishing column remaining in the swapped group must
+  # still catch the swap even when another group has dropped it. Group A holds
+  # two patterns with EQUAL score SEs (same diag) but OPPOSITE error
+  # covariances, so only the ecov column distinguishes the two rows.
+  L2 <- diag(2)
+  rownames(L2) <- c("fs_visual", "fs_speed"); colnames(L2) <- c("visual", "speed")
+  mkT <- function(a, e, d) {
+    m <- matrix(c(a, e, e, d), 2)
+    rownames(m) <- colnames(m) <- c("fs_visual", "fs_speed")
+    m
+  }
+  cnames <- c("fs_visual_se", "fs_speed_se",
+              "visual_by_fs_visual", "visual_by_fs_speed",
+              "speed_by_fs_visual", "speed_by_fs_speed",
+              "ev_fs_visual", "ecov_fs_speed_fs_visual", "ev_fs_speed")
+  rowvals <- function(T, L) as.numeric(
+    R2spa:::fs_row_cols(matrix(0, 1, 1), L, T, NULL)[1L, ]
+  )
+  mk_group <- function(scores, labels, Tlist) {
+    meas <- t(vapply(labels, function(p) rowvals(Tlist[[p]], L2),
+                     numeric(length(cnames))))
+    colnames(meas) <- cnames
+    df <- as.data.frame(cbind(scores, meas))
+    attr(df, "fs_pattern") <- list(label = labels)
+    attr(df, "fsT") <- Tlist
+    attr(df, "fsL") <- stats::setNames(lapply(labels, function(p) L2), labels)
+    attr(df, "fsb") <- NULL
+    df
+  }
+  sc <- function(a, b, c, d) {
+    m <- matrix(c(a, b, c, d), 2, 2, byrow = TRUE)
+    colnames(m) <- c("fs_visual", "fs_speed")
+    m
+  }
+  A <- list(P1 = mkT(0.1, 0.02, 0.2), P2 = mkT(0.1, -0.02, 0.2))
+  A_df <- mk_group(sc(0.1, 0.2, 0.3, 0.4), c("P1", "P2"), A)
+  B <- list(P3 = mkT(0.3, 0.05, 0.4), P4 = mkT(0.5, 0.06, 0.6))
+  B_df <- mk_group(sc(0.5, 0.6, 0.7, 0.8), c("P3", "P4"), B)
+  fs <- list(A = A_df, B = B_df)
+  # aligned: the guard is silent
+  expect_no_error(fs_indiv(fs))
+  # swap group A's two rows (equal SEs, opposite ecov): caught via the ecov
+  fs_swap <- fs
+  fs_swap[["A"]] <- A_df[c(2L, 1L), , drop = FALSE]
+  expect_error(fs_indiv(fs_swap), "reordered or subset after scoring")
+  # drop the distinguishing ecov column from group B only: the swapped group A
+  # is still checked against its OWN ecov column, so it still errors
+  fs_noecov <- fs_swap
+  fs_noecov[["B"]][["ecov_fs_speed_fs_visual"]] <- NULL
+  expect_error(fs_indiv(fs_noecov), "reordered or subset after scoring")
+})
+
 test_that("fs_indiv(): an unmodified result passes the guard (no false positive)", {
   # The fixture used throughout this file is a fresh get_fs() result; the
   # carried SE columns agree with the per-block fsT, so the guard is silent
