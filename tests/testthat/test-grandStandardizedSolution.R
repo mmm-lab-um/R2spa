@@ -28,6 +28,23 @@ test_that("Model without structural regression errors clearly", {
   expect_error(grandStandardizedSolution(fit0), "no structural")
 })
 
+test_that("grand_standardized_solution(): a malformed model_list is rejected up front", {
+  # model_list is the lavInspect(fit, "est") layout (a named list of block
+  # matrices), not a model string. A string or a list lacking beta/psi fails
+  # with an actionable message instead of crashing in the beta algebra.
+  expect_error(grandStandardizedSolution(fit1, model_list = mod1),
+               "named list of the model's estimated block matrices")
+  expect_error(grandStandardizedSolution(fit1, model_list = list(a = 1, b = 2)),
+               "named list of the model's estimated block matrices")
+  # a list with matrices but no beta/psi is also rejected
+  m <- list(lambda = matrix(0, 2), theta = matrix(0, 2))
+  expect_error(grandStandardizedSolution(fit1, model_list = m),
+               "named list of the model's estimated block matrices")
+  # a valid lavInspect(fit, "est") layout passes the guard
+  expect_no_error(grandStandardizedSolution(fit1,
+                                            model_list = lavInspect(fit1, "est")))
+})
+
 test_that("Standardized beta in a model with single group, two factors",
           { expect_equal(s2_std_beta$est.std, s2_std_beta_lav$est.std) })
 test_that("SE of standardized beta in a model with single group, two-factors",
@@ -84,6 +101,19 @@ test_that("grand std SE similar to average std SE", code = {
   gp_std_se <- subset(standardizedSolution(fit3), subset = op == "~")$se
   gr_std_se <- m2_std_beta$se
   expect_equal(mean(gp_std_se), mean(gr_std_se), tolerance = 0.1)
+})
+
+test_that("grand_standardized_solution(): a multigroup supplied model_list (nested or flat) works", {
+  # A multigroup lavInspect(fit, "est") is nested by group (the doc-recommended
+  # input) and used to fail the up-front validation, which only accepted the
+  # flat lavTech layout. Both the nested and the flat supplied layout must work
+  # and match the auto (model_list = NULL) path exactly.
+  nested <- grandStandardizedSolution(fit3, model_list = lavInspect(fit3, "est"))
+  flat <- grandStandardizedSolution(fit3, model_list = lavTech(fit3, "est"))
+  expect_identical(dim(nested), dim(m2_std_beta))
+  expect_equal(nested$est.std, m2_std_beta$est.std, tolerance = 1e-10)
+  expect_equal(flat$est.std, m2_std_beta$est.std, tolerance = 1e-10)
+  expect_equal(nested$se, m2_std_beta$se, tolerance = 1e-8)
 })
 
 ## Hand calculation

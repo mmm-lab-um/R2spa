@@ -421,3 +421,67 @@ test_that("fs_indiv(): per-row values == augment_lav_predict() after reconciling
     expect_equal(symm_ind, exp_T, tolerance = 1e-8, ignore_attr = TRUE)
   }
 })
+
+# ============================================================================
+# 8. Row-reorder / subset detection (PLAN 18)
+# ============================================================================
+# The row-specific quantities of a get_fs() result (fs_pattern labels,
+# per-observation fsL/fsT) are positional: they do NOT follow the data
+# columns when the rows are reordered or subset. fs_indiv() must detect the
+# drift (via the carried fs_<v>_se columns, which move with the rows while
+# the pattern labels / per-block fsT do not) and fail loudly rather than
+# silently pairing a row with another observation's measurement quantities.
+
+test_that("fs_indiv(): a reordered FIML result errors with the row-order message", {
+  # fs_fiml has multiple observed patterns with DIFFERENT per-pattern SEs.
+  # Swapping two rows from different patterns moves each carried SE into the
+  # other's slot while the fs_pattern label vector and the per-pattern
+  # fsT/fsL attributes stay put -- the guard must catch the mismatch.
+  se <- unname(fs_fiml[["fs_visual_se"]])
+  # Deterministic: find two rows whose SEs actually differ.
+  i <- 1L
+  j <- which(round(se, 8L) != round(se[i], 8L))[1L]
+  expect_true(!is.na(j), label = "fixture must carry >1 distinct per-row SE")
+  perm <- seq_len(nrow(fs_fiml))
+  perm[c(i, j)] <- c(j, i)
+  fs_shuf <- fs_fiml[perm, , drop = FALSE]
+  # The carried SE column moved with the rows; the pattern labels did not.
+  expect_false(isTRUE(all.equal(
+    unname(fs_shuf[["fs_visual_se"]]), unname(fs_fiml[["fs_visual_se"]]),
+    tolerance = 0
+  )))
+  expect_error(
+    fs_indiv(fs_shuf),
+    "reordered or subset after scoring"
+  )
+})
+
+test_that("fs_indiv(): a randomly shuffled FIML result also errors", {
+  set.seed(4321)
+  n <- nrow(fs_fiml)
+  fs_shuf <- fs_fiml[sample(n), , drop = FALSE]
+  expect_error(
+    fs_indiv(fs_shuf),
+    "reordered or subset after scoring"
+  )
+})
+
+test_that("fs_indiv(): a row-subset (dropping rows) FIML result errors", {
+  # Subsetting drops rows but the fs_pattern label vector keeps its original
+  # length, so the resolved row->block map no longer matches the data rows.
+  keep <- seq_len(floor(nrow(fs_fiml) / 2))
+  fs_sub <- fs_fiml[keep, , drop = FALSE]
+  expect_error(
+    fs_indiv(fs_sub),
+    "reordered or subset after scoring"
+  )
+})
+
+test_that("fs_indiv(): an unmodified result passes the guard (no false positive)", {
+  # The fixture used throughout this file is a fresh get_fs() result; the
+  # carried SE columns agree with the per-block fsT, so the guard is silent
+  # and fs_indiv() succeeds.
+  expect_no_error(fs_indiv(fs_fiml))
+  expect_no_error(fs_indiv(fs_sg))
+  expect_no_error(fs_indiv(fs_mg))
+})

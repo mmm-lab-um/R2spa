@@ -92,8 +92,9 @@ standardizes within group and `grandStandardizedSolution()` pools across groups
 - **`fsT`** (with **`fsL`** and **`fsb`**) — the general form `get_fs()` returns
   as attributes (`attr(fs, "fsT")`, `attr(fs, "fsL")`, `attr(fs, "fsb")`).
   `fsT` is the score error *variance-covariance* (so it also carries correlated
-  errors and cross-loadings) and `fsL` the implied loading of each latent on the
-  score. Use this when scores are composite (several indicators per latent, or a
+   errors and cross-loadings) and `fsL` the implied loading of each score on the
+   latent (the score expressed as a linear function of the latent). Use this when
+   scores are composite (several indicators per latent, or a
   score loading on several latents), and note it is the only form that carries
   per-observation measurement properties, which the `mirt` (IRT) and `merMod` (mixed
   model) paths need because loadings and error variances vary by person / cluster (see the
@@ -121,9 +122,9 @@ as attributes on the returned data frame:
 | `fs_<name>_se` | that score's standard error — the measurement-error term `tspa()` corrects for |
 | `ev_fs_<name>` | the score's error variance |
 | `ecov_fs_<a>_fs_<b>` | error covariance between scores `a` and `b` (only from a shared multi-factor model) |
-| `<indicator>_by_fs_<name>` | model-implied loading — the mean of the indicator on the score |
+| `<latent>_by_fs_<name>` | model-implied loading — the loading of the score on the latent (each score's regression on each latent, in the score equation `score = fsb + fsL·η + error`; the same quantity as the `fsL` matrix, one column per latent–score pair) |
 | `attr(fs, "fsT")` | the score error variance-covariance (carries correlated errors and cross-loadings) |
-| `attr(fs, "fsL")` | the implied loading of each latent on the score |
+| `attr(fs, "fsL")` | the implied loading of each score on the latent (rows = scores, columns = latents; `fsL[score, latent]` is the coefficient of the latent in the score equation `score = fsb + fsL·η + error`) |
 | `attr(fs, "fsb")` | the scoring-equation intercept, one per score (named by the score, e.g. `fs_ind60`; `0` for a complete-data single-factor CFA, varying per row when the measurement quantities do) |
 
 The attributes are what `tspa_mx_model()` consumes, and `tspa(fsb = ...)` uses
@@ -131,6 +132,16 @@ The attributes are what `tspa_mx_model()` consumes, and `tspa(fsb = ...)` uses
 TRUE)` materializes the `fsb` values as `int_fs_<f>` columns, which is how the
 `tspa_mx_model()` examples wire up the score-intercept definition variables
 (`fsb = c(fs_ind60 = "int_fs_ind60", ...)`).
+
+> **Row safety.** The result is an ordinary data frame and the row-specific
+> quantities (the `fs_pattern` labels, per-row `fsL`/`fsT`, the `fs_<name>_se`
+> columns) are *positional* — they do not follow row subsetting or
+> reordering. Add a stable ID column *before* scoring if you need to join the
+> scores to external data, and score a subset by calling `get_fs()` on the
+> subset rather than subsetting a scored result. `fs_indiv()` and
+> `compute_fs_prod()` error if the rows appear to have been reordered or
+> subset after scoring, instead of silently using another observation's
+> measurement quantities.
 
 ## Mean (sum) scores
 
@@ -163,9 +174,11 @@ summary(tspa_mean_fit, standardized = TRUE)
 
 `method = "mean"` is for complete-data fits: it errors when stage 1 retains
 missing data (e.g. `missing = "fiml"`) and is not supported together with
-`corrected_fsT`, `vfsLT`, `reliability`, `prior_mean`, or `prior_cov`.
+`corrected_fsT`, `reliability`, `prior_mean`, or `prior_cov`. It *is*
+supported together with `vfsLT`, so `tspa(corrected_se = TRUE)` works with
+mean scores.
 
-## Single group, single factor
+## Single group, two separate single-factor measurement models
 
 ```r
 model <- ' 
@@ -175,7 +188,7 @@ model <- '
 
   # regressions
     dem60 ~ ind60
-'
+ '
 ```
 
 To call `tspa()`, a data frame of factor scores is needed for all latent variables. To get this data frame, apply `get_fs()` to all latent variables and specify model parameters as their respective definitions. Combine factor scores for all latent variables using `cbind()` so that it can be used in `tspa()` for model building.
@@ -310,7 +323,7 @@ head(fs_hs)  # with cross-loadings and correlated measurement errors
 
 To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = the regression relation, data = the combined factor score data frame, and `group` = the grouping column (here `"school"`). Each score's standard error is available in the column named `fs_[variable name]_se`. For example, the standard error of the multigroup variable visual is in column `fs_visual_se` of the `fs_hs` data frame. Because `fs_hs` comes from `get_fs()`, `tspa()` reads the per-group standard errors from those columns automatically, so the `se_fs` argument can be omitted (passing it explicitly as a data frame still works). The `unique()` function is handy for inspecting the per-group standard errors: for example, `unique(fs_hs$fs_visual_se)` shows the standard error of visual in each group.
 
-Function `standardizedsolution()` enables user to view a table of the standardized estimate, standard error, z score, p-value, and confidence interval bounds for each multigroup regression relation.
+Function `standardizedSolution()` enables user to view a table of the standardized estimate, standard error, z score, p-value, and confidence interval bounds for each multigroup regression relation.
 
 ```{r}
 # tspa model
@@ -319,7 +332,7 @@ tspa_fit <- tspa(model = "visual ~ speed",
                  group = "school"
                  # group.equal = "regressions"
                  )
-stdsol <- standardizedsolution(tspa_fit)
+ stdsol <- standardizedSolution(tspa_fit)
 subset(stdsol, subset = op == "~")
 ```
 
@@ -335,9 +348,13 @@ cat(attributes(tspa_fit)$tspaModel)
 - [`2S-PA with Random Effects`](multilevel.html) — stage 1 from an `lme4` mixed model, feeding empirical-Bayes random effects into 2S-PA.
 - [`Scoring Matrices: lavaan CFA and lme4`](scoring-matrices.html) — the per-observation scoring matrices `get_fs()` attaches, and the empirical-Bayes identity behind them.
 - [`Correction to Measurement Error`](correction-error.html) — the measurement-error correction factor and its effect on standard errors.
+- [`Corrected Standard Errors`](corrected-se.html) — the first-order (delta-method) SE correction, `tspa(corrected_se = TRUE)`.
+- [`2S-PA with Missing Data`](missing-data.html) — stage 1 with `missing = "fiml"` and per-pattern factor scores.
+- [`Product factor-score indicators (latent interactions)`](product-factor-scores.html) — `product = TRUE` / `compute_fs_prod()` for latent interactions.
 - [`EFA Scores`](efa-score.html) — stage 1 from an exploratory factor analysis (EFA) rather than a CFA.
 - [`Linear Growth Modeling with 2S-PA`](tspa-growth-vignette.html) — 2S-PA for longitudinal / growth-curve measurement models.
 - [`2S-PA with OpenMx and IRT (mirt)`](tspa-vignette-mx.html) — stage 2 via `tspa_mx_model()` (OpenMx), including the `mirt` (IRT) path.
+- [`Scoring Methods and SE Correction in 2S-PA: A Simulation Study`](sim-scoring-se.html) — a simulation comparison of scoring methods and SE correction.
 
 ## References
 

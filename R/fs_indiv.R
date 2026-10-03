@@ -20,6 +20,19 @@
 #' differ). For `merMod` models there is one row per cluster, each carrying
 #' that cluster's own `fsL`/`fsT`.
 #'
+#' @details
+#' **Row safety.** The row-specific attributes of the input [get_fs()]
+#' result (`fs_pattern` labels, per-row `fsL`/`fsT`) are positional and do
+#' not follow row subsetting or reordering (see the "Row safety" note in
+#' [get_fs()]). If the input rows appear to have been reordered or subset
+#' after scoring, `fs_indiv()` errors rather than silently pairing rows
+#' with another observation's measurement quantities.
+#'
+#' **Multi-group mirt.** A multi-group mirt result carries a literal
+#' `group` column but no `group_col` attribute, so the `group` column is
+#' dropped from the output (the trailing-group recovery that [tspa()]
+#' performs on such results is not replicated here).
+#'
 #' @param fs A factor-score object as returned by [get_fs()] (or
 #'        [get_fs_lavaan()]/[get_fs_lmer()]): a unified data frame, a named
 #'        list of per-group data frames (`format = "list"`), or a `merMod`
@@ -39,8 +52,9 @@
 #'        * the per-observation standard errors (`fs_<f>_se`; the square
 #'          root of the per-row `fsT` diagonal, `NA` where that entry is
 #'          negative or non-finite);
-#'        * the implied loadings of the latents on the factor scores
-#'          (`<latent_j>_by_fs_<f>`, `q^2` of them);
+#'        * the implied loadings of the factor scores on the latents
+#'          (`<latent_j>_by_fs_<f>`, `q^2` of them; the `fsL` matrix, one
+#'          column per latent--score pair);
 #'        * the error variances and error covariances of the factor scores
 #'          (`ev_fs_<f>`, `q` of them, and `ecov_fs_<a>_fs_<b>`, `q choose
 #'          2` of them), in the same lower-triangular order [get_fs()] uses;
@@ -53,7 +67,7 @@
 #'          results.
 #'
 #' @seealso
-#' - `vignette("Scoring Matrices: lavaan CFA and lme4", package = "R2spa")` for the scoring-matrix internals these per-row quantities come from.
+#' - `vignette("scoring-matrices", package = "R2spa")` for the scoring-matrix internals these per-row quantities come from.
 #'
 #' @export
 #' @examples
@@ -76,6 +90,12 @@ fs_indiv <- function(fs, include_intercept = FALSE, ...) {
   ref_L <- resolved$blocks[[1L]]$fsL
   q <- ncol(ref_T)
   has_int <- include_intercept && !is.null(resolved$blocks[[1L]]$fsb)
+
+  # Row-order guard (PLAN 18): fail fast if the data-frame rows were
+  # reordered or subset after scoring (the per-block quantities below would
+  # otherwise be assigned to the wrong observations).
+  se_nm <- fs_row_colnames(ref_L, ref_T)$se
+  check_fs_row_alignment(fs, resolved, se_nm)
 
   n <- resolved$n
   k_ld <- q * q
@@ -122,7 +142,6 @@ fs_indiv <- function(fs, include_intercept = FALSE, ...) {
   # fs_row_cols()).
   fs_names <- rownames(ref_L)   # "fs_<factor>" (merMod: "fs_u<k>" / legacy)
   nm <- fs_row_colnames(ref_L, ref_T)
-  se_nm <- nm$se
   ld_nm <- nm$ld
   ev_nm <- nm$ev
   int_nm <- if (has_int) paste0("int_", fs_names) else character(0)
@@ -159,8 +178,8 @@ fs_indiv <- function(fs, include_intercept = FALSE, ...) {
 # Returns an n x K numeric matrix with K column blocks, all computed from
 # the (pattern-level) fsL/fsT/fsb and repeated for the `nrow(fs)` rows:
 #   1. se    q columns:            sqrt_or_na(diag(fsT))
-#   2. lds   q^2 columns:          c(fsL) (column-major: per latent,
-#                                    loadings of that latent on each score)
+#   2. lds   q^2 columns:          c(fsL) (column-major: per latent [column],
+#                                    the loading of each score [row] on it)
 #   3. evs   q*(q+1)/2 columns:    fsT[i, j] in i-outer / j<=i-inner order
 #                                    (row-major lower triangle, the order
 #                                    get_fs() columns are named in)
@@ -234,6 +253,80 @@ fs_row_colnames <- function(fsL, fsT) {
     }
   }
   list(se = se_nm, ld = ld_nm, ev = ev_nm)
+}
+
+# Row-order guard (PLAN 18): the row-specific attributes of a get_fs()
+# result (fs_pattern labels, per-row fsL/fsT) are positional. Subsetting
+# or reordering the data-frame rows decouples them from the carried data
+# columns, so the per-block quantities computed downstream would be
+# assigned to the wrong observations. The carried `fs_<v>_se` columns were
+# emitted by fs_row_cols() from each row's own block, so comparing them
+# against the block-derived SE values detects any such drift. Skipped when
+# the input carries no `_se` columns (hand-rolled fixtures) or the
+# expected names cannot be derived, to avoid false positives.
+check_fs_row_alignment <- function(fs, resolved, se_nm) {
+  n <- resolved$n
+  # A row-subsetted data frame keeps its full-length fs_pattern labels, so
+  # the resolved row -> block map no longer matches the data rows.
+  if (length(resolved$pattern_idx) != n) {
+    stop(fs_row_alignment_message(), call. = FALSE)
+  }
+  if (length(se_nm) == 0L) {
+    return(invisible(NULL))
+  }
+  se_carried <- fs_se_carried(fs, se_nm)
+  if (is.null(se_carried)) {
+    return(invisible(NULL))
+  }
+  rows_by_block <- split(
+    seq_len(n),
+    factor(resolved$pattern_idx, levels = seq_along(resolved$blocks))
+  )
+  for (b in seq_along(resolved$blocks)) {
+    rows_b <- rows_by_block[[b]]
+    if (length(rows_b) == 0L) {
+      next
+    }
+    exp_se <- sqrt_or_na(diag(resolved$blocks[[b]]$fsT))
+    for (j in seq_along(se_nm)) {
+      x <- se_carried[rows_b, j]
+      y <- exp_se[j]
+      ok <- is.na(x) == is.na(y) &
+        (is.na(x) | abs(x - y) <= 1e-8 * max(1, abs(y)))
+      if (!all(ok)) {
+        stop(fs_row_alignment_message(), call. = FALSE)
+      }
+    }
+  }
+  invisible(NULL)
+}
+
+# The shared actionable message for a misaligned score result.
+fs_row_alignment_message <- function() {
+  paste0(
+    "the row-specific attributes of this score result ",
+    "(fs_pattern / per-row fsL/fsT) do not match the data ",
+    "columns -- the rows appear to have been reordered or ",
+    "subset after scoring. Keep the original row order, or ",
+    "re-score the subset with get_fs() before calling ",
+    "fs_indiv()/compute_fs_prod()."
+  )
+}
+
+# The input's carried per-row SE values as a numeric matrix with one
+# column per `se_nm` entry (row order = the resolved rows), or NULL when
+# any of the columns is absent (hand-rolled input: skip the check).
+fs_se_carried <- function(fs, se_nm) {
+  if (is.data.frame(fs)) {
+    if (!all(se_nm %in% names(fs))) {
+      return(NULL)
+    }
+    return(as.matrix(fs[, se_nm, drop = FALSE]))
+  }
+  if (!all(vapply(fs, function(df) all(se_nm %in% names(df)), logical(1)))) {
+    return(NULL)
+  }
+  do.call(rbind, lapply(fs, function(df) as.matrix(df[, se_nm, drop = FALSE])))
 }
 
 # Resolve a get_fs() result into (a) the score data frame, (b) one

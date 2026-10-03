@@ -28,8 +28,21 @@
 #' uncertainty affects the group means pooled into the grand covariance).
 #'
 #' @param object An object of class lavaan.
-#' @param model_list A list of string variable describing the structural path
-#'                   model, in \code{lavaan} syntax.
+#' @param model_list A named list of the model's estimated block matrices
+#'                   (blocks \code{lambda}, \code{theta}, \code{psi},
+#'                   \code{beta}, \code{nu}, \code{alpha}). The natural layout
+#'                   is the flat one returned by \code{lavaan::lavTech(fit,
+#'                   "est")}, where a multigroup fit repeats the block names
+#'                   once per group (in group order). For a single-group fit
+#'                   \code{lavInspect(fit, "est")} and \code{lavTech(fit,
+#'                   "est")} coincide; for a multigroup fit
+#'                   \code{lavInspect(fit, "est")} instead nests the blocks
+#'                   under each group label, and that nested layout is accepted
+#'                   too (it is flattened to the group-ordered layout
+#'                   automatically). Defaults to the \code{object}'s own
+#'                   estimates; supply a different list to standardize a
+#'                   different set of estimates on the object's parameter
+#'                   positions.
 #' @param se A Boolean variable. If TRUE, standard errors for the grand
 #'                   standardized parameters will be computed.
 #' @param acov_par An asymptotic variance-covariance matrix for a fitted
@@ -51,7 +64,7 @@
 #' @importFrom lavaan vcov lav_func_jacobian_complex
 #'
 #' @seealso
-#' - `vignette("Grand Standardized Coefficients", package = "R2spa")` for the grand-standardization workflow.
+#' - `vignette("gr-std-coef", package = "R2spa")` for the grand-standardization workflow.
 #'
 #' @export
 #'
@@ -114,9 +127,33 @@
 
 
 grand_standardized_solution <- function(object, model_list = NULL,
-                                      se = TRUE, acov_par = NULL,
-                                      free_list = NULL, level = .95) {
-  if (is.null(model_list)) model_list <- tsp_model_matrices(object)
+                                       se = TRUE, acov_par = NULL,
+                                       free_list = NULL, level = .95) {
+  if (is.null(model_list)) {
+    model_list <- tsp_model_matrices(object)
+  } else {
+    # Normalize a nested (per-group) lavInspect layout to the flat layout the
+    # implementation consumes (a single-group fit is already flat). The result
+    # must be a named list of block matrices (at least 'beta' and 'psi';
+    # multigroup repeats the block names once per group). Anything else (e.g.
+    # a lavaan syntax string) fails cryptically deep in the beta algebra, so
+    # fail fast with an actionable message.
+    model_list <- normalize_model_list(model_list)
+    if (!is.list(model_list) ||
+        is.null(names(model_list)) ||
+        !all(vapply(model_list, is.matrix, logical(1))) ||
+        !any(names(model_list) == "beta") ||
+        !any(names(model_list) == "psi")) {
+      stop(
+        "'model_list' must be a named list of the model's estimated block ",
+        "matrices -- the flat lavTech(fit, 'est') layout, or the nested-by-",
+        "group lavInspect(fit, 'est') layout for a multigroup fit (at least ",
+        "'beta' and 'psi'; a multigroup fit repeats the block names once per ",
+        "group) -- not a model string. See ?grand_standardized_solution.",
+        call. = FALSE
+      )
+    }
+  }
   ns <- tsp_nobs(object)
   if (length(ns) == 1) ns <- NULL
   if (is.null(ns)) {
@@ -228,6 +265,32 @@ grand_standardized_solution <- function(object, model_list = NULL,
   }
   class(out) <- c("lavaan.data.frame", "data.frame")
   out
+}
+
+# A multigroup lavInspect(fit, "est") nests the block matrices under each
+# group label; grand_standardized_solution() consumes the flat layout
+# (lavTech(fit, "est")), where the block names repeat once per group in group
+# order. Normalize a nested layout to the flat one. A single-group fit is
+# already flat, so this is a no-op there; a non-nested (already-flat) list
+# passes through unchanged.
+normalize_model_list <- function(model_list) {
+  nested <- is.list(model_list) && !is.null(names(model_list)) &&
+    length(model_list) > 0L &&
+    all(vapply(model_list,
+               function(e) is.list(e) && !is.matrix(e) &&
+                 length(e) > 0L &&
+                 all(vapply(e, is.matrix, logical(1))),
+               logical(1)))
+  if (!nested) return(model_list)
+  # Flatten by pulling each group's blocks out through the [[ accessor (which
+  # returns the plain, unprefixed block names) and concatenating in group
+  # order. c() on the lavaan.list itself is avoided: it (and lapply/unlist)
+  # carry the group-prefixed internal names instead of the flat repeated ones.
+  flat <- list()
+  for (g in seq_along(model_list)) {
+    flat <- c(flat, as.list(unclass(model_list[[g]])))
+  }
+  flat
 }
 
 

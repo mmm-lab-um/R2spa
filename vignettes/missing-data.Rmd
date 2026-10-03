@@ -2,9 +2,11 @@
 title: "2S-PA with Missing Data"
 author: "Mark Lai"
 date: "`r Sys.Date()`"
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    toc: true
 vignette: >
-  %\VignetteIndexEntry{missing-data}
+  %\VignetteIndexEntry{2S-PA with Missing Data}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -31,10 +33,22 @@ definition variables, and its raw-data FIML evaluation can also handle rows
 whose scores are dropped as `NA`. The stage-2 fits in this vignette therefore
 use `tspa_mx_model()`.
 
+> **Optional dependencies.** The exact stage-2 route uses `OpenMx` (a
+> `Suggests`); the `tspa_mx_model()` chunks are skipped when `OpenMx` is not
+> installed.
+
 For illustration, we create two missing data patterns on
 `PoliticalDemocracy`: (1) MCAR missingness in a single item (`x1`, about 30%
 of cases); (2) block missingness, where the last 10 cases are missing all
 four `dem65` indicators — a factor with no observed indicator at all.
+
+One consequence of scoring on observed patterns: the sampling-error SE paths
+that require the *full* observed-indicator set — `get_fs(vfsLT = TRUE)`,
+`get_fs(corrected_fsT = TRUE)`, and `get_fs(reliability = TRUE)` — are not
+available when the data contain missing values. `get_fs()` errors rather than
+silently returning a per-pattern quantity that those paths cannot consume.
+Use the per-row values through the stage-2 routes shown below instead
+(`tspa(reduce = )` pooling, or `tspa_mx_model()` definition variables).
 
 ## Single-Factor Model
 
@@ -156,6 +170,29 @@ that case's value, so the stage-2 correction is per-row rather than pooled.
 `fsb` does the same for the per-row measurement intercepts (the `int_*`
 columns; a FIML fit estimates a mean structure, so the intercepts vary with
 the missing-data pattern).
+
+### Pooled `tspa()` route
+
+The exact OpenMx route above keeps every row (including the 10 uncorrectable
+`dem65` rows) through raw-data FIML. A lighter route uses the stage-2
+`tspa()` entrypoint directly: it pools the per-pattern measurement
+quantities (`fsT`, `fsL`) with `reduce = "mean"`, fixes them in the stage-2
+model, and fits a `lavaan::sem()` on the factor scores. As before, the 10
+uncorrectable `dem65` scores are dropped first — in the `lavaan` route those
+rows are then excluded from the structural fit (listwise), whereas the OpenMx
+route retains them via FIML. The pooled estimate agrees with both the exact
+OpenMx route and the joint model at about `0.913`.
+
+```{r}
+# Pooled tspa() route: pool per-pattern fsT/fsL, fix them, fit on scores
+fs <- get_fs(fit2)
+fs[66:75, "fs_dem65"] <- NA  # drop the uncorrectable dem65 scores
+tf <- tspa("dem65 ~ dem60; dem65 + dem60 ~ 1", data = fs, reduce = "mean")
+coef(tf)["dem65~dem60"]
+# Pooled measurement quantities (fixed in the stage-2 model):
+attr(tf, "tspa_args")$fsT
+attr(tf, "tspa_args")$fsL
+```
 
 ### Bartlett scores
 

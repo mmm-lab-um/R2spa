@@ -130,8 +130,8 @@
 #'   [tspa()] route does not need `OpenMx`.
 #'
 #' @seealso
-#' - `vignette("2S-PA with OpenMx and IRT (mirt)", package = "R2spa")` for the OpenMx route and IRT stage 1.
-#' - `vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")` for the lavaan route.
+#' - `vignette("tspa-vignette-mx", package = "R2spa")` for the OpenMx route and IRT stage 1.
+#' - `vignette("R2spa", package = "R2spa")` for the lavaan route.
 #'
 #' @export
 #'
@@ -534,9 +534,12 @@ tspa_mx_resolve_se_fs <- function(se_fs, data) {
       stop("'se_fs' definition-variable column '", col,
            "' must be numeric.", call. = FALSE)
     }
-    if (anyNA(data[[col]])) {
+    # Finiteness + non-negativity (not just NA): Inf/NaN would corrupt the
+    # squared definition variable, and a negative SE would square into a
+    # positive (wrong) error variance.
+    if (any(!is.finite(data[[col]]) | data[[col]] < 0)) {
       stop("'se_fs' definition-variable column '", col,
-           "' contains NA; definition variables must be complete for every row.",
+           "' must be finite and non-negative for every row.",
            call. = FALSE)
     }
     # A working column name unique against every existing and already-appended
@@ -571,9 +574,11 @@ tspa_mx_spec <- function(se_fs, fsL, fsT, fsb) {
     Tc <- matrix(NA_character_, length(V), length(V), dimnames = list(S, S))
     if (is.numeric(se_fs)) {
       se <- as.numeric(se_fs)
-      if (anyNA(se)) {
-        stop("'se_fs' must not contain NA: every latent needs a known ",
-             "factor-score SE.", call. = FALSE)
+      # Finite and non-negative: NA/Inf/NaN corrupt the fixed variance term,
+      # and a negative SE squares into a positive (wrong) error variance.
+      if (any(!is.finite(se) | se < 0)) {
+        stop("'se_fs' standard errors must be finite and non-negative: ",
+             "every latent needs a known factor-score SE.", call. = FALSE)
       }
       diag(Tv) <- se^2
     } else if (is.character(se_fs)) {

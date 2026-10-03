@@ -244,15 +244,15 @@ test_that("FIML: product SE/ld are pattern-resolved and NA on fully-missing rows
   set.seed(1334)
   dd <- pd_data
   dd$x1[!rbinom(nrow(dd), 1, 0.4)] <- NA
-  # One fully-missing row (no scorable pattern), placed in the middle:
-  # assemble_fs_blocks() sizes the output by max(case_idx), so a
-  # fully-missing row at the END of the data is silently dropped by
-  # get_fs() (reported as a package bug); a middle row is kept with
-  # NA score/label.
+  # Fully-missing rows (no scorable pattern) placed in the middle and at the
+  # END of the data: get_fs() keeps one output row per input row, so both
+  # are preserved with NA score/label (PLAN 18 row preservation).
   na_row <- as.data.frame(lapply(pd_data, function(col) NA))
-  dd <- rbind(dd[1:30, , drop = FALSE], na_row, dd[31:nrow(dd), , drop = FALSE])
+  dd <- rbind(dd[1:30, , drop = FALSE], na_row, dd[31:nrow(dd), , drop = FALSE],
+              na_row)
   fit_m <- suppressWarnings(cfa(pd_model, data = dd, missing = "fiml"))
   fs <- get_fs(fit_m, product = "ind60:dem60")
+  expect_equal(nrow(fs), nrow(dd))
 
   # Per-pattern blocks: >= 2 patterns
   T_pats <- attr(fs, "fsT")[[1]]
@@ -283,12 +283,37 @@ test_that("FIML: product SE/ld are pattern-resolved and NA on fully-missing rows
                  info = paste("ld for pattern", pl))
   }
 
-  # The fully-missing row: NA in all three product columns
+  # The fully-missing rows (middle + end): NA in all three product columns
   na_rows <- which(is.na(labels))
-  expect_gte(length(na_rows), 1L)
+  expect_equal(na_rows, c(31L, nrow(dd)))
   expect_true(all(is.na(p_col[na_rows])))
   expect_true(all(is.na(se_col[na_rows])))
   expect_true(all(is.na(ld_col[na_rows])))
+})
+
+test_that("row-order guard: a shuffled FIML result errors; the unmodified result passes", {
+  # Two-factor FIML fit with multiple observed patterns (x2 partially
+  # missing), so the per-row SEs vary by pattern.
+  set.seed(1335)
+  dd <- pd_data
+  dd$x2[!rbinom(nrow(dd), 1, 0.5)] <- NA
+  fit_m <- suppressWarnings(cfa(pd_model, data = dd, missing = "fiml"))
+  fs <- get_fs(fit_m)
+  se <- unname(fs$fs_ind60_se)
+  expect_gt(length(unique(round(se, 8))), 1L)  # genuinely multiple patterns
+  # The unmodified result passes the guard and computes the product columns.
+  expect_no_error(compute_fs_prod(fs, product = "ind60:dem60"))
+  # A shuffle moves each carried SE into a different pattern's slot while
+  # the fs_pattern labels and per-pattern fsT/fsL stay put -> the guard
+  # errors instead of assigning another observation's SE to the row.
+  n <- nrow(fs)
+  set.seed(4321)
+  fs_shuf <- fs[sample(n), , drop = FALSE]
+  expect_false(isTRUE(all.equal(
+    unname(fs_shuf$fs_ind60_se), se, tolerance = 0
+  )))
+  expect_error(compute_fs_prod(fs_shuf, product = "ind60:dem60"),
+               "reordered or subset after scoring")
 })
 
 # ---------------------------------------------------------------------------

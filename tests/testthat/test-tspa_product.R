@@ -292,6 +292,12 @@ test_that("mf: a non-positive implied product error variance (se_P^2) is an erro
   # the unified-SG fsT attribute is a length-1 list named ""
   attr(fs, "fsT") <- setNames(list(T0), "")
   attr(fs, "psi") <- psi
+  # keep the carried per-row SE columns consistent with the crafted fsT (the
+  # row-order guard in compute_fs_prod() rejects a score result whose _se
+  # columns disagree with the block fsT); the degenerate se_P^2 check that
+  # follows reads fsT/psi, not the _se columns.
+  fs[["fs_x_se"]] <- sqrt(0.1)
+  fs[["fs_m_se"]] <- sqrt(0.1)
   expect_error(
     suppressWarnings(tspa("y ~ x + m + x:m", data = fs, product = TRUE)),
     "implied product error variance"

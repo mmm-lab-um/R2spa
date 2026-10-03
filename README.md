@@ -27,66 +27,83 @@ GitHub with:
 remotes::install_github("mmm-lab-um/R2spa")
 ```
 
+## Documentation
+
+The package website, <https://mmm-lab-um.github.io/R2spa/>, hosts the
+full reference and a series of worked articles. Start with the
+[Two-Stage Path Analysis (2S-PA) Model
+Examples](https://mmm-lab-um.github.io/R2spa/articles/R2spa.html)
+getting-started article.
+
 ## Example
+
+The canonical workflow scores each latent from one multi-factor
+measurement model (`get_fs(..., local = TRUE)`), then fits the
+structural path with `tspa()`, which reads each score’s standard error
+from the `fs_<name>_se` columns automatically (no hard-coded `se_fs`
+needed):
 
 ``` r
 library(lavaan)
 library(R2spa)
 
-# Joint model
-model <- '
-  # latent variable definitions
-    ind60 =~ x1 + x2 + x3
-    dem60 =~ y1 + y2 + y3 + y4
-
-  # regression
-    dem60 ~ ind60
+# One multi-factor measurement model
+meas_model <- '
+  ind60 =~ x1 + x2 + x3
+  dem60 =~ y1 + y2 + y3 + y4
+  dem65 =~ y5 + y6 + y7 + y8
 '
 ```
 
 ``` r
-# 2S-PA
-# Stage 1: Get factor scores and standard errors for each latent construct
-fs_dat_ind60 <- get_fs(object = PoliticalDemocracy,
-                       model = "ind60 =~ x1 + x2 + x3")
-fs_dat_dem60 <- get_fs(object = PoliticalDemocracy,
-                       model = "dem60 =~ y1 + y2 + y3 + y4")
-fs_dat <- cbind(fs_dat_ind60, fs_dat_dem60)
-
-# get_fs() gives a dataframe with factor scores and standard errors
+# Stage 1: score each latent from its own measurement model (local = TRUE)
+fs_dat <- get_fs(PoliticalDemocracy, model = meas_model, local = TRUE)
+# get_fs() gives a data frame of factor scores and their standard errors
 head(fs_dat)
-#>     fs_ind60 fs_ind60_se ind60_by_fs_ind60 ev_fs_ind60   fs_dem60 fs_dem60_se
-#> 1 -0.5261683   0.1213615         0.9657673  0.01472862 -2.7487224   0.6756472
-#> 2  0.1436527   0.1213615         0.9657673  0.01472862 -3.0360803   0.6756472
-#> 3  0.7143559   0.1213615         0.9657673  0.01472862  2.6718589   0.6756472
-#> 4  1.2399257   0.1213615         0.9657673  0.01472862  2.9936997   0.6756472
-#> 5  0.8319080   0.1213615         0.9657673  0.01472862  1.9242932   0.6756472
-#> 6  0.2123845   0.1213615         0.9657673  0.01472862  0.9922798   0.6756472
-#>   dem60_by_fs_dem60 ev_fs_dem60
-#> 1         0.8868049   0.4564991
-#> 2         0.8868049   0.4564991
-#> 3         0.8868049   0.4564991
-#> 4         0.8868049   0.4564991
-#> 5         0.8868049   0.4564991
-#> 6         0.8868049   0.4564991
+#>     fs_ind60   fs_dem60  fs_dem65 fs_ind60_se fs_dem60_se fs_dem65_se
+#> 1 -0.5261683 -2.7487224 -1.371719   0.1213615   0.6756472   0.5724405
+#> 2  0.1436527 -3.0360803 -0.950851   0.1213615   0.6756472   0.5724405
+#> 3  0.7143559  2.6718589  2.738012   0.1213615   0.6756472   0.5724405
+#> 4  1.2399257  2.9936997  1.785091   0.1213615   0.6756472   0.5724405
+#> 5  0.8319080  1.9242932  1.544704   0.1213615   0.6756472   0.5724405
+#> 6  0.2123845  0.9922798 -1.050841   0.1213615   0.6756472   0.5724405
+#>   ind60_by_fs_ind60 ind60_by_fs_dem60 ind60_by_fs_dem65 dem60_by_fs_ind60
+#> 1         0.9657673                 0                 0                 0
+#> 2         0.9657673                 0                 0                 0
+#> 3         0.9657673                 0                 0                 0
+#> 4         0.9657673                 0                 0                 0
+#> 5         0.9657673                 0                 0                 0
+#> 6         0.9657673                 0                 0                 0
+#>   dem60_by_fs_dem60 dem60_by_fs_dem65 dem65_by_fs_ind60 dem65_by_fs_dem60
+#> 1         0.8868049                 0                 0                 0
+#> 2         0.8868049                 0                 0                 0
+#> 3         0.8868049                 0                 0                 0
+#> 4         0.8868049                 0                 0                 0
+#> 5         0.8868049                 0                 0                 0
+#> 6         0.8868049                 0                 0                 0
+#>   dem65_by_fs_dem65 ev_fs_ind60 ecov_fs_dem60_fs_ind60 ev_fs_dem60
+#> 1         0.8998252  0.01472862                      0   0.4564991
+#> 2         0.8998252  0.01472862                      0   0.4564991
+#> 3         0.8998252  0.01472862                      0   0.4564991
+#> 4         0.8998252  0.01472862                      0   0.4564991
+#> 5         0.8998252  0.01472862                      0   0.4564991
+#> 6         0.8998252  0.01472862                      0   0.4564991
+#>   ecov_fs_dem65_fs_ind60 ecov_fs_dem65_fs_dem60 ev_fs_dem65
+#> 1                      0                      0   0.3276882
+#> 2                      0                      0   0.3276882
+#> 3                      0                      0   0.3276882
+#> 4                      0                      0   0.3276882
+#> 5                      0                      0   0.3276882
+#> 6                      0                      0   0.3276882
 ```
 
 ``` r
-# Stage 2: Perform 2S-PA
+# Stage 2: fit the structural path; se_fs is read from the fs_*_se columns
 tspa_fit <- tspa(
-  model = "dem60 ~ ind60",
-  data = fs_dat,
-  se_fs = list(ind60 = 0.1213615, dem60 = 0.6756472)
+  model = "dem60 ~ ind60
+          dem65 ~ ind60 + dem60",
+  data = fs_dat
 )
-parameterestimates(tspa_fit)
-#>        lhs op      rhs   est    se     z pvalue ci.lower ci.upper
-#> 1    ind60 =~ fs_ind60 1.000 0.000    NA     NA    1.000    1.000
-#> 2    dem60 =~ fs_dem60 1.000 0.000    NA     NA    1.000    1.000
-#> 3 fs_ind60 ~~ fs_ind60 0.015 0.000    NA     NA    0.015    0.015
-#> 4 fs_dem60 ~~ fs_dem60 0.456 0.000    NA     NA    0.456    0.456
-#> 5    dem60  ~    ind60 1.329 0.332 4.000      0    0.678    1.981
-#> 6    ind60 ~~    ind60 0.416 0.070 5.914      0    0.278    0.553
-#> 7    dem60 ~~    dem60 2.842 0.543 5.235      0    1.778    3.906
 ```
 
 Because the latent constructs have no intrinsic scale, the
@@ -97,11 +114,20 @@ interest (see the *Two-Stage Path Analysis* vignette,
 ``` r
 standardizedSolution(tspa_fit) |>
   subset(op %in% c("~", "~~") & !grepl("^fs_", lhs))
-#>     lhs op   rhs est.std    se     z pvalue ci.lower ci.upper
-#> 5 dem60  ~ ind60   0.453 0.101 4.480      0    0.255    0.651
-#> 6 ind60 ~~ ind60   1.000 0.000    NA     NA    1.000    1.000
-#> 7 dem60 ~~ dem60   0.795 0.092 8.668      0    0.615    0.974
+#>      lhs op   rhs est.std    se      z pvalue ci.lower ci.upper
+#> 19 dem60  ~ ind60   0.453 0.101  4.480  0.000    0.255    0.651
+#> 20 dem65  ~ ind60   0.129 0.073  1.771  0.076   -0.014    0.272
+#> 21 dem65  ~ dem60   0.898 0.049 18.314  0.000    0.802    0.994
+#> 22 ind60 ~~ ind60   1.000 0.000     NA     NA    1.000    1.000
+#> 23 dem60 ~~ dem60   0.795 0.092  8.668  0.000    0.615    0.974
+#> 24 dem65 ~~ dem65   0.071 0.047  1.514  0.130   -0.021    0.164
 ```
+
+> **Optional dependencies.** The exact (non-pooled) stage-2 route,
+> `tspa_mx_model()`, requires `OpenMx`, and the item-response-theory
+> (`mirt`) scoring path requires `mirt` (both `Suggests`); see the
+> *2S-PA with OpenMx and IRT (mirt)* vignette,
+> `vignette("tspa-vignette-mx")`.
 
 This package is based upon work supported by the National Science
 Foundation under Grant No. 2141790.

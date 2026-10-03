@@ -93,9 +93,10 @@ The maximum deviation from the reported `fs_f` column is at the level of
 machine precision. The same `S` also generates the companion attributes,
 so all of them are redundant views of the same linear operator:
 
-- `fsL = S %*% Lambda`: implied loadings of the items on the factor
-  scores (i.e. the factor score's regression on the items, in loading
-  form);
+- `fsL = S %*% Lambda`: implied loadings of the factor scores on the
+  latent variables (rows = score names, columns = latent names; i.e. each
+  score's regression on each latent, the score equation
+  `score = fsb + fsL·η + error`, in loading form);
 - `fsb = alpha - fsL %*% alpha`: implied intercepts of the factor
   scores;
 - `fsT = S %*% Theta %*% t(S)`: error variance-covariance of the

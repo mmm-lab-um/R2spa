@@ -203,7 +203,7 @@ test_that("tspa(): merMod per-cluster fsT/fsL -- pooled to the unweighted cluste
 # 3. Single-factor FIML: se_fs pooling of the per-row fs_<v>_se columns
 # ============================================================================
 
-test_that("tspa(): single-factor FIML -- se_fs is pooled per group from the per-row fs_<v>_se columns", {
+test_that("tspa(): single-factor FIML -- an explicit se_fs is used as-is (not replaced by the pooled per-row SEs)", {
   d <- HolzingerSwineford1939
   set.seed(4242)
   d$x2[!rbinom(nrow(d), 1L, 0.5)] <- NA
@@ -212,26 +212,65 @@ test_that("tspa(): single-factor FIML -- se_fs is pooled per group from the per-
   )
   fs_sf <- get_fs(fit_sf)
   expect_equal(attr(fs_sf, "group_col"), "school")
-  # the per-row SE genuinely varies within every group (the FIML signal)
+  # the per-row SE genuinely varies within every group (the FIML signal
+  # that would have triggered the derived-path pooling)
   se_col <- fs_sf[["fs_visual_se"]]
   varied <- vapply(split(se_col, fs_sf$school),
                    function(x) length(unique(x)) > 1L, logical(1))
   expect_true(all(varied))
 
+  # An explicit se_fs is used as-is: the 1-row value applies to every
+  # group (the complete-data single-row convention), so the rendered model
+  # is the plain 0.35 render, not the per-group pooled values.
   fit <- tspa("", data = fs_sf, se_fs = c(visual = 0.35), group = "school")
-  # effective per-group SE == mean(fs_visual_se, na.rm = TRUE) within group
-  gorder <- as.character(unique(fs_sf$school))
-  se_ref <- data.frame(
-    visual = vapply(gorder, function(g) {
-      mean(se_col[fs_sf$school == g], na.rm = TRUE)
-    }, numeric(1L))
-  )
-  rownames(se_ref) <- gorder
-  # the attached model string is byte-identical to the legacy render of the
-  # hand-computed per-group SEs
   expect_equal(attr(fit, "tspaModel"),
-               R2spa:::tspa_render(R2spa:::tspa_schema_sf("", se_ref),
+               R2spa:::tspa_render(R2spa:::tspa_schema_sf("",
+                                   data.frame(visual = 0.35)),
                                    style = "sf"))
+})
+
+test_that("tspa(): single-factor FIML -- se_fs omitted keeps the derived (pooled) behavior", {
+  d <- HolzingerSwineford1939
+  set.seed(4242)
+  d$x2[!rbinom(nrow(d), 1L, 0.5)] <- NA
+  fit_sf <- suppressWarnings(
+    cfa("visual =~ x1 + x2 + x3", data = d, group = "school", missing = "fiml")
+  )
+  fs_sf <- get_fs(fit_sf)
+  # With se_fs omitted the multi-factor derivation fires (the result carries
+  # fsT/fsL attributes): the per-pattern fsT/fsL are pooled to a single
+  # representative matrix per group (case-count-weighted per-row mean), and
+  # the rendered model is the mf render of those pooled values.
+  Tpat <- attr(fs_sf, "fsT")
+  Lpat <- attr(fs_sf, "fsL")
+  Bpat <- attr(fs_sf, "fsb")
+  fit <- tspa("", data = fs_sf, group = "school")
+  gorder <- as.character(unique(fs_sf$school))
+  expect_equal(names(attr(fit, "fsT")), gorder)
+  # Per-group case-count-weighted mean of the per-pattern intercepts.
+  b_pooled_g <- function(g) {
+    lab_g <- attr(fs_sf, "fs_pattern")[[g]]$label
+    b_g <- Bpat[[g]]
+    setNames(vapply(seq_along(b_g), function(i) {
+      sum(table(factor(lab_g, levels = names(b_g))) * b_g[[i]]) /
+        sum(!is.na(lab_g))
+    }, numeric(1L)), names(b_g[[1L]]))
+  }
+  B_pooled <- setNames(lapply(gorder, b_pooled_g), gorder)
+  for (g in gorder) {
+    lab_g <- attr(fs_sf, "fs_pattern")[[g]]$label
+    ref_g <- pat_weighted_mean(Tpat[[g]], Lpat[[g]], lab_g)
+    expect_equal(attr(fit, "fsT")[[g]], ref_g$fsT, tolerance = 1e-8,
+                 ignore_attr = TRUE, label = paste("pooled fsT for", g))
+    expect_equal(attr(fit, "fsL")[[g]], ref_g$fsL, tolerance = 1e-8,
+                 ignore_attr = TRUE, label = paste("pooled fsL for", g))
+  }
+  # byte-identical to the hand render of the pooled per-group values
+  expect_equal(attr(fit, "tspaModel"),
+               R2spa:::tspa_render(
+                 R2spa:::tspa_schema_mf("", attr(fit, "fsT"),
+                                        attr(fit, "fsL"), B_pooled),
+                 style = "mf"))
 })
 
 test_that("tspa(): single-factor FIML from a list-of-frames result -- the group= argument finds the group column", {
@@ -518,7 +557,213 @@ test_that("tspa(): per-unit fsT/fsL with a non-get_fs data frame errors informat
 })
 
 # ============================================================================
-# 8. mirt per-obs MULTI-FACTOR -> tspa() is pooled (SG + MG) (PLAN 11)
+# 8. Explicit measurement inputs always win (PLAN 18)
+# ============================================================================
+
+test_that("tspa(): an explicit fsb wins over the data's fsb attribute", {
+  m2f <- "ind60 =~ x1 + x2 + x3
+          dem60 =~ y1 + y2 + y3 + y4"
+  fs2f <- get_fs(PoliticalDemocracy, model = m2f, std.lv = TRUE)
+  # the data's own fsb attribute is zero (std.lv regression scores)
+  expect_equal(unname(unlist(attr(fs2f, "fsb"))), c(0, 0))
+  fit <- suppressWarnings(
+    tspa("dem60 ~ ind60", data = fs2f,
+         fsT = attr(fs2f, "fsT"), fsL = attr(fs2f, "fsL"),
+         fsb = c(fs_ind60 = 2, fs_dem60 = 3))
+  )
+  # the supplied intercepts (not the attribute's zeros) are recorded ...
+  expect_equal(attr(fit, "tspa_args")$fsb, c(fs_ind60 = 2, fs_dem60 = 3))
+  # ... and carried into the rendered stage-2 model
+  model_txt <- attr(fit, "tspaModel")
+  expect_match(model_txt, "fs_ind60 ~ 2 \\* 1", fixed = FALSE)
+  expect_match(model_txt, "fs_dem60 ~ 3 \\* 1", fixed = FALSE)
+  # ...and the explicit-fsb fit differs from the derived (attribute-fsb) fit
+  fit_d <- suppressWarnings(tspa("dem60 ~ ind60", data = fs2f))
+  expect_false(identical(attr(fit, "tspaModel"), attr(fit_d, "tspaModel")))
+})
+
+test_that("tspa(): a constant explicit fsb is broadcast over per-unit (FIML) data", {
+  # A constant (flat) fsb on per-unit (multi-pattern) data must be broadcast to
+  # every pattern/group, not misread as a per-pattern intercept list (which
+  # corrupted the values at two patterns and errored "subscript out of bounds"
+  # with more; and was silently discarded for a multigroup list). Auto-derived
+  # fsT/fsL are used here (no explicit fsT/fsL) so the original
+  # auto-derivation path is exercised.
+  # -- single-group FIML (multiple observed patterns) --
+  n_pat <- length(attr(fs_fiml_2f_sg, "fsT")[[1L]])
+  expect_true(n_pat > 1L, label = "fixture must carry >1 observed pattern")
+  fit_sg <- suppressWarnings(
+    tspa("visual ~ speed", data = fs_fiml_2f_sg,
+         fsb = c(fs_visual = 2, fs_speed = 3))
+  )
+  expect_equal(attr(fit_sg, "tspa_args")$fsb, c(fs_visual = 2, fs_speed = 3))
+  expect_match(attr(fit_sg, "tspaModel"), "fs_visual ~ 2 \\* 1", fixed = FALSE)
+  expect_match(attr(fit_sg, "tspaModel"), "fs_speed ~ 3 \\* 1", fixed = FALSE)
+
+  # -- multigroup FIML (unified data frame, group column) --
+  fit_mg <- suppressWarnings(
+    tspa("visual ~ speed", data = fs_fiml_2f_mg, group = "school",
+         fsb = c(fs_visual = 2, fs_speed = 3))
+  )
+  fsb_mg <- attr(fit_mg, "tspa_args")$fsb
+  expect_true(is.list(fsb_mg) && length(fsb_mg) == 2L)
+  expect_true(all(vapply(fsb_mg,
+                         function(g) isTRUE(all.equal(unname(g), c(2, 3))),
+                         logical(1))))
+
+  # -- control: the derived (no explicit fsb) fit keeps the attribute zeros --
+  fit0 <- suppressWarnings(tspa("visual ~ speed", data = fs_fiml_2f_sg))
+  expect_equal(unname(unlist(attr(fit0, "tspa_args")$fsb)), c(0, 0))
+})
+
+test_that("tspa(): a per-group constant fsb is broadcast within each group (FIML)", {
+  # A per-group constant fsb (one flat intercept vector per group) must be
+  # broadcast over each group's own patterns, not misread as a per-pattern list
+  # (which corrupted the values at two patterns and errored "subscript out of
+  # bounds" with more) -- in both the unified and list MG formats.
+  glabs <- names(attr(fs_fiml_2f_mg, "fsb"))
+  expect_length(glabs, 2L)
+  pg_fsb <- setNames(
+    list(c(fs_visual = 2, fs_speed = 3), c(fs_visual = 4, fs_speed = 5)),
+    glabs
+  )
+  # unified MG data frame
+  fit_u <- suppressWarnings(
+    tspa("visual ~ speed", data = fs_fiml_2f_mg, group = "school",
+         fsb = pg_fsb)
+  )
+  got_u <- attr(fit_u, "tspa_args")$fsb
+  expect_equal(unname(got_u[[glabs[1L]]]), c(2, 3))
+  expect_equal(unname(got_u[[glabs[2L]]]), c(4, 5))
+  # list format
+  fs_l <- get_fs(fit_fiml_2f_mg, format = "list")
+  fit_l <- suppressWarnings(
+    tspa("visual ~ speed", data = fs_l, group = "school", fsb = pg_fsb)
+  )
+  got_l <- attr(fit_l, "tspa_args")$fsb
+  expect_equal(unname(got_l[[glabs[1L]]]), c(2, 3))
+  expect_equal(unname(got_l[[glabs[2L]]]), c(4, 5))
+
+  # a fully named per-group list is matched by label, so a reordered named
+  # list must not be silently swapped (positional fallback would swap it)
+  rev_fsb <- pg_fsb[c(2L, 1L)]
+  expect_false(identical(names(rev_fsb), glabs))
+  for (data in list(fs_fiml_2f_mg, fs_l)) {
+    got <- suppressWarnings(
+      attr(tspa("visual ~ speed", data = data, group = "school", fsb = rev_fsb),
+           "tspa_args")
+    )$fsb
+    expect_equal(unname(got[[glabs[1L]]]), c(2, 3))
+    expect_equal(unname(got[[glabs[2L]]]), c(4, 5))
+  }
+  # an unnamed list is matched positionally (unchanged behavior)
+  got_un <- suppressWarnings(
+    attr(tspa("visual ~ speed", data = fs_fiml_2f_mg, group = "school",
+              fsb = unname(pg_fsb)), "tspa_args")
+  )$fsb
+  expect_equal(unname(got_un[[glabs[1L]]]), c(2, 3))
+  expect_equal(unname(got_un[[glabs[2L]]]), c(4, 5))
+  # duplicate, mismatched, and partially named group lists are rejected
+  dup_fsb <- list(c(2, 3), c(4, 5))
+  names(dup_fsb) <- c(glabs[1L], glabs[1L])
+  expect_error(
+    tspa("visual ~ speed", data = fs_fiml_2f_mg, group = "school",
+         fsb = dup_fsb),
+    "duplicate group names"
+  )
+  expect_error(
+    tspa("visual ~ speed", data = fs_fiml_2f_mg, group = "school",
+         fsb = setNames(list(c(2, 3), c(4, 5)), c("Other", glabs[2L]))),
+    "do not match the data's groups"
+  )
+  part_fsb <- list(c(2, 3), c(4, 5))
+  names(part_fsb) <- c(glabs[1L], "")
+  expect_error(
+    tspa("visual ~ speed", data = fs_fiml_2f_mg, group = "school",
+         fsb = part_fsb),
+    "only partially named"
+  )
+})
+
+test_that("tspa(): explicit per-unit fsT/fsL are pooled, not replaced by the attributes (FIML and merMod)", {
+  # FIML per-pattern: double every supplied per-pattern fsT/fsL -> the pooled
+  # result is exactly double the no-argument (derived) pooled result.
+  dbl <- function(x) {
+    lapply(x, function(g) if (is.list(g) && !is.matrix(g)) {
+      lapply(g, function(m) 2 * m)
+    } else {
+      2 * g
+    })
+  }
+  fit0 <- suppressWarnings(
+    tspa("visual ~ speed", data = fs_fiml_2f_sg)
+  )
+  fit2 <- suppressWarnings(
+    tspa("visual ~ speed", data = fs_fiml_2f_sg,
+         fsT = dbl(attr(fs_fiml_2f_sg, "fsT")),
+         fsL = dbl(attr(fs_fiml_2f_sg, "fsL")))
+  )
+  expect_equal(attr(fit2, "fsT"), 2 * attr(fit0, "fsT"), tolerance = 1e-10,
+               ignore_attr = TRUE)
+  expect_equal(attr(fit2, "fsL"), 2 * attr(fit0, "fsL"), tolerance = 1e-10,
+               ignore_attr = TRUE)
+  # the explicit fit is NOT the derived (attribute-pooled) fit
+  expect_false(isTRUE(all.equal(unname(attr(fit2, "fsT")),
+                                unname(attr(fit0, "fsT")), tolerance = 1e-8)))
+
+  # merMod per-cluster: same check on the 3-D array form
+  T3d <- attr(fs_mer_pool, "fsT")
+  L3d <- attr(fs_mer_pool, "fsL")
+  fit0m <- suppressWarnings(
+    tspa("u1 ~ u0", data = fs_mer_pool)
+  )
+  fit2m <- suppressWarnings(
+    tspa("u1 ~ u0", data = fs_mer_pool, fsT = 2 * T3d, fsL = 2 * L3d)
+  )
+  expect_equal(attr(fit2m, "fsT"), 2 * attr(fit0m, "fsT"), tolerance = 1e-10,
+               ignore_attr = TRUE)
+  expect_equal(attr(fit2m, "fsL"), 2 * attr(fit0m, "fsL"), tolerance = 1e-10,
+               ignore_attr = TRUE)
+})
+
+test_that("tspa(): explicit per-unit fsT/fsL with an explicit fsb pool the supplied triple (FIML)", {
+  # Doubling fsT/fsL and shifting fsb by a constant: the pooled fit must
+  # reflect the supplied values (fsb pooled from the shifted per-pattern
+  # vectors), not the data's own attributes.
+  dbl <- function(x) {
+    lapply(x, function(g) if (is.list(g) && !is.matrix(g)) {
+      lapply(g, function(m) 2 * m)
+    } else {
+      2 * g
+    })
+  }
+  Tpat <- attr(fs_fiml_2f_sg, "fsT")[[1L]]
+  Lpat <- attr(fs_fiml_2f_sg, "fsL")[[1L]]
+  Bpat <- attr(fs_fiml_2f_sg, "fsb")[[1L]]
+  B_shift <- lapply(Bpat, function(b) b + 5)
+  fp <- attr(fs_fiml_2f_sg, "fs_pattern")[[1L]]$label
+  cnt <- c(table(factor(fp, levels = names(Tpat))))
+  # per-latent case-count-weighted mean of the shifted per-pattern intercepts
+  b_ref <- setNames(vapply(seq_len(length(B_shift[[1L]])), function(j) {
+    sum(cnt * vapply(B_shift, function(b) unname(b)[j], numeric(1L))) /
+      sum(cnt)
+  }, numeric(1L)), names(B_shift[[1L]]))
+  fit <- suppressWarnings(
+    tspa("visual ~ speed", data = fs_fiml_2f_sg,
+         fsT = structure(list(Tpat), names = ""),
+         fsL = structure(list(Lpat), names = ""),
+         fsb = structure(list(B_shift), names = ""))
+  )
+  # pooled fsb == the case-count-weighted mean of the shifted intercepts
+  expect_equal(attr(fit, "tspa_args")$fsb, b_ref, tolerance = 1e-10)
+  # and the fsT pooled from the (here unmodified) patterns is the plain mean
+  ref_T <- Reduce("+", lapply(names(Tpat), function(p) Tpat[[p]] * cnt[p])) /
+    sum(cnt)
+  expect_equal(attr(fit, "fsT"), ref_T, tolerance = 1e-10, ignore_attr = TRUE)
+})
+
+# ============================================================================
+# 9. mirt per-obs MULTI-FACTOR -> tspa() is pooled (SG + MG) (PLAN 11)
 # ============================================================================
 
 skip_if_not_installed("mirt")

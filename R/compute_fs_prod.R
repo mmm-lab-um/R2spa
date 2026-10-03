@@ -110,7 +110,7 @@
 #'        pattern). All existing columns and attributes are untouched.
 #'
 #' @seealso
-#' - `vignette("Product factor-score indicators (latent interactions)", package = "R2spa")` for the full latent-interaction workflow.
+#' - `vignette("product-factor-scores", package = "R2spa")` for the full latent-interaction workflow.
 #'
 #' @export
 #'
@@ -179,10 +179,16 @@ compute_fs_prod <- function(fs, product) {
       )
     }
   )
+  # Row-order guard (PLAN 18): fail fast if the data-frame rows were
+  # reordered or subset after scoring (the per-pattern product SE/ld values
+  # below would otherwise be assigned to the wrong observations).
+  blk1 <- resolved$blocks[[1L]]
+  check_fs_row_alignment(fs, resolved,
+                         fs_row_colnames(blk1$fsL, blk1$fsT)$se)
   # The latent (co)variance: a plain matrix (list-format single group) or
   # the length-1 list named "" (unified single group).
   psi <- fs_psi_matrix(attr(fs, "psi"))
-  L1 <- resolved$blocks[[1L]]$fsL
+  L1 <- blk1$fsL
   lv_names <- colnames(L1)
   if (is.null(lv_names) || anyNA(lv_names)) {
     stop(
