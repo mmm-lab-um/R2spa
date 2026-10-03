@@ -183,8 +183,7 @@ compute_fs_prod <- function(fs, product) {
   # reordered or subset after scoring (the per-pattern product SE/ld values
   # below would otherwise be assigned to the wrong observations).
   blk1 <- resolved$blocks[[1L]]
-  check_fs_row_alignment(fs, resolved,
-                         fs_row_colnames(blk1$fsL, blk1$fsT)$se)
+  check_fs_row_alignment(fs, resolved)
   # The latent (co)variance: a plain matrix (list-format single group) or
   # the length-1 list named "" (unified single group).
   psi <- fs_psi_matrix(attr(fs, "psi"))

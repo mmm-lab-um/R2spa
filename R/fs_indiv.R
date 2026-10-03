@@ -94,8 +94,7 @@ fs_indiv <- function(fs, include_intercept = FALSE, ...) {
   # Row-order guard (PLAN 18): fail fast if the data-frame rows were
   # reordered or subset after scoring (the per-block quantities below would
   # otherwise be assigned to the wrong observations).
-  se_nm <- fs_row_colnames(ref_L, ref_T)$se
-  check_fs_row_alignment(fs, resolved, se_nm)
+  check_fs_row_alignment(fs, resolved)
 
   n <- resolved$n
   k_ld <- q * q
@@ -142,6 +141,7 @@ fs_indiv <- function(fs, include_intercept = FALSE, ...) {
   # fs_row_cols()).
   fs_names <- rownames(ref_L)   # "fs_<factor>" (merMod: "fs_u<k>" / legacy)
   nm <- fs_row_colnames(ref_L, ref_T)
+  se_nm <- nm$se
   ld_nm <- nm$ld
   ev_nm <- nm$ev
   int_nm <- if (has_int) paste0("int_", fs_names) else character(0)
@@ -259,38 +259,50 @@ fs_row_colnames <- function(fsL, fsT) {
 # result (fs_pattern labels, per-row fsL/fsT) are positional. Subsetting
 # or reordering the data-frame rows decouples them from the carried data
 # columns, so the per-block quantities computed downstream would be
-# assigned to the wrong observations. The carried `fs_<v>_se` columns were
-# emitted by fs_row_cols() from each row's own block, so comparing them
-# against the block-derived SE values detects any such drift. Skipped when
-# the input carries no `_se` columns (hand-rolled fixtures) or the
-# expected names cannot be derived, to avoid false positives.
-check_fs_row_alignment <- function(fs, resolved, se_nm) {
+# assigned to the wrong observations. Every carried per-row column (score
+# SEs, cross-loadings, error (co)variances) was emitted by fs_row_cols()
+# from each row's own block, so comparing the FULL set -- not just the
+# diagonal SEs, which two patterns can share while their cross-loadings or
+# off-diagonal error covariances differ -- against the row's own block
+# detects any such drift. Skipped when the input carries none of the
+# columns (hand-rolled fixtures) or the expected names cannot be derived,
+# to avoid false positives.
+check_fs_row_alignment <- function(fs, resolved) {
   n <- resolved$n
   # A row-subsetted data frame keeps its full-length fs_pattern labels, so
   # the resolved row -> block map no longer matches the data rows.
   if (length(resolved$pattern_idx) != n) {
     stop(fs_row_alignment_message(), call. = FALSE)
   }
-  if (length(se_nm) == 0L) {
+  # Full carried-quantity names (se + cross-loadings + error (co)variances)
+  # from the first block's fsL/fsT (identical shape across blocks).
+  blk1 <- resolved$blocks[[1L]]
+  nm <- fs_row_colnames(blk1$fsL, blk1$fsT)
+  cnames <- c(nm$se, nm$ld, nm$ev)
+  if (length(cnames) == 0L) {
     return(invisible(NULL))
   }
-  se_carried <- fs_se_carried(fs, se_nm)
-  if (is.null(se_carried)) {
+  carried <- fs_qty_carried(fs, cnames)
+  if (is.null(carried)) {
     return(invisible(NULL))
   }
   rows_by_block <- split(
     seq_len(n),
     factor(resolved$pattern_idx, levels = seq_along(resolved$blocks))
   )
+  one_row <- matrix(0, 1L, 1L)
   for (b in seq_along(resolved$blocks)) {
     rows_b <- rows_by_block[[b]]
     if (length(rows_b) == 0L) {
       next
     }
-    exp_se <- sqrt_or_na(diag(resolved$blocks[[b]]$fsT))
-    for (j in seq_along(se_nm)) {
-      x <- se_carried[rows_b, j]
-      y <- exp_se[j]
+    blk <- resolved$blocks[[b]]
+    # The block's full se + cross-loading + error (co)variance row, in the
+    # same column order as cnames (fs_row_cols() with fsb = NULL).
+    exp_row <- fs_row_cols(one_row, blk$fsL, blk$fsT, NULL)[1L, , drop = FALSE]
+    for (j in seq_along(cnames)) {
+      x <- carried[rows_b, j]
+      y <- exp_row[1L, j]
       ok <- is.na(x) == is.na(y) &
         (is.na(x) | abs(x - y) <= 1e-8 * max(1, abs(y)))
       if (!all(ok)) {
@@ -313,20 +325,20 @@ fs_row_alignment_message <- function() {
   )
 }
 
-# The input's carried per-row SE values as a numeric matrix with one
-# column per `se_nm` entry (row order = the resolved rows), or NULL when
+# The input's carried per-row quantities as a numeric matrix with one
+# column per `cnames` entry (row order = the resolved rows), or NULL when
 # any of the columns is absent (hand-rolled input: skip the check).
-fs_se_carried <- function(fs, se_nm) {
+fs_qty_carried <- function(fs, cnames) {
   if (is.data.frame(fs)) {
-    if (!all(se_nm %in% names(fs))) {
+    if (!all(cnames %in% names(fs))) {
       return(NULL)
     }
-    return(as.matrix(fs[, se_nm, drop = FALSE]))
+    return(as.matrix(fs[, cnames, drop = FALSE]))
   }
-  if (!all(vapply(fs, function(df) all(se_nm %in% names(df)), logical(1)))) {
+  if (!all(vapply(fs, function(df) all(cnames %in% names(df)), logical(1)))) {
     return(NULL)
   }
-  do.call(rbind, lapply(fs, function(df) as.matrix(df[, se_nm, drop = FALSE])))
+  do.call(rbind, lapply(fs, function(df) as.matrix(df[, cnames, drop = FALSE])))
 }
 
 # Resolve a get_fs() result into (a) the score data frame, (b) one

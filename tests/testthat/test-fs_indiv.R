@@ -428,9 +428,11 @@ test_that("fs_indiv(): per-row values == augment_lav_predict() after reconciling
 # The row-specific quantities of a get_fs() result (fs_pattern labels,
 # per-observation fsL/fsT) are positional: they do NOT follow the data
 # columns when the rows are reordered or subset. fs_indiv() must detect the
-# drift (via the carried fs_<v>_se columns, which move with the rows while
-# the pattern labels / per-block fsT do not) and fail loudly rather than
-# silently pairing a row with another observation's measurement quantities.
+# drift by comparing every carried per-row quantity (score SEs, cross-
+# loadings, error (co)variances) -- not just the SEs, which two patterns can
+# share while their cross-loadings or off-diagonal error covariances differ
+# -- against the row's own block, and fail loudly rather than silently pair a
+# row with another observation's measurement quantities.
 
 test_that("fs_indiv(): a reordered FIML result errors with the row-order message", {
   # fs_fiml has multiple observed patterns with DIFFERENT per-pattern SEs.
@@ -475,6 +477,42 @@ test_that("fs_indiv(): a row-subset (dropping rows) FIML result errors", {
     fs_indiv(fs_sub),
     "reordered or subset after scoring"
   )
+})
+
+test_that("fs_indiv() guard: equal-SE patterns with different error covariances are caught", {
+  # Regression (PLAN 18): the guard must compare the FULL carried measurement
+  # quantities, not just sqrt(diag(fsT)). Two patterns can share identical score
+  # SEs while differing in an off-diagonal error covariance; a row swap across
+  # them moves a row into a slot whose SE still matches but whose error
+  # covariance does not. An SE-only check lets that pass and silently assigns
+  # the wrong ecov; the full-quantity check must catch it.
+  mkL <- function() {
+    L <- diag(2)
+    rownames(L) <- c("fs_visual", "fs_speed"); colnames(L) <- c("visual", "speed")
+    L
+  }
+  mkT <- function(e) {
+    m <- matrix(c(0.1, e, e, 0.2), 2)
+    rownames(m) <- c("fs_visual", "fs_speed"); colnames(m) <- c("fs_visual", "fs_speed")
+    m
+  }
+  b1 <- list(fsL = mkL(), fsT = mkT(+0.02), fsb = NULL)
+  b2 <- list(fsL = mkL(), fsT = mkT(-0.02), fsb = NULL)
+  resolved <- list(n = 2L, pattern_idx = c(1L, 2L), blocks = list(b1, b2))
+  cnames <- unlist(R2spa:::fs_row_colnames(b1$fsL, b1$fsT))
+  r1 <- as.numeric(R2spa:::fs_row_cols(matrix(0, 1, 1), b1$fsL, b1$fsT, NULL)[1, ])
+  r2 <- as.numeric(R2spa:::fs_row_cols(matrix(0, 1, 1), b2$fsL, b2$fsT, NULL)[1, ])
+  # The SE columns (first two) are identical across the two patterns; only the
+  # off-diagonal error covariance (column 8) differs.
+  expect_true(isTRUE(all.equal(round(r1[1:2], 10), round(r2[1:2], 10))))
+  expect_false(isTRUE(all.equal(round(r1[8], 10), round(r2[8], 10))))
+  aligned <- as.data.frame(rbind(r1, r2)); names(aligned) <- cnames
+  swapped <- as.data.frame(rbind(r2, r1)); names(swapped) <- cnames
+  # Aligned: the guard is silent. Swapped across the two patterns: the SE-only
+  # comparison still matches, but the full-quantity check must fail.
+  expect_no_error(R2spa:::check_fs_row_alignment(aligned, resolved))
+  expect_error(R2spa:::check_fs_row_alignment(swapped, resolved),
+               "reordered or subset after scoring")
 })
 
 test_that("fs_indiv(): an unmodified result passes the guard (no false positive)", {

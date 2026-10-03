@@ -247,14 +247,18 @@ test_that("tspa(): single-factor FIML -- se_fs omitted keeps the derived (pooled
   fit <- tspa("", data = fs_sf, group = "school")
   gorder <- as.character(unique(fs_sf$school))
   expect_equal(names(attr(fit, "fsT")), gorder)
-  # Per-group case-count-weighted mean of the per-pattern intercepts.
+  # Per-group case-count-weighted mean of the per-pattern intercepts: for each
+  # score, the pattern case-counts weight that score's per-pattern intercepts.
+  # The result is a per-score vector (one intercept per score, not one per
+  # pattern) -- the shape tspa_schema_mf() expects for a per-group fsb.
   b_pooled_g <- function(g) {
     lab_g <- attr(fs_sf, "fs_pattern")[[g]]$label
-    b_g <- Bpat[[g]]
-    setNames(vapply(seq_along(b_g), function(i) {
-      sum(table(factor(lab_g, levels = names(b_g))) * b_g[[i]]) /
-        sum(!is.na(lab_g))
-    }, numeric(1L)), names(b_g[[1L]]))
+    b_g <- Bpat[[g]]   # named list of patterns, each a per-score vector
+    counts <- table(factor(lab_g, levels = names(b_g)))
+    pooled <- Reduce(`+`,
+                     lapply(names(b_g), function(p) counts[[p]] * b_g[[p]])) /
+      sum(!is.na(lab_g))
+    setNames(unname(pooled), names(b_g[[1L]]))
   }
   B_pooled <- setNames(lapply(gorder, b_pooled_g), gorder)
   for (g in gorder) {
@@ -690,6 +694,12 @@ test_that("tspa(): a per-group constant fsb is broadcast within each group (FIML
          fsb = list(c(2, 3))),
     "has length 1 but the model has 2 groups"
   )
+  # a too-short constant vector -> rejected on the pooled path as well (it must
+  # name one intercept per score, or it would broadcast a partial vector)
+  expect_error(
+    tspa("visual ~ speed", data = fs_fiml_2f_mg, group = "school", fsb = 0),
+    "has length 1 but the per-score intercepts have length 2"
+  )
 })
 
 test_that("tspa(): explicit fsb for a complete-data multigroup result (schema path)", {
@@ -731,6 +741,13 @@ test_that("tspa(): explicit fsb for a complete-data multigroup result (schema pa
     tspa(m, data = fs_cd, group = "school",
          fsb = list(c(fs_visual = 2, fs_speed = 3))),
     "has length 1 but the model has 2 groups"
+  )
+  # (d) a too-short shared (constant) vector -> rejected. Without this check it
+  #     would index to NA (fsb = 0 on two scores -> fs_speed ~ c(NA, NA)) and
+  #     lavaan would silently free the missing score intercepts.
+  expect_error(
+    tspa(m, data = fs_cd, group = "school", fsb = 0),
+    "has length 1 but there are 2 scores"
   )
 })
 

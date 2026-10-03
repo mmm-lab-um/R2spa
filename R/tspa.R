@@ -1156,9 +1156,23 @@ check_fsb_group_count <- function(fsb, n_grp) {
 # else is rejected. Mirrors the per-unit path's broadcast/resolve so an explicit
 # fsb can never be misread as a shorter per-group list or silently applied to
 # the wrong group. (PLAN 18.)
-normalize_fsb_groups <- function(fsb, ngroup, glabels) {
+normalize_fsb_groups <- function(fsb, ngroup, glabels, n_scores) {
+  # A per-score intercept vector must name exactly one value per score; a
+  # shorter one indexes to NA (e.g. fsb = 0 on a two-score model) and lavaan
+  # would silently free the missing score intercepts. (PLAN 18.)
+  check_fsb_score_len <- function(x, what) {
+    if (length(x) != n_scores) {
+      stop(
+        "the explicit ", what, " 'fsb' has length ", length(x), " but there ",
+        "are ", n_scores, " score", if (n_scores == 1L) "" else "s", " (one ",
+        "intercept per score is required).",
+        call. = FALSE
+      )
+    }
+  }
   labeled <- !is.null(glabels) && any(nzchar(glabels))
   if (is_flat_fsb_const(fsb)) {
+    check_fsb_score_len(fsb, "shared")
     out <- vector("list", ngroup)
     if (labeled) names(out) <- glabels
     for (g in seq_len(ngroup)) out[[g]] <- fsb
@@ -1166,6 +1180,7 @@ normalize_fsb_groups <- function(fsb, ngroup, glabels) {
   }
   if (is.list(fsb)) {
     check_fsb_group_count(fsb, ngroup)
+    for (g in seq_along(fsb)) check_fsb_score_len(fsb[[g]], "per-group")
     if (labeled) return(resolve_group_fsb(fsb, glabels))
     if (any(!is.na(names(fsb)) & nzchar(names(fsb)))) {
       stop(
@@ -2059,7 +2074,7 @@ tspa_schema_mf <- function(model, fsT, fsL, fsb, prods = NULL,
     # against the group labels (order-independent when named, positional when
     # unnamed) and checked for the right count, mirroring the per-unit path.
     # (PLAN 18.)
-    B_list <- normalize_fsb_groups(fsb, ngroup, names(T_list))
+    B_list <- normalize_fsb_groups(fsb, ngroup, names(T_list), length(fs))
     for (i in seq_along(fs)) {
       lab <- paste0("__r2spa_int", i, "__")
       for (g in seq_len(ngroup)) {
