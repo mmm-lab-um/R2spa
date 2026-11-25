@@ -482,19 +482,30 @@ test_that("Need to provide none or both fsT and fsL", {
   )
 })
 
-test_that("tspa(): non-numeric or non-finite se_fs is a clear error", {
+test_that("tspa(): non-numeric, non-finite, or negative se_fs is a clear error", {
   # non-numeric: a cryptic 'non-numeric argument' from the schema otherwise
   expect_error(
     tspa("dem60 ~ ind60", data = fs_dat_single,
          se_fs = c(ind60 = "0.12", dem60 = "0.68")),
     "numeric standard errors"
   )
-  # non-finite: a NaN fixed value in the model string is a parse failure
-  # in lavaan, not an actionable error
+  # NA: would become a fixed NaN in the model string (a lavaan parse failure)
   expect_error(
     tspa("dem60 ~ ind60", data = fs_dat_single,
          se_fs = c(ind60 = 0.12, dem60 = NA_real_)),
-    "not all finite"
+    "finite and non-negative"
+  )
+  # Inf: same NaN/parse failure risk
+  expect_error(
+    tspa("dem60 ~ ind60", data = fs_dat_single,
+         se_fs = c(ind60 = Inf, dem60 = 0.68)),
+    "finite and non-negative"
+  )
+  # negative: a negative SE would square into a positive (wrong) error variance
+  expect_error(
+    tspa("dem60 ~ ind60", data = fs_dat_single,
+         se_fs = c(ind60 = -0.2, dem60 = -0.3)),
+    "finite and non-negative"
   )
 })
 

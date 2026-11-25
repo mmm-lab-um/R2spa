@@ -180,7 +180,11 @@ augment_lav_predict <- function(
   for (g in seq_len(ngroups)) {
     fs_g <- as.matrix(fs_lst[[g]])
     blocks <- blocks_by_group[[g]]
-    n_cases <- max(unlist(lapply(blocks, function(b) max(b$case_idx))))
+    # lavPredict() keeps one row per case (lavaan's NA convention for
+    # unscorable factors), so its row count is the ground-truth group size
+    # and a fully-missing case at the END of the group is kept as an NA row
+    # (PLAN 18); the legacy max(case_idx) sizing would drop it.
+    n_cases <- nrow(fs_g)
     fs_dat <- data.frame(
       matrix(
         NA,
@@ -247,7 +251,8 @@ augment_lav_predict <- function(
 #'                  `NULL` (default) auto-derives the assignment from the
 #'                  loadings. See [get_fs()] for the full description.
 #'
-#' @return An N x p matrix of factor scores.
+#' @return An N x q matrix of factor scores (one row per observation in
+#'         \code{y}, one column per latent factor).
 #' @export
 #'
 #' @examples

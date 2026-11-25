@@ -377,6 +377,19 @@ product indicator columns (\code{fs_a:fs_b}), their standard errors
 \code{\link[=compute_fs_prod]{compute_fs_prod()}} for the derivation. Single-group lavaan models only
 (v1); not supported with \code{local = TRUE}.
 }
+
+\subsection{Row safety}{
+
+The result is an ordinary data frame, and the row-specific quantities
+(the \code{fs_pattern} labels, the per-observation \code{fsL}/\code{fsT} lists, and the
+\verb{fs_<v>_se} / \verb{_by_} / \verb{ev_*} columns) are \emph{positional}: they do not
+follow row subsetting or reordering. Add a stable ID column \emph{before}
+scoring if you need to join the scores to external data, and score a
+subset by calling \code{get_fs()} on the subset rather than subsetting a
+scored result. \code{\link[=fs_indiv]{fs_indiv()}} and \code{\link[=compute_fs_prod]{compute_fs_prod()}} detect rows that
+were reordered or subset after scoring and error instead of silently
+using another observation's measurement quantities.
+}
 }
 \examples{
 library(lavaan)
@@ -432,10 +445,10 @@ get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
 }
 \seealso{
 \itemize{
-\item \code{vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")} for end-to-end stage-1/stage-2 examples.
-\item \code{vignette("Scoring Matrices: lavaan CFA and lme4", package = "R2spa")} for the scoring-matrix internals.
-\item \code{vignette("EFA Scores", package = "R2spa")} for EFA-based factor scores.
-\item \code{vignette("2S-PA with Missing Data", package = "R2spa")} for \code{missing = "fiml"}.
-\item \code{vignette("Scoring Methods and SE Correction in 2S-PA: A Simulation Study", package = "R2spa")} for a simulation study comparing scoring methods and SE correction.
+\item \code{vignette("R2spa", package = "R2spa")} for end-to-end stage-1/stage-2 examples.
+\item \code{vignette("scoring-matrices", package = "R2spa")} for the scoring-matrix internals.
+\item \code{vignette("efa-score", package = "R2spa")} for EFA-based factor scores.
+\item \code{vignette("missing-data", package = "R2spa")} for \code{missing = "fiml"}.
+\item \code{vignette("sim-scoring-se", package = "R2spa")} for a simulation study comparing scoring methods and SE correction.
 }
 }

@@ -1,321 +1,273 @@
 ---
 title: "2S-PA with OpenMx and IRT (mirt)"
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    toc: true
 vignette: >
   %\VignetteIndexEntry{2S-PA with OpenMx and IRT (mirt)}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>"
-)
-# OpenMx and mirt are optional Suggests; guard the chunks that need them so the
-# vignette builds whether or not they are installed.
+```{r, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 have_openmx <- requireNamespace("OpenMx", quietly = TRUE)
-have_mirt   <- requireNamespace("mirt", quietly = TRUE)
+have_mirt <- requireNamespace("mirt", quietly = TRUE)
 ```
 
-```{r, message = FALSE}
+## Why use OpenMx for stage 2?
+
+With categorical items, the precision of a factor score depends on the
+person's response pattern. A single measurement-error variance for everyone
+may therefore be inadequate. The original 2S-PA framework uses
+**definition variables** to account for this observation-specific
+measurement error (Lai & Hsiao, 2022).
+
+A definition variable is a data value used to fix a model parameter for a
+particular observation. `tspa_mx_model()` uses OpenMx to fit the structural
+model with each observation's score loadings, error variances, and error
+covariances. You can write the structural model in familiar lavaan syntax
+and pass a `get_fs()` result directly.
+
+This vignette first illustrates the OpenMx workflow with continuous items,
+then uses item response models fitted with `mirt`. Install `OpenMx` for the
+stage-2 examples and `mirt` for the IRT examples. Chunks requiring these
+packages run only when they are installed.
+
+```{r, message=FALSE}
 library(lavaan)
 library(R2spa)
 if (have_openmx) library(OpenMx)
-if (have_mirt)   library(mirt)
+if (have_mirt) library(mirt)
 ```
 
-Two-stage path analysis (2S-PA) can be fit with `OpenMx` as well as the
-default `lavaan` backend. `tspa_mx_model()` takes a `lavaan`-style structural
-model string plus the (per-row) factor-score loading / error information from
-`get_fs()` and returns a fitted `OpenMx` RAM model.
+## Continuous indicators: the same two-stage workflow
 
-# With a Linear Factor Model
-
-The example is from https://lavaan.ugent.be/tutorial/sem.html.
+Using lavaan's `PoliticalDemocracy` data, obtain scores for industrialization
+and democracy in 1960:
 
 ```{r}
-# CFA
-my_cfa <- "
-  # latent variables
-    ind60 =~ x1 + x2 + x3
-    dem60 =~ y1 + y2 + y3 + y4
-"
-(fs_dat <- get_fs(PoliticalDemocracy, model = my_cfa, std.lv = TRUE,
-                  format = "list")) |> head()
+measurement_model <- '
+  ind60 =~ x1 + x2 + x3
+  dem60 =~ y1 + y2 + y3 + y4
+'
+fs_dat <- get_fs(PoliticalDemocracy, model = measurement_model, std.lv = TRUE)
 ```
+
+Both stage-2 functions use the measurement information stored with the
+scores. `tspa()` returns a lavaan fit; `tspa_mx_model()` returns a fitted
+OpenMx model that can be summarized directly.
 
 ```{r}
-tspa_fit <- tspa(model = "dem60 ~ ind60", data = fs_dat,
-                 fsT = attr(fs_dat, "fsT"),
-                 fsL = attr(fs_dat, "fsL"))
-parameterEstimates(tspa_fit)
+tspa_fit <- tspa("dem60 ~ ind60", data = fs_dat)
+standardizedSolution(tspa_fit) |>
+  subset(op == "~")
 ```
 
-## Using OpenMx
-
-The measurement information is read straight from the `fsL` / `fsT`
-attributes of the `get_fs()` output. The score columns (`fs_ind60`,
-`fs_dem60`) and the latent names (`ind60`, `dem60`) must already be present
-in `data` / the model string.
-
-```{r, eval = have_openmx}
-tspa_mx_fit <- tspa_mx_model(model = "dem60 ~ ind60", data = fs_dat,
-                             fsL = attr(fs_dat, "fsL"),
-                             fsT = attr(fs_dat, "fsT"))
-# Summarize the results
+```{r, eval=have_openmx}
+tspa_mx_fit <- tspa_mx_model("dem60 ~ ind60", data = fs_dat)
 summary(tspa_mx_fit)
 ```
 
-### With Mean Structure
+For these complete continuous-item data, the score measurement quantities
+are constant across observations. Both functions therefore use constant
+measurement constraints. Their distinction becomes important when those
+quantities vary across people: OpenMx retains the individual values,
+whereas `tspa()` pools them within groups.
+
+### Including latent means
+
+When modeling means, the score intercepts must also be supplied. `get_fs()`
+stores them in `fsb`, and `tspa_mx_model()` uses them automatically.
+Here, the first item intercept for each factor is fixed to zero to set
+the factor's origin:
 
 ```{r}
-my_cfa <- "
-  # latent variables
-    ind60 =~ x1 + x2 + x3
-    dem60 =~ y1 + y2 + y3 + y4
-    x1 + y1 ~ 0
-    ind60 + dem60 ~ 1
-"
-fs_dat <- get_fs(PoliticalDemocracy, model = my_cfa,
-                 meanstructure = TRUE,
-                 format = "list")
+mean_model <- '
+  ind60 =~ x1 + x2 + x3
+  dem60 =~ y1 + y2 + y3 + y4
+  x1 + y1 ~ 0
+  ind60 + dem60 ~ 1
+'
+fs_means <- get_fs(PoliticalDemocracy, model = mean_model, meanstructure = TRUE)
+tspa_means <- tspa("dem60 ~ ind60; dem60 + ind60 ~ 1", data = fs_means)
+parameterEstimates(tspa_means) |>
+  subset(op %in% c("~", "~1") & !grepl("^fs_", lhs))
 ```
 
-lavaan
-
-```{r}
-tspa_fit <- tspa(model = "dem60 ~ ind60\ndem60 + ind60 ~ 1", data = fs_dat,
-                 fsT = attr(fs_dat, "fsT"),
-                 fsL = attr(fs_dat, "fsL"),
-                 fsb = attr(fs_dat, "fsb"))
-parameterEstimates(tspa_fit, standardized = TRUE)
+```{r, eval=have_openmx}
+mx_means <- tspa_mx_model("dem60 ~ ind60; dem60 + ind60 ~ 1", data = fs_means)
+summary(mx_means)
 ```
 
-OpenMx
+The intercept of an endogenous latent variable is its expected value when
+its predictors are zero. It is not generally the same as its marginal mean.
+Keep this distinction in mind when comparing mean-model output.
 
-```{r, eval = have_openmx}
-tspa_mx_fit <- tspa_mx_model(model = "dem60 ~ ind60\ndem60 + ind60 ~ 1",
-                             data = fs_dat)
-# fsL, fsT, and fsb are derived from the get_fs() result's attributes.
-# Summarize the results
-summary(tspa_mx_fit)
-```
+## Categorical indicators: an IRT example
 
-The two routes agree on covariance and structural quantities when given the
-same mean structure. Without known score intercepts, the split of the observed
-mean between latent and score is unidentifiable and the routes can report
-different splits. Here `get_fs()` supplies `fsb` as a fixed score intercept;
-with the structural mean model above, compare implied means rather than the
-intercept of an endogenous latent alone.
+The following simulation is based on the setting discussed by Lai and
+Hsiao (2022). Two constructs are each measured by ten binary items. The
+second construct depends on the first with a population slope of 0.5.
+We fit a Rasch model for the first item set and a two-parameter logistic
+(2PL) model for the second.
 
-## Compare to joint model
-
-```{r}
-jreg <- sem(
-    "
-    # latent variables
-    ind60 =~ x1 + x2 + x3
-    dem60 =~ y1 + y2 + y3 + y4
-    # latent regression
-    dem60 ~ ind60
-    ",
-    data = PoliticalDemocracy, std.lv = TRUE)
-coef(jreg)["dem60~ind60"]
-```
-
-# Combined with IRT
-
-Example from Lai & Hsiao (2022, Psychological Methods)
-
-## Not accounting for error
-
-```{r, eval = have_mirt}
-# Simulate data with mirt
+```{r, eval=have_mirt}
 set.seed(1235)
 num_obs <- 1000
-# Simulate theta
-eta <- MASS::mvrnorm(num_obs, mu = c(0, 0), Sigma = diag(c(1, 1 - 0.5^2)),
-                     empirical = TRUE)
+eta <- MASS::mvrnorm(num_obs, mu = c(0, 0),
+                     Sigma = diag(c(1, 1 - 0.5^2)), empirical = TRUE)
 th1 <- eta[, 1]
 th2 <- -1 + 0.5 * th1 + eta[, 2]
-# items and response data
 a1 <- matrix(1, 10)
 d1 <- matrix(rnorm(10))
 a2 <- matrix(runif(10, min = 0.5, max = 1.5))
 d2 <- matrix(rnorm(10))
 dat1 <- simdata(a = a1, d = d1, N = num_obs, itemtype = "2PL", Theta = th1)
 dat2 <- simdata(a = a2, d = d2, N = num_obs, itemtype = "2PL", Theta = th2)
-# Factor scores
 mod1 <- mirt(dat1, model = 1, itemtype = "Rasch", verbose = FALSE)
 mod2 <- mirt(dat2, model = 1, itemtype = "2PL", verbose = FALSE)
 fs1 <- fscores(mod1, full.scores.SE = TRUE)
 fs2 <- fscores(mod2, full.scores.SE = TRUE)
-lm(fs2[, 1] ~ fs1[, 1])  # attenuated coefficient
+lm(fs2[, 1] ~ fs1[, 1])
 ```
 
-## Factor-score intercepts via get_fs()
+The ordinary regression treats the EAP scores as error-free. Its coefficient
+does not account for score unreliability and need not estimate the latent
+regression coefficient. Next, we fit a two-factor IRT model and use the
+resulting score measurement information in stage 2.
 
-The `mirt` fit above is also scored directly by `get_fs()`, which returns the EAP
-scores together with their per-row standard errors, implied loadings and error
-variances (and, via `fs_indiv()`, the definition variables) — so the hand-rolled
-`fs_eap` frame in the next section is optional. A factor prior mean can be given
-with `prior_mean` (mirt's default is a zero-mean factor). When the mean is not
-zero, the per-row factor-score intercepts stored in the `fsb` attribute are
-non-zero: each `fsb_i` is the prior mean scaled by that row's shrinkage factor
-(the posterior variance `Vpost_i`), so the intercepts — and the score means —
-track the prior mean, and vary from row to row.
+### Obtain scores and fit the structural model
 
-```{r, eval = have_mirt}
-fs  <- get_fs(mod1)
-fse <- get_fs(mod1, prior_mean = c(F1 = 2))
-head(fs, 3)                                   # score / SE / loading / error variance
-round(c(fsb.r1.default = unname(attr(fs, "fsb")[[1]]),
-        fsb.r2.default = unname(attr(fs, "fsb")[[2]]),
-        fsb.r1.prior2  = unname(attr(fse, "fsb")[[1]]),
-        fsb.r2.prior2  = unname(attr(fse, "fsb")[[2]])), 4)
-round(c(score.mean.default = mean(fs$fs_F1),
-        score.mean.prior2  = mean(fse$fs_F1)), 4)
-```
+The two-factor model allows the factors to correlate. The discrimination
+parameters for the first ten items are constrained equal, as in the Rasch
+measurement model.
 
-Under mirt's default zero-mean prior every `fsb` is zero (the scores are mean
-zero); with `prior_mean = c(F1 = 2)` they are non-zero and differ by row. These
-`fsb` values are exactly what `tspa_mx_model()` reads as its score-intercept row
-("With Mean Structure" above).
-
-`get_fs()` results can now also be passed to `tspa_mx_model()` directly:
-with all of `se_fs`/`fsL`/`fsT`/`fsb` omitted, the measurement inputs are
-derived from the result's attributes — the per-row loadings and error
-variances become definition variables referencing the result's own
-`*_by_*`/`ev_*`/`ecov_*` columns, and the `int_fs_*` score-intercept columns
-are appended from the `fsb` attribute (the `fs_indiv()` round-trip, now
-automatic). The minimal model that exercises the score-intercept row, on
-the nonzero-prior and the zero-mean results:
-
-```{r, eval = have_openmx && have_mirt}
-# All measurement inputs (per-row loadings, error variances, and the
-# int_fs_* intercept columns) are derived from the get_fs() result:
-tspa_mx_fit <- tspa_mx_model("F1 ~ 1", data = fse)
-summary(tspa_mx_fit)
-# The zero-mean result derives the same way (its fsb attribute is all-zero,
-# so the appended int_fs_F1 column is all-zero):
-tspa_mx_fit <- tspa_mx_model("F1 ~ 1", data = fs)
-summary(tspa_mx_fit)
-```
-
-Under `prior_mean = c(F1 = 2)` the appended `int_fs_F1` column is nonzero
-and row-varying; for the zero-mean result it is all-zero. For a
-`get_fs()` result, then, the `fs_indiv()` + hand-rolled character matrices
-of the next section — and the explicit `attr(..., "fsL")`-style arguments
-used elsewhere in this vignette — are optional sugar, not a requirement;
-they remain the route when the per-row quantities come from outside
-`get_fs()`.
-
-## 2S-PA with EAP (shrinkage) scores
-
-Because EAP (shrinkage) scores are used, we use the following properties for
-these scores ($\tilde \eta_i$ for person $i$):
-
-- Standard error (SE, from software output) = $\sqrt{V(\eta) (1 - \rho_{\tilde \eta, i})}$, where $\rho_{\tilde \eta, i}$ is the reliability of $\tilde \eta_i$
-- Loading of $\tilde \eta_i$ on $\eta$ is equal to $\rho_{\tilde \eta, i}$ = $1 - \text{SE}^2 / V(\eta)$
-- Standard error of measurement for $\tilde \eta_i$ is equal to $\rho_{\tilde \eta, i} \text{SE}$
-- Based on the above, the total variance of $\tilde \eta_i$ is also $\rho_{\tilde \eta, i}$.
-
-```{r, eval = have_mirt}
-# Combine into data set
-fs_eap <- cbind(fs1, fs2) |>
-    as.data.frame() |>
-    setNames(c("fs1", "se_fs1", "fs2", "se_fs2")) |>
-    # Compute reliability and error variances
-    within(expr = {
-        rel_fs1 <- 1 - se_fs1^2
-        rel_fs2 <- 1 - se_fs2^2
-        ev_fs1 <- se_fs1^2 * (1 - se_fs1^2)
-        ev_fs2 <- se_fs2^2 * (1 - se_fs2^2)
-    })
-```
-
-The per-person reliability and error variance are supplied as *definition
-variables*: each `fsL` / `fsT` cell holds the name of the `data` column that
-carries that person's value. The structural latent names (`f1`, `f2`) are kept
-distinct from the score columns (`fs1`, `fs2`).
-
-```{r, eval = have_openmx && have_mirt}
-cross_load <- matrix(c("rel_fs1", NA, NA, "rel_fs2"), nrow = 2) |>
-    `dimnames<-`(list(c("fs1", "fs2"), c("f1", "f2")))
-err_cov <- matrix(c("ev_fs1", NA, NA, "ev_fs2"), nrow = 2) |>
-    `dimnames<-`(rep(list(c("fs1", "fs2")), 2))
-tspa_mx_fit <- tspa_mx_model(model = "f2 ~ f1\nf2 + f1 ~ 1",
-                             data = fs_eap, fsL = cross_load, fsT = err_cov)
-# Summarize the results
-summary(tspa_mx_fit)
-```
-
-The same model fits in one call from a `get_fs()` result: with the
-measurement arguments omitted, `tspa_mx_model()` derives the
-definition-variable matrices (and the `int_fs_*` intercept columns) from the
-result's own `*_by_*`/`ev_*`/`ecov_*` columns and `fsb` attribute, as in the
-previous section. The hand-rolled route stays when the per-person quantities
-come from outside `get_fs()` — as here, where the per-person reliabilities and
-error variances are the hand-computed EAP formulas above, not a `get_fs()`
-result's implied-loadings / error-covariance columns.
-
-## Joint model reference
-
-The gold-standard comparison is a joint (one-step) MIMIC/SEM fit. With 2PL
-items this uses the polychoric-WLS approximation here; a full FIML fit is
-computationally prohibitive at this scale.
-
-```{r, eval = have_mirt}
-dat <- cbind(dat1, dat2)
-colnames(dat) <- paste0("i", 1:20)
-wls_fit <- sem("
-f1 =~ i1 + i2 + i3 + i4 + i5 + i6 + i7 + i8 + i9 + i10
-f2 =~ i11 + i12 + i13 + i14 + i15 + i16 + i17 + i18 + i19 + i20
-f2 ~ f1
-", data = dat, ordered = TRUE, std.lv = TRUE)
-coef(wls_fit)["f2~f1"]
-```
-
-## Multidimensional Measurement Model
-
-When a multidimensional model is used, for EAP scores we use the following
-properties generalized from the unidimensional case. Specifically, let
-$V(\boldsymbol \eta)$ = $\boldsymbol{\psi}$.
-
-- Loading of $\tilde{\boldsymbol \eta}_i$ on $\boldsymbol \eta$ is $\boldsymbol{\Lambda}_{\tilde \eta, i}$, which is also the reliability matrix (i.e., the squared covariance between $\tilde{\boldsymbol \eta}_i$ and $\boldsymbol \eta$).
-- Error matrix ($\mathbf{E}$, from software output) = $(\mathbf{I} - \boldsymbol{\Lambda}_{\tilde \eta, i})\boldsymbol{\psi}$. Therefore, $\boldsymbol{\Lambda}_{\tilde \eta, i} = \mathbf{I} - \mathbf{E} \boldsymbol{\psi}^{-1}$.
-- Error variance of $\tilde \eta_i$ is $\boldsymbol{\Lambda}_{\tilde \eta, i} \mathbf{E}$.
-
-```{r, eval = have_mirt}
+```{r, eval=have_mirt}
 dat <- cbind(dat1, dat2)
 colnames(dat) <- paste0("Item_", 1:20)
-# Multidimensional IRT
-mod <- "
-F1 = 1-10
-F2 = 11-20
-COV = F1*F2
-CONSTRAIN = (1-10, a1)
-"
-mfit <- mirt(dat, model = mod, itemtype = "2PL", verbose = FALSE)
+irt_model <- '
+  F1 = 1-10
+  F2 = 11-20
+  COV = F1*F2
+  CONSTRAIN = (1-10, a1)
+'
+mfit <- mirt(dat, model = irt_model, itemtype = "2PL", verbose = FALSE)
+fs_irt <- get_fs(mfit)
+head(fs_irt[c("fs_F1", "fs_F2", "fs_F1_se", "fs_F2_se")])
 ```
 
-```{r, eval = have_mirt}
-# Factor scores, plus the per-row loadings and error covariances and
-# score intercepts get_fs() attaches (the same full-factor-covariance
-# correction the EAP section above derives from the hand-computed
-# reliabilities and error variances).
-fs_dat <- get_fs(mfit)
+```{r, eval=have_openmx && have_mirt}
+mx_irt <- tspa_mx_model("F2 ~ F1; F2 + F1 ~ 1", data = fs_irt)
+summary(mx_irt)
 ```
 
-```{r, eval = have_openmx && have_mirt}
-# Structural model on the two latent dimensions (the mirt factor names, kept
-# distinct from the score columns). All measurement inputs are derived from
-# the get_fs() result's attributes: the per-row loadings and error
-# covariances become definition variables referencing its own
-# *_by_*/ev_*/ecov_* columns, and the int_fs_* score-intercept columns are
-# appended from the fsb attribute (the fs_indiv() round-trip, now automatic):
-tspa_mx2_fit <- tspa_mx_model(model = "F2 ~ F1\nF2 + F1 ~ 1", data = fs_dat)
-# Summarize the results
-summary(tspa_mx2_fit)
+The structural names `F1` and `F2` match the IRT factor names. The observed
+score columns are `fs_F1` and `fs_F2`. Their observation-specific loadings,
+error covariances, and intercepts are obtained from `fs_irt` automatically.
+
+The IRT fit establishes the latent-variable scale and origin. In particular,
+the separate zero-mean IRT fits above do not preserve the generating mean
+of −1 for the second construct. Compare structural associations on a common
+scale, rather than interpreting that generating mean as a target of every fit.
+
+## How EAP uncertainty is translated into measurement error
+
+An EAP score's posterior uncertainty and its measurement-error variance
+in a single-indicator model are different quantities. For a unidimensional
+model, write the posterior variance for person $i$ as $v_i$ and the prior
+latent variance as $\psi$. The working score measurement model uses
+
+$$
+\rho_i = 1 - v_i/\psi,\qquad
+\lambda_i = \rho_i,\qquad
+\theta_i = \rho_i v_i.
+$$
+
+Thus, the software-reported posterior SE is $\sqrt{v_i}$, whereas the
+standard error of measurement in the stage-2 score equation is
+$\sqrt{\rho_i v_i}$. With unit prior variance, $\rho_i = 1-v_i$ and
+the working total score variance is $\rho_i$. These relationships underlie
+the EAP reliability adjustment in Lai and Hsiao (2022); for categorical
+models they provide an approximate score measurement model.
+
+`get_fs()` performs the conversion. The following example shows how to
+supply the same type of information explicitly when scores and posterior
+SEs come from another source.
+
+### Supplying observation-specific constraints explicitly
+
+For the separate single-factor fits above, `mirt` uses unit prior variance.
+We calculate each score's reliability and error variance:
+
+```{r, eval=have_mirt}
+fs_eap <- as.data.frame(cbind(fs1, fs2))
+names(fs_eap) <- c("fs1", "se_fs1", "fs2", "se_fs2")
+fs_eap <- within(fs_eap, {
+  rel_fs1 <- 1 - se_fs1^2
+  rel_fs2 <- 1 - se_fs2^2
+  ev_fs1 <- rel_fs1 * se_fs1^2
+  ev_fs2 <- rel_fs2 * se_fs2^2
+})
 ```
+
+In `fsL` and `fsT`, character entries name columns containing each
+person's values. `NA` entries specify zero loadings or covariances.
+The measurement errors from the two separate item sets are assumed
+uncorrelated here.
+
+```{r, eval=have_openmx && have_mirt}
+score_loadings <- matrix(c("rel_fs1", NA, NA, "rel_fs2"), nrow = 2,
+                          dimnames = list(c("fs1", "fs2"), c("f1", "f2")))
+score_errors <- matrix(c("ev_fs1", NA, NA, "ev_fs2"), nrow = 2,
+                        dimnames = rep(list(c("fs1", "fs2")), 2))
+mx_separate <- tspa_mx_model("f2 ~ f1; f2 + f1 ~ 1", data = fs_eap,
+                             fsL = score_loadings, fsT = score_errors)
+summary(mx_separate)
+```
+
+### More than one latent dimension
+
+For multidimensional EAP scores, let $\mathbf{E}_i$ be the posterior
+covariance matrix and $\boldsymbol{\Psi}$ the prior latent covariance.
+The corresponding working matrices are
+
+$$
+\mathbf{L}_i = \mathbf{I} - \mathbf{E}_i\boldsymbol{\Psi}^{-1},
+\qquad
+\mathbf{T}_i = \mathbf{L}_i\mathbf{E}_i.
+$$
+
+The score loading matrix can have off-diagonal entries, and the error
+covariance can be nonzero. `get_fs(mfit)` uses the full matrices, including
+the factor correlation; it does not treat the two dimensions as independent.
+
+## Comparison with a joint categorical SEM
+
+For comparison, fit the structural relation directly to the binary items
+with lavaan's default WLSMV estimator for ordered indicators:
+
+```{r, eval=have_mirt}
+wls_fit <- sem('
+  f1 =~ Item_1 + Item_2 + Item_3 + Item_4 + Item_5 +
+        Item_6 + Item_7 + Item_8 + Item_9 + Item_10
+  f2 =~ Item_11 + Item_12 + Item_13 + Item_14 + Item_15 +
+        Item_16 + Item_17 + Item_18 + Item_19 + Item_20
+  f2 ~ f1
+', data = dat, ordered = TRUE)
+standardizedSolution(wls_fit) |>
+  subset(op == "~")
+```
+
+This is a comparison of estimation approaches, not an identical-likelihood
+analysis: `mirt` uses logistic item response functions here, whereas lavaan's
+ordered-item model uses a probit formulation. See the
+[categorical-item simulation](sim-categorical-irt.html) for comparisons of
+joint and separate scoring, pooled and observation-specific correction,
+and WLSMV across several conditions.
+
+## Reference
+
+Lai, M. H. C., & Hsiao, Y.-Y. (2022). Two-stage path analysis with definition
+variables: An alternative framework to account for measurement error.
+*Psychological Methods, 27*(4), 568–588. <https://doi.org/10.1037/met0000410>

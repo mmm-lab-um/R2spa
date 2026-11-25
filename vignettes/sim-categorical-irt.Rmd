@@ -15,38 +15,37 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 # Overview
 
-Two-stage path analysis (2S-PA) estimates a structural path model by first computing
-factor scores (stage 1) and then regressing those scores on one another while
-correcting for their measurement error (stage 2, `tspa()` / `tspa_mx_model()`).
-Until now the package's scoring and correction machinery was exercised on *continuous*
-indicators. This vignette reports a small Monte Carlo study that asks whether the
-two-stage approximation remains accurate when the stage-1 model is a **categorical**
-(item-response) fit scored by `get_fs.mirt()`, and how it compares with the
-fully joint **WLSMV** model.
+Factor scores from categorical items can have different precision across
+participants. The original 2S-PA framework accounts for this
+observation-specific measurement error using definition variables
+(Lai & Hsiao, 2022).
+
+This simulation compares 2S-PA with joint categorical SEM in a two-factor
+latent regression. For a worked IRT analysis, see
+[2S-PA with OpenMx and IRT](tspa-vignette-mx.html).
 
 The structural model has two correlated unit-variance factors with a single path,
 `F2 ~ F1`. The stage-1 items are either **binary** (2PL) or **polytomous** (graded
 response, 4 categories), and the item thresholds are either **balanced** (spread
 across the latent range) or **skewed** (shifted so most responses fall in the lowest
-category). The two-stage estimators differ along two dimensions — the **stage-1 scoring**
-(joint vs. local per-construct) and the **stage-2 correction** (pooled vs. exact). The
-pooled stage-2 is `tspa()` and the exact stage-2 is `tspa_mx_model()`; local scoring is
-not a separate function, only a different way of obtaining the stage-1 scores. The table
-labels are shorthand for each combination:
+category). The table labels identify each combination of stage-1 scoring and
+stage-2 correction:
 
-- **`tspa`** / **`tspa_mx`** — *joint* stage 1, with the pooled `tspa()` or the exact
+- **`tspa`** / **`tspa_mx`** — *joint* stage 1, with the pooled `tspa()` or observation-specific
   `tspa_mx_model()` stage 2, respectively;
 - **`tspa_local`** / **`tspa_mx_local`** — the same two stage-2 routes, but with a *local*
   stage 1 that scores each factor from its own items separately;
-- **WLSMV** — the fully joint `lavaan::sem()` with categorical indicators (gold standard).
+- **WLSMV** — joint SEM fitted to the categorical indicators using `lavaan::sem()`.
 
-Because the data are simulated, the true standardized path is known, so we can report
-bias (point estimate) and coverage (standard-error accuracy).
+The population standardized path is known, so we report bias and the
+proportion of 95% confidence intervals containing that value (coverage).
+Here, "observation-specific" means that the measurement quantities are
+not pooled; the EAP score measurement model remains an approximation.
 
 The generation script is `data-raw/sim_categorical_irt.R` (kept out of the build); it
 writes the fixture read here (`vignettes/sim_categorical_irt.RDS`).
 
-# Data generation process
+# Data-generating model
 
 The latent model is, on the unit-factor-variance scale,
 
@@ -79,16 +78,16 @@ print(round(meta$marginal, 3))
 
 `balanced` is centered (binary marginal ~0.5; graded ~1.4 of 0--3) while `skewed`
 concentrates responses in the low end (binary ~0.2; graded ~0.7). Skewed thresholds
-make many observations weakly identified, so the per-observation score standard errors
-are larger and more heterogeneous — the condition that stresses the two-stage
-correction.
+provide less measurement information for many participants. This can produce
+larger and more heterogeneous score uncertainty, making the treatment of
+observation-specific measurement error especially relevant.
 
 # Estimators compared
 
 All five estimate the **standardized** `F2 ~ F1` path (the correlation between the
 factors), the scale-free quantity comparable across them. They differ along two
 dimensions — the **stage-1 scoring** (joint vs. local) and the **stage-2 correction**
-(pooled vs. exact):
+(pooled vs. observation-specific):
 
 - **Stage 1 — joint.** Fit the two-factor item-response model (`mirt`, `COV = F1*F2`) and
   score it with `get_fs()`. Each factor's EAP score conditions on *all* items, so the two
@@ -100,7 +99,7 @@ dimensions — the **stage-1 scoring** (joint vs. local) and the **stage-2 corre
 - **Stage 2 — pooled** (labels `tspa`, `tspa_local`): `tspa("F2 ~ F1", scores)`, which
   *pools* the per-observation quantities to a representative value before correcting the
   regression.
-- **Stage 2 — exact** (labels `tspa_mx`, `tspa_mx_local`): `tspa_mx_model("F2 ~ F1",
+- **Stage 2 — observation-specific** (labels `tspa_mx`, `tspa_mx_local`): `tspa_mx_model("F2 ~ F1",
   scores)`, which uses the per-observation quantities as definition variables — the
   non-pooled correction.
 - **WLSMV:** the fully joint `lavaan::sem()` of the measurement model and the path, fit
@@ -110,8 +109,9 @@ dimensions — the **stage-1 scoring** (joint vs. local) and the **stage-2 corre
 The standardized path is read from each fitted model as
 $\hat\gamma \, \text{SD}(F1) / \text{SD}(F2)$, with the standard error from a
 first-order (delta-method) linearization in the structural path and the two factor
-variances. This single formula reproduces `lavaan`'s `standardizedSolution()` for the
-two lavaan arms and the equivalent algebra for the OpenMx arm.
+variances. This puts the lavaan and OpenMx results on the same SD scale.
+The reported SEs do not include the additional `corrected_se = TRUE`
+adjustment for uncertainty in the stage-1 measurement quantities.
 
 # Results
 
@@ -164,17 +164,16 @@ knitr::kable(pt, row.names = FALSE,
              caption = "Point estimates (standardized path) by item type. True value = 0.6.")
 ```
 
-At `n = 200` and `500` the joint methods (`tspa`, `tspa_mx`) and WLSMV are close to
-unbiased (cell biases within about `0.02` of `0`). The **pooled** `tspa` is biased
-downward in every one of those cells, and the **exact** `tspa_mx` has strictly smaller
-bias than the pooled route; the WLSMV reference has the smallest bias in most cells. The pooled-vs-exact gap is largest under
-the **skewed** thresholds, where the per-observation standard errors are most
-heterogeneous. The smaller sample size (`n = 50`) is noisier, as expected (Monte Carlo SD
-roughly two to three times larger), but the point estimates stay close to `0.6` in most
-cells. The one clear exception is the WLSMV reference on the **skewed binary** items,
-which is biased upward (mean estimate about `0.70`, bias about `+0.10`) and has the worst
-coverage in the study — consistent with WLSMV's sensitivity to the low-frequency
-categories that skewed binary thresholds produce at small `n`.
+For joint stage-1 scoring at `n = 200` and `500`, the observed biases are
+small for both 2S-PA versions and WLSMV. Retaining observation-specific
+measurement quantities generally reduces the downward bias associated
+with pooling in these conditions. The difference is most apparent with
+skewed thresholds.
+
+Results vary more at `n = 50`. In particular, WLSMV has an upward bias
+of about 0.10 for skewed binary items in this simulation. The table should
+be read alongside the usable-SE counts below, because some small-sample
+fits do not yield usable standard errors.
 
 ## Standard errors
 
@@ -203,57 +202,50 @@ knitr::kable(se, row.names = FALSE,
              caption = "Standard errors (standardized path) by item type. Nominal coverage 0.95.")
 ```
 
-At `n = 200` and `500` coverage is within about `4` points of the nominal `0.95`, and
-calibration is condition-dependent rather than uniformly close to `1` (near- or
-above-nominal for the balanced binary conditions, mildly below for the graded and skewed
-items). At `n = 50` the picture changes: the first-order (delta-method) SEs used throughout
-**under-cover** for all three methods (calibration roughly `0.7` to `0.95`), because a
-first-order linearization of the standardized path understates its sampling variability when
-the stage-2 parameters are themselves uncertain. The WLSMV SEs are the least calibrated in
-these small-sample cells (about `0.7`), and on the skewed binary items the usable-SE count
-(`n_se`) also drops, since some fits return no usable covariance.
+Calibration compares the mean reported SE with the observed sampling SD
+across replications; a ratio of one indicates agreement. Coverage compares
+the reported confidence intervals with their nominal 95% level. Neither
+quantity is uniformly ideal across conditions.
+
+At `n = 50`, several conditions show SEs that are too small and coverage
+below 95%, particularly for WLSMV with skewed binary items. Bias, imprecise
+variance estimates, and the first-order standardization approximation can
+all affect coverage. This simulation does not isolate their contributions.
 
 ## Joint vs. local stage-1 scoring
 
-The `tspa_local` / `tspa_mx_local` arms repeat the two-stage estimation with *local*
-(per-construct) scoring. Local and joint scoring give nearly the same precision (Monte
-Carlo SD) and similar standard-error coverage at every `n` — the stage-2 correction
-absorbs the difference in how the scores were obtained. The difference is in **bias at
-small `n`**: at `n = 50` the locally-scored arms are noticeably more biased (mean cell
-`|bias|` about `0.10`, versus about `0.03`–`0.04` for the joint arms), the penalty
-largest for the **binary** items, where each item carries less information and dropping
-the cross-factor borrowing hurts most. At `n = 200` and `500` the gap closes to a couple
-of hundredths or less, so the two scoring modes are essentially equivalent at moderate
-and larger sample sizes. Per-construct scoring is therefore a workable alternative to
-joint scoring, at the cost of some extra small-sample bias.
+Separate scoring uses only the five indicators of each construct. Joint
+EAP scoring can also use information from the other construct's indicators
+through the estimated factor correlation. Both approaches carry their
+corresponding measurement information into stage 2.
+
+The separately scored versions show larger observed bias at `n = 50`
+in this study, especially with binary items. Differences are smaller at
+`n = 200` and `500`. This pattern is consistent with a benefit from
+shared measurement information in small samples, but it is specific to
+the correlated-factor models studied here.
 
 # Discussion
 
-- **The two-stage approximation carries over to categorical items.** At `n = 200` and `500`
-  both `tspa` and `tspa_mx` recover the standardized path for binary and polytomous
-  indicators, matching the WLSMV reference to within about `0.03` in the worst cell (the
-  exact `tspa_mx` route within about `0.015`). Categorical stage-1 items are therefore not
-  an obstacle to 2S-PA.
-- **Exact beats pooled under skew.** Pooling the per-observation error variances to a
-  single representative value is a better approximation when those variances are
-  homogeneous (balanced thresholds) and a worse one when they are heterogeneous
-  (skewed thresholds, where many observations are weakly identified). The bias gap
-  between `tspa` and `tspa_mx` is largest in exactly those cells; the OpenMx route, which
-  keeps the per-observation quantities, stays closer to WLSMV.
-- **SEs are well behaved at moderate `n`, with their limits visible at `n = 50`.** At
-  `n = 200` and `500` all three methods give coverage within about `4` points of `0.95`
-  with near-nominal, condition-dependent calibration. At `n = 50` the first-order
-  delta-method SEs under-cover for every method (calibration about `0.7`–`0.95`) — an
-   expected limitation of first-order linearization when the stage-2 parameters are
-   themselves uncertain — and WLSMV is the least calibrated (about `0.7`), with the fewest
-   usable SEs on the skewed binary items.
-- **Local (per-construct) scoring is close to joint, except at small `n`.** Scoring each
-  factor from its own items and combining the results block-diagonally with
-  `combine_fs()` gives essentially the same estimates as joint scoring at `n = 200` and
-  `500`, with similar precision and SE coverage at every size. The only cost is extra bias
-  at `n = 50` (largest for binary items): joint EAP scoring's cross-factor borrowing is
-  worth more when each factor is measured by few, weak items.
-- **Scope.** The study is small-scale (`B = `r meta$B`), single-group, and uses one
-  discrimination value and `4` categories for the polytomous case. It is meant to show
-  that the machinery works and to point at the pooled-vs-exact trade-off, not to give
-  precise coverage figures.
+- **Measurement error can be handled after IRT scoring.** At the larger
+  sample sizes, the 2S-PA estimates are close to the population path in
+  the conditions examined.
+- **Pooling is a substantive approximation.** Replacing individual
+  measurement quantities with an average can change the estimates,
+  particularly when score precision varies substantially across people.
+- **Small-sample inference remains difficult.** Measurement-error
+  correction alone does not ensure well-calibrated standard errors or
+  confidence intervals.
+- **The stage-1 model matters.** Joint and separate scoring use different
+  measurement information and show different small-sample biases here.
+
+The study is single-group and small-scale (`B = `r meta$B`), with one
+discrimination value and four categories in the polytomous conditions.
+Use it as an illustration of the scoring and measurement-error choices,
+rather than as a precise prediction of performance in another application.
+
+## Reference
+
+Lai, M. H. C., & Hsiao, Y.-Y. (2022). Two-stage path analysis with definition
+variables: An alternative framework to account for measurement error.
+*Psychological Methods, 27*(4), 568–588. <https://doi.org/10.1037/met0000410>

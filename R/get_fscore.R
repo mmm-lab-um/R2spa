@@ -84,6 +84,18 @@
 #' [compute_fs_prod()] for the derivation. Single-group lavaan models only
 #' (v1); not supported with `local = TRUE`.
 #'
+#' ## Row safety
+#'
+#' The result is an ordinary data frame, and the row-specific quantities
+#' (the `fs_pattern` labels, the per-observation `fsL`/`fsT` lists, and the
+#' `fs_<v>_se` / `_by_` / `ev_*` columns) are *positional*: they do not
+#' follow row subsetting or reordering. Add a stable ID column *before*
+#' scoring if you need to join the scores to external data, and score a
+#' subset by calling `get_fs()` on the subset rather than subsetting a
+#' scored result. [fs_indiv()] and [compute_fs_prod()] detect rows that
+#' were reordered or subset after scoring and error instead of silently
+#' using another observation's measurement quantities.
+#'
 #' @param object A data frame, a fitted [lavaan] model object, or a fitted
 #'        [lme4::lmer] model object (`merMod`).
 #' @param model An optional string specifying the measurement model
@@ -289,11 +301,11 @@
 #' @importFrom stats setNames
 #'
 #' @seealso
-#' - `vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")` for end-to-end stage-1/stage-2 examples.
-#' - `vignette("Scoring Matrices: lavaan CFA and lme4", package = "R2spa")` for the scoring-matrix internals.
-#' - `vignette("EFA Scores", package = "R2spa")` for EFA-based factor scores.
-#' - `vignette("2S-PA with Missing Data", package = "R2spa")` for `missing = "fiml"`.
-#' - `vignette("Scoring Methods and SE Correction in 2S-PA: A Simulation Study", package = "R2spa")` for a simulation study comparing scoring methods and SE correction.
+#' - `vignette("R2spa", package = "R2spa")` for end-to-end stage-1/stage-2 examples.
+#' - `vignette("scoring-matrices", package = "R2spa")` for the scoring-matrix internals.
+#' - `vignette("efa-score", package = "R2spa")` for EFA-based factor scores.
+#' - `vignette("missing-data", package = "R2spa")` for `missing = "fiml"`.
+#' - `vignette("sim-scoring-se", package = "R2spa")` for a simulation study comparing scoring methods and SE correction.
 #'
 #' @export
 #'
@@ -579,7 +591,8 @@ augment_fs <- function(fs, fs_ev) {
 assemble_fs_blocks <- function(
   blocks_by_group,
   format = c("unified", "list"),
-  group_col = NULL
+  group_col = NULL,
+  group_n = NULL
 ) {
   format <- match.arg(format)
   group_labels <- names(blocks_by_group)
@@ -596,7 +609,17 @@ assemble_fs_blocks <- function(
 
   for (g in seq_along(group_labels)) {
     blocks <- blocks_by_group[[g]]
-    n_cases <- max(unlist(lapply(blocks, function(b) max(b$case_idx))))
+    # Ground-truth group size: the caller knows the model frame's per-group
+    # row counts, so a fully-missing case at the END of a group (no scorable
+    # case_idx reaches it) is kept as an NA row instead of being dropped
+    # (PLAN 18). `group_n` is positional (same order as blocks_by_group)
+    # because the single-group label "" is not name-addressable in R.
+    # Without `group_n` the legacy max(case_idx) sizing applies.
+    if (!is.null(group_n)) {
+      n_cases <- group_n[g]
+    } else {
+      n_cases <- max(unlist(lapply(blocks, function(b) max(b$case_idx))))
+    }
 
     aug_list <- lapply(blocks, function(b) {
       augment_fs(b$fs, b$fsT)

@@ -53,8 +53,8 @@ element as free. A non-\code{NULL} \code{which_free} of length
 principal submatrix (see \code{vfsLT}).}
 
 \item{engine}{The engine used to evaluate the Jacobian \code{J = d(thetahat)/d(eta)}. \code{"analytic"} (the default) uses a
-refit-free, deterministic influence-function closed form
-(PLAN 16, sections 2.4 and 4.3): \verb{J = -H^\{-1\} C}, with \code{H}
+refit-free, deterministic influence-function closed form:
+\verb{J = -H^\{-1\} C}, with \code{H}
 (the log-likelihood Hessian over the free params) and \code{C}
 (the cross-derivative w.r.t. the fixed \code{fsL}/\code{fsT} entries)
 obtained by central-differencing the analytic log-likelihood
@@ -108,7 +108,7 @@ correction is never applied twice).
 
 The \code{engine} argument selects how the Jacobian is evaluated. The default
 \code{"analytic"} is refit-free and deterministic: an influence-function closed
-form (PLAN 16, sections 2.4 and 4.3), \verb{J = -H^\{-1\} C}, with \code{H} (the
+form, \verb{J = -H^\{-1\} C}, with \code{H} (the
 log-likelihood Hessian over the free params) and \code{C} (the cross-derivative
 w.r.t. the fixed \code{fsL}/\code{fsT} entries) obtained by central-differencing the
 analytic log-likelihood score. It covers single- and multi-group models,
@@ -141,7 +141,7 @@ sqrt(diag(vc))   # corrected standard errors
 }
 \seealso{
 \itemize{
-\item \code{vignette("Corrected Standard Errors", package = "R2spa")} for the corrected-SE workflow.
-\item \code{vignette("Correction to Measurement Error", package = "R2spa")} for the underlying error correction.
+\item \code{vignette("corrected-se", package = "R2spa")} for the corrected-SE workflow.
+\item \code{vignette("correction-error", package = "R2spa")} for the underlying error correction.
 }
 }

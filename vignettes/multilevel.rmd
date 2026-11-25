@@ -14,22 +14,46 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
+# OpenMx is an optional Suggests; guard the stage-2 OpenMx chunks so the
+# vignette builds whether or not it is installed.
+have_openmx <- requireNamespace("OpenMx", quietly = TRUE)
 ```
 
-In this vignette, we show how to use 2S-PA for estimating associations for cluster-level random effects. We use simulated data from a parallel-process growth model, where the two processes have different time scales. This is a pretty challenging model to estimate using standard structural equation models (as time scales are different) or multilevel models (as it is multivariate).
+## Studying associations among individual growth parameters
+
+Suppose researchers measure two processes repeatedly, such as well-being
+and stress, and want to know whether people who change more quickly in one
+process also change more quickly in the other. A mixed model can estimate
+each person's intercept and slope, but those estimates contain error.
+Simply correlating the estimated random effects treats them as perfectly
+measured and can bias the associations.
+
+This vignette uses 2S-PA to account for measurement error in empirical Bayes
+(EB) estimates of random effects. We fit a separate mixed model for each
+process in stage 1, then estimate the covariances among their random
+intercepts and slopes in stage 2. The simulated processes have different
+measurement schedules: five occasions for one and twenty for the other.
+This lets us analyze their associations without fitting a single
+multivariate growth model.
+
+Stage 2 uses `tspa_mx_model()` to retain each person's measurement
+information. These examples require `OpenMx` and are skipped if it is not
+installed. For methodological background, see Lai and Liu (2026).
 
 ```{r, message = FALSE}
 library(R2spa)
 library(lme4)
-library(OpenMx)
+if (have_openmx) library(OpenMx)
 ```
 
-The EB (empirical-Bayes) random effects from `lmer()` are per-cluster, so the
-per-cluster loadings and error covariances are supplied to `tspa_mx_model()` as
-*definition variables* (column names), which it derives from the `get_fs()`
-result automatically. The score column of each latent carries an `fs_` prefix
-(e.g. latent `u0` is measured by the score column `fs_u0`). A small helper
-pulls the implied latent covariance back out of the fitted RAM model by name:
+`get_fs()` returns one row per person for these models. The latent random
+intercept `u0` is measured by the score `fs_u0`, and the latent random
+slope `u1` by `fs_u1`. Their score loadings and error covariances can vary
+with the number and timing of observations. OpenMx uses definition variables
+to fix these quantities to each person's values.
+
+The helper below extracts the estimated latent covariance matrix from the
+OpenMx fit for the comparisons later in the vignette.
 
 ```{r}
 lat_cov <- function(fit, lat) {
@@ -82,7 +106,7 @@ y1 <- eta[clus_id1, 1] + time1 * eta[clus_id1, 2] + e1
 clus_id2 <- rep(seq_len(n_clus), each = n_time2)
 sigma2 <- 2  # error sd
 # Simulate error
-e2 <- rnorm(clus_id1)
+e2 <- rnorm(clus_id2)
 e2 <- e2 - mean(e2)
 e2 <- e2 / sd(e2) * sigma2
 y2 <- eta[clus_id2, 3] + time2 * eta[clus_id2, 4] + e2
@@ -109,14 +133,13 @@ error variances (`ev_fs_u0`) and error covariance (`ecov_fs_u1_fs_u0`):
 knitr::kable(head(fs_dat1), digits = 3)
 ```
 
-The loading, error-variance and error-covariance column names are exactly the
-*definition variables* `tspa_mx_model()` reads in the model below.
-
-One caveat: because `get_fs()` does not attach a per-cluster score intercept
-(`fsb`) for `lmer()` fits, stage 2 fixes the score intercepts at zero. That does not
-affect the latent *covariances* compared below (a covariance is separable from
-the mean), but it pins the latent *mean* estimates (`u0 + u1 ~ 1`) to the shrunk
-EB score means, so read those means with that caveat.
+The stage-2 function reads the measurement columns automatically.
+The EB random effects are deviations from the fixed-effect intercept and
+slope, rather than estimates of the person's full trajectory coefficients.
+The comparisons below concern variances and covariances of those deviations.
+To describe average trajectories, use the fixed effects from the stage-1
+mixed models; the stage-2 random-effect means are not the generating
+intercept and slope means.
 
 ## Using EB Without Accounting for Error
 
@@ -127,30 +150,35 @@ cor(cbind(eb_m1, eb_m2))
 cov(cbind(eb_m1, eb_m2))
 ```
 
-The numbers are quite different from the generating values.
+These are associations among the EB estimates themselves. Shrinkage and
+estimation error can make them differ from the associations among the
+underlying random effects. We compare them with the population values below.
 
 ## 2S-PA
 
 ### Process 1
 
-```{r}
-tspa1_mx <- tspa_mx_model(model = "u0 ~~ u1\nu0 + u1 ~ 1", data = fs_dat1)
-# Run OpenMx
-tspa1_mx_fit <- mxRun(tspa1_mx)
+First estimate the random-intercept and random-slope covariance for one
+process. `tspa_mx_model()` returns a fitted model, which can be summarized
+directly:
+
+```{r, eval = have_openmx}
+tspa1_mx_fit <- tspa_mx_model(model = "u0 ~~ u1\nu0 + u1 ~ 1", data = fs_dat1)
 # Summarize the results
 summary(tspa1_mx_fit)
 ```
 
 The estimated variances and covariances for $u_0$ and $u_1$ are similar to the ones in the mixed model.
 
-```{r}
+```{r, eval = have_openmx}
 print("2S-PA covariance")
 lat_cov(tspa1_mx_fit, c("u0", "u1"))
 print("lme4 covariance")
 as.matrix(VarCorr(m1)$clus_id1)
 ```
 
-Notes: The formulation works best with ML estimation for `lmer()`; with REML, one may need to consider the contrast matrix.
+The examples use maximum likelihood (`REML = FALSE`) for the stage-1
+mixed models.
 
 <!-- For REML,
 
@@ -165,15 +193,13 @@ $$ -->
 
 ### Process 2
 
-```{r}
-tspa2_mx <- tspa_mx_model(model = "u0 ~~ u1\nu0 + u1 ~ 1", data = fs_dat2)
-# Run OpenMx
-tspa2_mx_fit <- mxRun(tspa2_mx)
+```{r, eval = have_openmx}
+tspa2_mx_fit <- tspa_mx_model(model = "u0 ~~ u1\nu0 + u1 ~ 1", data = fs_dat2)
 # Summarize the results
 summary(tspa2_mx_fit)
 ```
 
-```{r}
+```{r, eval = have_openmx}
 print("2S-PA covariance")
 lat_cov(tspa2_mx_fit, c("u0", "u1"))
 print("lme4 covariance")
@@ -182,7 +208,9 @@ as.matrix(VarCorr(m2)$clus_id2)
 
 ### Combining Processes 1 and 2
 
-First, combine the two data sets with EB estimates. We'll add suffix to separate the variables.
+The suffixes `_1` and `_2` distinguish the two processes. Both score datasets
+contain the same people in the same order, so we combine their columns.
+In an application, verify participant alignment before combining scores.
 
 ```{r}
 colnames(fs_dat1) <- paste0(colnames(fs_dat1), "_1")
@@ -190,52 +218,50 @@ colnames(fs_dat2) <- paste0(colnames(fs_dat2), "_2")
 fs_dat <- cbind(fs_dat1, fs_dat2)
 ```
 
-```{r}
+```{r, eval = have_openmx}
 # Unstructured model on the four growth-parameter latents. Explicit fsL/fsT
 # here: auto-derivation yields one latent set per frame, so the two
 # processes' u0/u1 latents must be named apart (u0_1/u0_2, u1_1/u1_2).
 cross_load <- matrix(c("u0_by_fs_u0_1", "u0_by_fs_u1_1", NA, NA,
-                       "u1_by_fs_u0_1", "u1_by_fs_u1_1", NA, NA,
-                       NA, NA, "u0_by_fs_u0_2", "u0_by_fs_u1_2",
-                       NA, NA, "u1_by_fs_u0_2", "u1_by_fs_u1_2"), nrow = 4) |>
-    `dimnames<-`(list(c("fs_u0_1", "fs_u1_1", "fs_u0_2", "fs_u1_2"),
-                      c("u0_1", "u1_1", "u0_2", "u1_2")))
+                        "u1_by_fs_u0_1", "u1_by_fs_u1_1", NA, NA,
+                        NA, NA, "u0_by_fs_u0_2", "u0_by_fs_u1_2",
+                        NA, NA, "u1_by_fs_u0_2", "u1_by_fs_u1_2"), nrow = 4) |>
+     `dimnames<-`(list(c("fs_u0_1", "fs_u1_1", "fs_u0_2", "fs_u1_2"),
+                       c("u0_1", "u1_1", "u0_2", "u1_2")))
 err_cov <- matrix(c("ev_fs_u0_1", "ecov_fs_u1_fs_u0_1", NA, NA,
                     "ecov_fs_u1_fs_u0_1", "ev_fs_u1_1", NA, NA,
                     NA, NA, "ev_fs_u0_2", "ecov_fs_u1_fs_u0_2",
                     NA, NA, "ecov_fs_u1_fs_u0_2", "ev_fs_u1_2"), nrow = 4) |>
-    `dimnames<-`(rep(list(c("fs_u0_1", "fs_u1_1", "fs_u0_2", "fs_u1_2")), 2))
-tspa3_mx <- tspa_mx_model(
+     `dimnames<-`(rep(list(c("fs_u0_1", "fs_u1_1", "fs_u0_2", "fs_u1_2")), 2))
+tspa3_mx_fit <- tspa_mx_model(
     model = "u0_1 ~~ u1_1 + u0_2 + u1_2\n
              u1_1 ~~ u0_2 + u1_2\n
              u0_2 ~~ u1_2\n
              u0_1 + u1_1 + u0_2 + u1_2 ~ 1",
     data = fs_dat, fsL = cross_load, fsT = err_cov)
-# Run OpenMx
-tspa3_mx_fit <- mxRun(tspa3_mx)
 # Summarize the results
 summary(tspa3_mx_fit)
 ```
 
-```{r}
+```{r, eval = have_openmx}
 lat3 <- c("u0_1", "u1_1", "u0_2", "u1_2")
 knitr::kable(cov(cbind(eb_m1, eb_m2)), digits = 3, caption = "EB covariance")
 knitr::kable(lat_cov(tspa3_mx_fit, lat3), digits = 3, caption = "2S-PA covariance")
 knitr::kable(latent_cov, digits = 3, caption = "Population covariance")
 ```
 
-One can see the 2S-PA covariance matrix is much closer to the population values than using just EB estimates.
-
-With only `n_clus = 100` clusters, any single draw carries substantial
-sampling variability (a Monte-Carlo study over the same design gives standard
-deviations of roughly `0.05`--`0.26` on these entries). The 2S-PA estimates are
-essentially unbiased -- their mean across many replications recovers the
-population values to within a few percent -- so the small gaps remaining here
-are sampling error from one realization, not a bias in the estimator.
+The three tables compare covariances of the EB estimates, 2S-PA latent
+covariances, and the generating population covariances. In this simulated
+sample, measurement-error correction brings the cross-process covariances
+closer to the population values. Differences remain because the estimates
+are based on only 100 participants. A single simulated sample cannot
+establish an estimator's bias; that requires repeated-sampling evaluation.
 
 # With Missing Data
 
-Now consider data with missing time points. We consider missing at random, where data are more likely to be missing for later time points.
+Next, remove some observations, with a higher probability of missingness
+at later occasions. Missingness depends on observed time, so this
+simulation uses a missing-at-random mechanism conditional on time.
 
 ```{r}
 set.seed(1942)
@@ -262,30 +288,39 @@ colnames(fs_dat2) <- paste0(colnames(fs_dat2), "_2")
 fs_dat <- cbind(fs_dat1, fs_dat2)
 ```
 
-Note that the cross-loadings and error covariances are not constant across clusters.
+People now differ in both the number and timing of observed occasions.
+Their score loadings and error covariances consequently vary:
 
 ```{r}
 head(fs_dat)
 ```
 
-Now run 2S-PA and compare with EB estimates without accounting for error
+Fit the same stage-2 model using the updated measurement information.
+The `mxTryHard()` call retries optimization to seek a converged solution:
 
-```{r}
+```{r, eval = have_openmx}
 tspa3o_mx <- tspa_mx_model(
     model = "u0_1 ~~ u1_1 + u0_2 + u1_2\n
              u1_1 ~~ u0_2 + u1_2\n
              u0_2 ~~ u1_2\n
              u0_1 + u1_1 + u0_2 + u1_2 ~ 1",
     data = fs_dat, fsL = cross_load, fsT = err_cov)
-# Run OpenMx
+# Retry optimization
 tspa3o_mx_fit <- mxTryHard(tspa3o_mx)
 # Summarize the results
 summary(tspa3o_mx_fit)
 ```
 
-```{r}
+```{r, eval = have_openmx}
 lat3 <- c("u0_1", "u1_1", "u0_2", "u1_2")
 knitr::kable(cov(cbind(fs_dat1[, 1:2], fs_dat2[, 1:2])), digits = 3, caption = "EB covariance")
 knitr::kable(lat_cov(tspa3o_mx_fit, lat3), digits = 3, caption = "2S-PA covariance")
 knitr::kable(latent_cov, digits = 3, caption = "Population covariance")
 ```
+
+## Reference
+
+Lai, M. H. C., & Liu, S. (2026). A two-stage approach to account for
+measurement error when using empirical Bayes estimates of random slopes.
+*Psychological Methods*. Advance online publication.
+<https://doi.org/10.1037/met0000838>

@@ -2,13 +2,21 @@
 % Please edit documentation in R/helper.R
 \name{block_diag}
 \alias{block_diag}
-\title{Create block diagonal matrix}
+\title{Create a block diagonal matrix}
 \usage{
 block_diag(...)
 }
 \arguments{
-\item{...}{Either multiple matrices or a list of matrices.}
+\item{...}{Either multiple square matrices, or a single \emph{list} of
+square matrices. A single bare matrix is \emph{not} accepted:
+with one argument it is coerced via \code{as.list()} into a list
+of its scalar elements and rejected. Wrap it in a list instead,
+e.g. \code{block_diag(list(m))}.
+
+Every input must be a square matrix, and the inputs must either all carry
+row and column names or all lack them (mixing named and unnamed matrices is
+an error).}
 }
 \description{
-Create block diagonal matrix
+Create a block diagonal matrix
 }

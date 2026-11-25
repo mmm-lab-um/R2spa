@@ -30,7 +30,7 @@
 #'
 #' The `engine` argument selects how the Jacobian is evaluated. The default
 #' `"analytic"` is refit-free and deterministic: an influence-function closed
-#' form (PLAN 16, sections 2.4 and 4.3), `J = -H^{-1} C`, with `H` (the
+#' form, `J = -H^{-1} C`, with `H` (the
 #' log-likelihood Hessian over the free params) and `C` (the cross-derivative
 #' w.r.t. the fixed `fsL`/`fsT` entries) obtained by central-differencing the
 #' analytic log-likelihood score. It covers single- and multi-group models,
@@ -79,8 +79,8 @@
 #'                   principal submatrix (see `vfsLT`).
 #' @param engine The engine used to evaluate the Jacobian `J =
 #'              d(thetahat)/d(eta)`. `"analytic"` (the default) uses a
-#'              refit-free, deterministic influence-function closed form
-#'              (PLAN 16, sections 2.4 and 4.3): `J = -H^{-1} C`, with `H`
+#'              refit-free, deterministic influence-function closed form:
+#'              `J = -H^{-1} C`, with `H`
 #'              (the log-likelihood Hessian over the free params) and `C`
 #'              (the cross-derivative w.r.t. the fixed `fsL`/`fsT` entries)
 #'              obtained by central-differencing the analytic log-likelihood
@@ -99,8 +99,8 @@
 #'     `vcov(tspa_fit)` (symmetric).
 #'
 #' @seealso
-#' - `vignette("Corrected Standard Errors", package = "R2spa")` for the corrected-SE workflow.
-#' - `vignette("Correction to Measurement Error", package = "R2spa")` for the underlying error correction.
+#' - `vignette("corrected-se", package = "R2spa")` for the corrected-SE workflow.
+#' - `vignette("correction-error", package = "R2spa")` for the underlying error correction.
 #'
 #' @examples
 #' library(lavaan)

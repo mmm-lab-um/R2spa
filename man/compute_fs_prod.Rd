@@ -131,6 +131,6 @@ order of a normal frequency distribution in any number of variables.
 }
 \seealso{
 \itemize{
-\item \code{vignette("Product factor-score indicators (latent interactions)", package = "R2spa")} for the full latent-interaction workflow.
+\item \code{vignette("product-factor-scores", package = "R2spa")} for the full latent-interaction workflow.
 }
 }

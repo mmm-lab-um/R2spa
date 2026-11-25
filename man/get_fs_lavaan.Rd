@@ -254,10 +254,10 @@ get_fs(PoliticalDemocracy[c("x1", "x2", "x3", "y1", "y2", "y3", "y4")],
 }
 \seealso{
 \itemize{
-\item \code{vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")} for end-to-end stage-1/stage-2 examples.
-\item \code{vignette("Scoring Matrices: lavaan CFA and lme4", package = "R2spa")} for the scoring-matrix internals.
-\item \code{vignette("EFA Scores", package = "R2spa")} for EFA-based factor scores.
-\item \code{vignette("2S-PA with Missing Data", package = "R2spa")} for \code{missing = "fiml"}.
-\item \code{vignette("Scoring Methods and SE Correction in 2S-PA: A Simulation Study", package = "R2spa")} for a simulation study comparing scoring methods and SE correction.
+\item \code{vignette("R2spa", package = "R2spa")} for end-to-end stage-1/stage-2 examples.
+\item \code{vignette("scoring-matrices", package = "R2spa")} for the scoring-matrix internals.
+\item \code{vignette("efa-score", package = "R2spa")} for EFA-based factor scores.
+\item \code{vignette("missing-data", package = "R2spa")} for \code{missing = "fiml"}.
+\item \code{vignette("sim-scoring-se", package = "R2spa")} for a simulation study comparing scoring methods and SE correction.
 }
 }

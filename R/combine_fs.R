@@ -48,7 +48,8 @@
 #' around.
 #'
 #' **Scope (v1).** Single-group inputs only: a multi-group result (a list of
-#' per-group data frames, or a unified frame with a `group_col`) is rejected.
+#' per-group data frames, a unified frame with a `group_col`, or a
+#' multi-group mirt frame carrying a literal `group` column) is rejected.
 #' `lme4` inputs are one row per cluster, so align them on the cluster id.
 #'
 #' @param fs_list A list of at least two [get_fs()] results (lavaan, mirt, or
@@ -139,7 +140,10 @@ combine_fs <- function(fs_list, ..., id = NULL, latent_names = NULL) {
         call. = FALSE
       )
     }
-    if (!is.null(attr(x, "group_col"))) {
+    # A unified lavaan MG result carries a `group_col` attribute; a
+    # multi-group mirt result carries only a literal `group` column (no
+    # attribute), so both signals are rejected (v1: single-group only).
+    if (!is.null(attr(x, "group_col")) || "group" %in% names(x)) {
       stop(
         "combine_fs() (v1) supports single-group inputs only; input ", k,
         " is a multi-group result.",

@@ -26,8 +26,21 @@ grandStandardizedSolution(
 \arguments{
 \item{object}{An object of class lavaan.}
 
-\item{model_list}{A list of string variable describing the structural path
-model, in \code{lavaan} syntax.}
+\item{model_list}{A named list of the model's estimated block matrices
+(blocks \code{lambda}, \code{theta}, \code{psi},
+\code{beta}, \code{nu}, \code{alpha}). The natural layout
+is the flat one returned by \code{lavaan::lavTech(fit,
+"est")}, where a multigroup fit repeats the block names
+once per group (in group order). For a single-group fit
+\code{lavInspect(fit, "est")} and \code{lavTech(fit,
+"est")} coincide; for a multigroup fit
+\code{lavInspect(fit, "est")} instead nests the blocks
+under each group label, and that nested layout is accepted
+too (it is flattened to the group-ordered layout
+automatically). Defaults to the \code{object}'s own
+estimates; supply a different list to standardize a
+different set of estimates on the object's parameter
+positions.}
 
 \item{se}{A Boolean variable. If TRUE, standard errors for the grand
 standardized parameters will be computed.}
@@ -137,6 +150,6 @@ grand_standardized_solution(fit4)
 }
 \seealso{
 \itemize{
-\item \code{vignette("Grand Standardized Coefficients", package = "R2spa")} for the grand-standardization workflow.
+\item \code{vignette("gr-std-coef", package = "R2spa")} for the grand-standardization workflow.
 }
 }

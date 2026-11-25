@@ -2,3 +2,72 @@ url: https://mmm-lab-um.github.io/R2spa/
 template:
   bootstrap: 5
 
+reference:
+  - title: "Core two-stage estimation"
+    contents:
+    - tspa
+    - tspa_mx_model
+    - get_fs
+    - get_fs_lavaan
+    - get_fs_lmer
+  - title: "Factor-score computation"
+    contents:
+    - compute_fscore
+    - compute_fs_prod
+    - fs_indiv
+    - augment_lav_predict
+    - combine_fs
+    - fs_to_group_list
+  - title: "SE correction & standardization"
+    contents:
+    - vcov_corrected
+    - grand_standardized_solution
+  - title: "Utilities"
+    contents:
+    - block_diag
+
+articles:
+  - title: "Getting started"
+    desc: >
+      Obtain factor scores, account for measurement error, and interpret
+      structural relations using worked examples.
+    contents:
+    - R2spa
+  - title: "Scoring strategies"
+    desc: >
+      Scores from separate and multi-factor measurement models, and the
+      loadings and error variances used in stage 2.
+    contents:
+    - scoring-matrices
+    - multiple-factors
+  - title: "Missing data & groups"
+    desc: >
+      Observation-specific measurement error with missing indicators and
+      random-effect estimates from mixed models.
+    contents:
+    - missing-data
+    - multilevel
+  - title: "Inference: SEs & standardization"
+    desc: >
+      Corrected standard errors for the stage-2 path and grand-standardized
+      coefficients.
+    contents:
+    - corrected-se
+    - correction-error
+    - gr-std-coef
+  - title: "Extensions"
+    desc: >
+      Latent interactions, categorical items with mirt and OpenMx,
+      latent growth models, and EFA scores.
+    contents:
+    - product-factor-scores
+    - tspa-vignette-mx
+    - tspa-growth-vignette
+    - efa-score
+  - title: "Theory & simulation evidence"
+    desc: >
+      Simulation studies comparing scoring methods, standard-error
+      corrections, and categorical-item analyses with joint SEM.
+    contents:
+    - sim-scoring-se
+    - sim-categorical-irt

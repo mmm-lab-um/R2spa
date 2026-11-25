@@ -1,238 +1,199 @@
 ---
 title: "Multi-Factor Measurement Model"
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    toc: true
 vignette: >
   %\VignetteIndexEntry{Multi-Factor Measurement Model}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>"
-)
+```{r, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-```{r, message = FALSE}
+## Why can factor scores have cross-loadings?
+
+A CFA may specify that each item loads on only one factor. That does not
+necessarily mean that each *factor score* measures only one factor.
+When regression scores are obtained from a model with correlated factors,
+the score for one factor generally uses information from indicators of the
+other factors as well. In stage 2, the scores can therefore have
+cross-loadings and correlated measurement errors.
+
+This vignette shows how `R2spa` accounts for these properties, using
+the `PoliticalDemocracy` data from the
+[lavaan SEM tutorial](https://lavaan.ugent.be/tutorial/sem.html).
+See the [introductory vignette](R2spa.html) for the basic two-stage workflow.
+
+```{r, message=FALSE}
 library(lavaan)
 library(R2spa)
 ```
 
-The example is from https://lavaan.ugent.be/tutorial/sem.html. 
+## Scores from a two-factor CFA
 
-## Factor score
-
-For a CFA model with multiple latent factors, even when each indicator only loads on one factor, the resulting factor scores generally are weighted composites of **ALL** indicators. Consider the regression score, which has the form
-
-$$\tilde{\boldsymbol \eta} = \mathbf{A}(\mathbf{y} - \hat{\boldsymbol \mu}) + \boldsymbol{\alpha}$$
-
-where $\mathbf{A} = \boldsymbol{\Psi}\boldsymbol{\Lambda}^\top \hat{\boldsymbol{\Sigma}}^{-1}$ is a $q$ $\times$ $p$ matrix, $\hat{\boldsymbol \mu} = \boldsymbol{\nu} + \boldsymbol{\Lambda} \boldsymbol{\alpha}$ and $\boldsymbol{\Sigma} = \boldsymbol{\Lambda} \boldsymbol{\Psi}\boldsymbol{\Lambda}^\top + \boldsymbol{\Theta}$ are the model-implied means and covariances of the indicators $\mathbf{y}$, and $\boldsymbol{\alpha}$ and $\boldsymbol{\Psi}$ are the latent means and latent covariances. 
-
-Therefore, assuming that the model is correctly specified such that $\mathbf{y} = \boldsymbol{\nu} + \boldsymbol{\Lambda} \boldsymbol{\eta} + \boldsymbol{\varepsilon}$,
-
-$$
-  \begin{aligned}
-  \tilde{\boldsymbol \eta} & = \mathbf{A}(\boldsymbol{\Lambda} \boldsymbol{\eta} + \boldsymbol{\varepsilon} - \boldsymbol{\Lambda} \boldsymbol{\alpha}) + \boldsymbol{\alpha} \\
-  & = (\mathbf{I} - \mathbf{A}\boldsymbol{\Lambda}) \boldsymbol{\alpha} +
-  \mathbf{A}\boldsymbol{\Lambda} \boldsymbol{\eta} + \mathbf{A}\boldsymbol{\varepsilon}.
-  \end{aligned}
-$$
-
-If we consider $\tilde{\boldsymbol \eta}$ as indicators of $\boldsymbol \eta$, we can see that $\boldsymbol{\nu}_\tilde{\boldsymbol{\eta}} = (\mathbf{I} - \mathbf{A}\boldsymbol{\Lambda}) \boldsymbol{\alpha}$ is the intercept, $\boldsymbol{\Lambda}_\tilde{\boldsymbol{\eta}} = \mathbf{A}\boldsymbol{\Lambda}$ is the $q$ $\times$ $q$ loading matrix, and $\boldsymbol{\Theta}_\tilde{\boldsymbol{\eta}} = \mathbf{A}\boldsymbol{\varepsilon}$ is the error covariance matrix.
-
-We can see that $\boldsymbol{\Lambda}_\tilde{\boldsymbol{\eta}}$ is generally not diagonal, as the following shows:
+First, fit a CFA for industrialization (`ind60`) and political democracy
+(`dem60`), both in 1960. `std.lv = TRUE` sets each factor's variance to one
+in this measurement model.
 
 ```{r}
-# CFA
-my_cfa <- "
-  # latent variables
-    ind60 =~ x1 + x2 + x3
-    dem60 =~ y1 + y2 + y3 + y4
-"
-cfa_fit <- cfa(model = my_cfa,
-               data  = PoliticalDemocracy,
-               std.lv = TRUE)
-# A matrix
-pars <- lavInspect(cfa_fit, what = "est")
-lambda_mat <- pars$lambda
-psi_mat <- pars$psi
-sigma_mat <- cfa_fit@implied$cov[[1]]
-ginvsigma <- MASS::ginv(sigma_mat)
-alambda <- psi_mat %*% crossprod(lambda_mat, ginvsigma %*% lambda_mat)
-alambda
+measurement_model <- '
+  ind60 =~ x1 + x2 + x3
+  dem60 =~ y1 + y2 + y3 + y4
+'
+cfa_fit <- cfa(measurement_model, data = PoliticalDemocracy, std.lv = TRUE)
+fs_dat <- get_fs(cfa_fit)
+head(fs_dat[c("fs_ind60", "fs_dem60")])
 ```
 
-We can also use `R2spa::get_fs()`:
+The score loading matrix describes how the scores relate to the latent
+variables. Rows correspond to scores and columns to latent variables.
+The off-diagonal entries are *score cross-loadings*, not item cross-loadings
+in the original CFA. The error covariance matrix describes the measurement
+error remaining in those scores.
 
 ```{r}
-(fs_dat <- get_fs(PoliticalDemocracy, model = my_cfa, std.lv = TRUE)) |> head()
+attr(fs_dat, "fsL")[[1]]
+attr(fs_dat, "fsT")[[1]]
 ```
 
-Therefore, cross-loadings must be accounted for in stage 2. Because `fs_dat`
-comes from `get_fs()`, `tspa()` reads the implied loading matrix `fsL` (which
-here carries the cross-loadings) and the score error covariance `fsT` from the
-result's attributes, so the `fsT`/`fsL` arguments no longer need to be passed
-(they can still be passed explicitly if preferred).
+`tspa()` uses both matrices automatically. The following model estimates
+the regression of democracy on industrialization while accounting for the
+score cross-loadings and measurement-error covariance:
 
 ```{r}
-tspa_fit <- tspa(model = "dem60 ~ ind60", data = fs_dat)
+tspa_fit <- tspa("dem60 ~ ind60", data = fs_dat)
+standardizedSolution(tspa_fit) |>
+  subset(op == "~")
 cat(attr(tspa_fit, "tspaModel"))
-parameterestimates(tspa_fit)
 ```
 
-The non-diagonal `fsL` (cross-loadings) is what makes the score-based model
-recover the joint-model structure, because each score is a weighted composite of
-all the indicators.
+### The score measurement equation
 
-## Three-factor model example
+For continuous indicators, regression factor scores have the form
 
-```{r}
-# CFA
-cfa_3fac <-  "
-  # latent variables
-    ind60 =~ x1 + x2 + x3
-    dem60 =~ y1 + y2 + y3 + y4
-    dem65 =~ y5 + y6 + y7 + y8
-"
-cfa_3fac_fit <- cfa(model = cfa_3fac,
-                    data  = PoliticalDemocracy,
-                    std.lv = TRUE)
-# A matrix
-pars <- lavInspect(cfa_3fac_fit, what = "est")
-lambda_mat <- pars$lambda
-psi_mat <- pars$psi
-sigma_mat <- cfa_3fac_fit@implied$cov[[1]]
-ginvsigma <- MASS::ginv(sigma_mat)
-alambda <- psi_mat %*% crossprod(lambda_mat, ginvsigma %*% lambda_mat)
-alambda
-```
+$$
+\tilde{\boldsymbol{\eta}} =
+\mathbf{A}(\mathbf{y} - \boldsymbol{\mu}) + \boldsymbol{\alpha},
+\qquad
+\mathbf{A} = \boldsymbol{\Psi}\boldsymbol{\Lambda}^{\top}
+\boldsymbol{\Sigma}^{-1},
+$$
 
-We can also use `R2spa::get_fs()`:
+where $\boldsymbol{\Lambda}$ contains the item loadings,
+$\boldsymbol{\Psi}$ contains the factor variances and covariances,
+$\boldsymbol{\alpha}$ contains the factor means, and
+$\boldsymbol{\mu} = \boldsymbol{\nu} +
+\boldsymbol{\Lambda}\boldsymbol{\alpha}$ contains the item means.
+The model-implied item covariance matrix is
+$\boldsymbol{\Sigma} = \boldsymbol{\Lambda}\boldsymbol{\Psi}
+\boldsymbol{\Lambda}^{\top} + \boldsymbol{\Theta}$.
+In practice, estimated measurement parameters are used in these expressions.
 
-```{r}
-(fs_dat_3fac <- get_fs(PoliticalDemocracy, model = cfa_3fac, std.lv = TRUE)) |>
-  head()
-```
+Substituting the CFA equation
+$\mathbf{y} = \boldsymbol{\nu} + \boldsymbol{\Lambda}
+\boldsymbol{\eta} + \boldsymbol{\varepsilon}$ gives
 
-As before, `tspa()` reads the cross-loadings (`fsL`) and the score error
-covariance (`fsT`) from the `get_fs()` result.
+$$
+\tilde{\boldsymbol{\eta}} =
+(\mathbf{I} - \mathbf{A}\boldsymbol{\Lambda})\boldsymbol{\alpha}
++ \mathbf{A}\boldsymbol{\Lambda}\boldsymbol{\eta}
++ \mathbf{A}\boldsymbol{\varepsilon}.
+$$
 
-```{r}
-tspa_fit_3fac <- tspa(model = "dem60 ~ ind60
-                               dem65 ~ ind60 + dem60",
-              data = fs_dat_3fac)
-cat(attr(tspa_fit_3fac, "tspaModel"))
-parameterestimates(tspa_fit_3fac)
-```
+Thus, the stage-2 score loadings are
+$\mathbf{L} = \mathbf{A}\boldsymbol{\Lambda}$ (`fsL`), the score
+intercepts are $\mathbf{b} = (\mathbf{I} - \mathbf{L})
+\boldsymbol{\alpha}$ (`fsb`), and the score error covariance is
+$\mathbf{T} = \mathbf{A}\boldsymbol{\Theta}\mathbf{A}^{\top}$ (`fsT`).
+Even with a simple item-loading pattern, neither $\mathbf{L}$ nor
+$\mathbf{T}$ is generally diagonal for regression scores.
 
+## Separate measurement models for each construct
 
-Compare to SEM:
-
-```{r}
-sem_3fac <- sem("
-  # latent variables
-    ind60 =~ x1 + x2 + x3
-    dem60 =~ y1 + y2 + y3 + y4
-    dem65 =~ y5 + y6 + y7 + y8
-  # structural model
-    dem60 ~ ind60
-    dem65 ~ ind60 + dem60
-  ",
-  data = PoliticalDemocracy
-)
-standardizedsolution(sem_3fac)
-```
-
-The `lavaan::sem()` fit above is the **gold-standard** joint model: it estimates
-the measurement model and the structural paths together, treating the indicators
-as observed, so no separate measurement-error correction is needed. `tspa()`
-reaches the same structural estimates a different way — by correcting the stage-1
-*scores* for their measurement error — so the two agree when the sample is large.
-The simulation studies find 2S-PA tracks the joint model closely while staying
-more reliable, with less biased standard errors and better coverage, in small
-samples and with unreliable or categorical items (Lai & Hsiao, 2022; Lai et
-al., 2023). `PoliticalDemocracy` is a real data set, so there is no "true value"
-to compare against here; the point of putting the two side by side is that they
-target the same structural model.
-
-## Local vs joint scores
-
-The `get_fs()` calls above all score from a *joint* multi-factor measurement
-model: one fit with all the latents estimated together. With freely correlated
-factors, each score is a weighted composite of **all** the indicators (the
-off-diagonals of the `alambda` matrices above), so the stage-2 model has to
-account for the cross-loadings explicitly. The canonical 2S-PA setup (Lai &
-Hsiao, 2022) instead scores each latent from its **own** local measurement
-model. `get_fs(..., local = TRUE)` does this in one call and merges the
-per-construct results into the usual multi-factor layout:
+An alternative is to estimate each construct's measurement model separately.
+For a simple CFA specification, `local = TRUE` does this in one call. Unlike
+the joint CFA above, each score now uses only its own construct's indicators:
 
 ```{r}
-(fs_local <- get_fs(PoliticalDemocracy,
-                    model = cfa_3fac,
-                    std.lv = TRUE,
-                    local = TRUE)) |> head()
-```
-
-The merged result has the same layout as the joint output, with the cross
-terms *exactly* zero: the `fsT` and `fsL` attributes are block-diagonal, the
-`psi` attribute is diagonal, and the off-diagonal `_by_` loading columns and
-all `ecov_*` columns are zero. Each score is a *pure* per-construct score —
-the cross-factor structure is not estimated by design:
-
-```{r}
+measurement_3 <- '
+  ind60 =~ x1 + x2 + x3
+  dem60 =~ y1 + y2 + y3 + y4
+  dem65 =~ y5 + y6 + y7 + y8
+'
+path_model <- '
+  dem60 ~ ind60
+  dem65 ~ ind60 + dem60
+'
+fs_local <- get_fs(PoliticalDemocracy, model = measurement_3,
+                   std.lv = TRUE, local = TRUE)
 attr(fs_local, "fsL")[[1]]
-sapply(c("fs_ind60", "fs_dem60", "fs_dem65"),
-       function(col) max(abs(fs_local[[col]] - fs_dat_3fac[[col]])))
+tspa_local <- tspa(path_model, data = fs_local)
+standardizedSolution(tspa_local) |>
+  subset(op == "~")
 ```
 
-So local scores are not the same as joint scores: with freely correlated
-factors they differ (the maximum score differences above), because the joint
-fit scores every latent from all the indicators — even the joint fit's own
-per-factor estimates shift under free correlation. With the factors
-constrained uncorrelated (e.g. `ind60 ~~ 0 * dem60` in the joint model), the
-likelihood factorizes and the two agree to optimizer tolerance.
+The combined score loading and error covariance matrices have zero
+off-diagonal entries.
+These zeros concern the *score measurement model*; the structural relations
+among the latent variables are estimated in stage 2.
 
-Because the merged result carries the usual `fsT`/`fsL` attributes (with the
-zero cross terms), it feeds `tspa()` directly with no explicit `fsT`/`fsL`
-arguments — the stage-2 model picks up the zero cross-loadings and score
-error covariances from the attributes:
+Separate-model scores need not equal scores from a multi-factor CFA, because
+the latter can use information shared across correlated factors. The choice
+of stage-1 model should reflect the intended measurement model, including
+any substantively justified item cross-loadings or cross-construct residual
+covariances.
+
+If a separate model needs additional syntax, such as a within-construct
+residual covariance, supply one complete model string per construct:
 
 ```{r}
-tspa_fit_local <- tspa(model = "dem60 ~ ind60
-                        dem65 ~ ind60 + dem60",
-                       data = fs_local)
-parameterestimates(tspa_fit_local)
+fs_separate <- get_fs(PoliticalDemocracy, local = TRUE,
+                      model = c(
+                        'ind60 =~ x1 + x2 + x3',
+                        'dem60 =~ y1 + y2 + y3 + y4
+                         y1 ~~ y4'
+                      ))
 ```
 
-`model` may also be a character vector (or a named list) of complete
-single-factor model strings, each element fit verbatim — the escape hatch for
-anything the strict string grammar rejects, e.g. a within-factor residual
-covariance (`y1 ~~ y4`). `vfsLT` (and hence `tspa(corrected_se = TRUE)`),
-`prior_cov`, and `reliability` are not supported in `local` mode (v1); see
-`?get_fs` (Details) for the full contract.
+The `local = TRUE` option currently does not compute the joint sampling
+covariance needed for `vfsLT = TRUE` and the automated stage-2 standard-error
+correction. See [Corrected Standard Errors](corrected-se.html) for other ways
+to examine stage-1 estimation uncertainty.
 
-## Combining separate `get_fs()` results
+## Combining scores obtained in separate calls
 
-`local = TRUE` scores every latent from its own local model in a **single**
-`get_fs()` call on one multi-factor model. When the per-construct scores instead
-come from **separate** `get_fs()` calls — because the items were measured with
-different methods (for example `mirt` for some items and `lavaan` for the rest)
-or come from different subsets of the data — `combine_fs()` assembles them into
-the same block-diagonal layout and feeds `tspa()` directly (no explicit
-`fsL`/`fsT` needed). Each result contributes one block (a multi-latent result is
-a `k x k` block); every cross-block entry is exactly zero.
+Use `combine_fs()` when constructs have already been scored separately,
+including when different measurement software is used. It preserves the
+score measurement information needed by the stage-2 functions.
 
 ```{r}
-comb_local <- combine_fs(
-  get_fs(PoliticalDemocracy, model = "ind60 =~ x1 + x2 + x3", std.lv = TRUE),
-  get_fs(PoliticalDemocracy, model = "dem60 =~ y1 + y2 + y3 + y4", std.lv = TRUE),
-  get_fs(PoliticalDemocracy, model = "dem65 =~ y5 + y6 + y7 + y8", std.lv = TRUE)
-)
-# For this data the block-diagonal fsL matches the local = TRUE result above
-# exactly, and so does the stage-2 estimate:
-all.equal(attr(comb_local, "fsL")[[1]], attr(fs_local, "fsL")[[1]])
-all.equal(coef(tspa_fit_local),
-          coef(tspa(model = "dem60 ~ ind60\n dem65 ~ ind60 + dem60",
-                    data = comb_local)))
+fs_ind <- get_fs(PoliticalDemocracy, model = "ind60 =~ x1 + x2 + x3")
+fs_dem <- get_fs(PoliticalDemocracy, model = "dem60 =~ y1 + y2 + y3 + y4")
+fs_combined <- combine_fs(fs_ind, fs_dem)
+tspa_combined <- tspa("dem60 ~ ind60", data = fs_combined)
+standardizedSolution(tspa_combined) |>
+  subset(op == "~")
 ```
+
+By default, the inputs must contain the same observations in the same order.
+If they include a shared identifier, use `id = "participant_id"` to align
+them. `combine_fs()` currently accepts single-group inputs.
+
+The combined measurement matrices retain each input's within-model
+loadings and error covariances and set cross-model entries to zero. This
+assumes that measurement errors from different input models are uncorrelated.
+If cross-construct error covariances are part of the measurement model,
+estimate the constructs together instead.
+
+## References
+
+- Lai, M. H. C., & Hsiao, Y.-Y. (2022). Two-stage path analysis with definition
+  variables: An alternative framework to account for measurement error.
+  *Psychological Methods, 27*(4), 568–588. <https://doi.org/10.1037/met0000410>
+- Lai, M. H. C., Tse, W. W.-Y., Zhang, G., Li, Y., & Hsiao, Y.-Y. (2023).
+  Correcting for unreliability and partial invariance: A two-stage path analysis
+  approach. *Structural Equation Modeling: A Multidisciplinary Journal, 30*(2),
+  258–271. <https://doi.org/10.1080/10705511.2022.2125397>

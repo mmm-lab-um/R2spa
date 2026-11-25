@@ -16,19 +16,27 @@ knitr::opts_chunk$set(
 )
 ```
 
-When computing the reliability or the standard errors of factor scores, we typically condition on the estimates of the model parameters, aka assuming that they are known. However, when sample size is small, ignoring those can be problematic as the model parameters are imprecise. This vignette provides details on how to obtain more realistic estimates of standard errors of factor scores.
+## Why adjust the score error variance?
 
-In short: by default `get_fs()` computes score error variances *conditional on the
-estimated* parameters — i.e. it treats the scoring weights as known. That is the
-within-sample error variance, but in small samples, or weakly-identified models
-(where the weights are estimated with substantial error), it understates the
-score's error variance. `get_fs(..., corrected_fsT = TRUE)` adds the delta-method
-correction term for the sampling error of the scoring weights, inflating `fsT`
-accordingly. The effect is negligible in large, well-identified samples (the
-weight-sampling variance tends to zero) and grows as identification gets poorer.
-Scope/constraints: `corrected_fsT` applies to `lavaan` regression / Bartlett
-scores; it is ignored for `merMod` objects and is not supported when the data
-contain missing values.
+Factor scores are weighted combinations of item responses. Their measurement
+error depends on the scoring weights, which are usually estimated from a
+measurement model. By default, `get_fs()` computes the score error covariance
+matrix (`fsT`) treating those estimated weights as known.
+
+`get_fs(..., corrected_fsT = TRUE)` adds a term for sampling variability in
+the weights. That term can matter when the measurement parameters are
+estimated imprecisely, for example in a small sample. This vignette explains
+the calculation using simulations with one and two factors.
+
+This option adjusts the **measurement-error covariance of the scores**.
+It differs from `tspa(corrected_se = TRUE)`, which adjusts the **sampling
+standard errors of the structural parameter estimates**; see
+[Corrected Standard Errors](corrected-se.html).
+
+The score error-variance adjustment is available for lavaan regression and
+Bartlett scores with complete indicator data. It is not applied to mixed-model
+scores. The examples use stored simulation results; the replication loops
+are shown for reproducibility but are not run when the vignette is built.
 
 # Unidimensional Case
 
@@ -36,7 +44,9 @@ Consider the conditional variance of the factor scores, $Var(\tilde \eta \mid \e
 
 $$Var(\tilde \eta \mid \eta) = Var(\boldsymbol{a}^\top \boldsymbol{\lambda} \eta + \boldsymbol{a}^\top \boldsymbol{\varepsilon} \mid \eta) = \eta^2 Var(\boldsymbol{a}^\top \boldsymbol{\lambda}) + Var(\boldsymbol{a}^\top \boldsymbol{\varepsilon}).$$
 
-The second term is the error component. Here is a small simulation:
+The second term concerns the score's measurement error. We simulate repeated
+indicator responses for the same latent values to compare scores computed
+with known weights and with weights estimated in each sample:
 
 ```{r}
 #' Load package and set seed
@@ -99,17 +109,24 @@ true_a %*% diag(theta) %*% t(true_a)
 apply(fsy_sim, 1, var) |> mean() 
 ```
 
-The standard errors are larger when using sample estimates of weights.
+The scores vary more across replications when the weights are estimated.
+The following calculation isolates the contribution of uncertain weights
+to the measurement-error component. It uses a working assumption that the
+estimated weights and the indicator errors are independent.
 
 When $\boldsymbol{a}$ is known, the error variance is simply $\boldsymbol{a}^\top \boldsymbol{\Theta} \boldsymbol{a}$. However, when $\boldsymbol{a}$ is unknown and estimated as $\tilde{\boldsymbol{a}}$ from the data, 
 
 $$Var(\tilde{\boldsymbol{a}}^\top \boldsymbol{\varepsilon}) = E[Var(\tilde{\boldsymbol{a}}^\top \boldsymbol{\varepsilon} \mid \tilde{\boldsymbol{a}})] + Var[E(\tilde{\boldsymbol{a}}^\top \boldsymbol{\varepsilon} \mid \tilde{\boldsymbol{a}})].$$
 
-Under the assumption of $E(\boldsymbol{\varepsilon})$ = $\boldsymbol{0}$, the second term is 0. The first term is an expectation of a quadratic form, 
+Under this independence assumption and $E(\boldsymbol{\varepsilon}) =
+\boldsymbol{0}$, the second term is zero. The first term is the expectation
+of a quadratic form:
 
 $$E(\tilde{\boldsymbol{a}}^\top \boldsymbol{\Theta} \tilde{\boldsymbol{a}}) = E(\tilde{\boldsymbol{a}}^\top) \boldsymbol{\Theta} E(\tilde{\boldsymbol{a}}) + \mathrm{tr}(\boldsymbol{\Theta} \boldsymbol{V}_{\tilde{\boldsymbol{a}}})$$
 
-where $\boldsymbol{V}_{\tilde{\boldsymbol{a}}}$ is the covariance matrix of $\tilde{\boldsymbol{a}}$. We can see this using the simulated data
+where $\boldsymbol{V}_{\tilde{\boldsymbol{a}}}$ is the sampling covariance
+matrix of the estimated weights. The trace term is the added contribution
+to the error variance. We can calculate it from the simulated weights:
 
 ```{r}
 correct_fac <- sum(diag(diag(theta) %*% cov(t(a_sim))))
@@ -118,7 +135,8 @@ true_a %*% diag(theta) %*% t(true_a) + correct_fac
 
 ## Correction Factor
 
-We can approximate $\boldsymbol{V}_{\tilde{\boldsymbol{a}}}$ using the [delta method](https://en.wikipedia.org/wiki/Delta_method), and the other terms in the above using sample estimates
+In an application, the sampling covariance of the weights can be approximated
+using the delta method. Substituting the estimated quantities gives
 
 $$\tilde{\boldsymbol{a}}^\top \hat{\boldsymbol{\Theta}} \tilde{\boldsymbol{a}} + \mathrm{tr}(\hat{\boldsymbol{\Theta}} \hat{\boldsymbol{V}}_{\tilde{\boldsymbol{a}}}).$$
 
@@ -148,7 +166,12 @@ fsy2 <- R2spa::get_fs(y, std.lv = TRUE, corrected_fsT = TRUE)
 attr(fsy2, which = "fsT")
 ```
 
-# Multidimensional Case
+# Two-factor example
+
+With more than one factor, the correction is a matrix: it adjusts both
+error variances and error covariances. We repeat the simulation with two
+correlated factors and seven indicators, then compare the error covariance
+matrices obtained with known and estimated weights.
 
 ```{r}
 #' Set seed
@@ -265,4 +288,3 @@ fsy2 <- R2spa::get_fs(
     corrected_fsT = TRUE)
 attr(fsy2, which = "fsT")
 ```
-

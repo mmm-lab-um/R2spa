@@ -1,5 +1,14 @@
-#' Create block diagonal matrix
-#' @param ... Either multiple matrices or a list of matrices.
+#' Create a block diagonal matrix
+#'
+#' @param ... Either multiple square matrices, or a single \emph{list} of
+#'            square matrices. A single bare matrix is \emph{not} accepted:
+#'            with one argument it is coerced via \code{as.list()} into a list
+#'            of its scalar elements and rejected. Wrap it in a list instead,
+#'            e.g. \code{block_diag(list(m))}.
+#'
+#' Every input must be a square matrix, and the inputs must either all carry
+#' row and column names or all lack them (mixing named and unnamed matrices is
+#' an error).
 #' @export
 block_diag <- function(...) {
     if (...length() > 1) {

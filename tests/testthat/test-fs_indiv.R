@@ -421,3 +421,202 @@ test_that("fs_indiv(): per-row values == augment_lav_predict() after reconciling
     expect_equal(symm_ind, exp_T, tolerance = 1e-8, ignore_attr = TRUE)
   }
 })
+
+# ============================================================================
+# 8. Row-reorder / subset detection (PLAN 18)
+# ============================================================================
+# The row-specific quantities of a get_fs() result (fs_pattern labels,
+# per-observation fsL/fsT) are positional: they do NOT follow the data
+# columns when the rows are reordered or subset. fs_indiv() must detect the
+# drift by comparing every carried per-row quantity (score SEs, cross-
+# loadings, error (co)variances) -- not just the SEs, which two patterns can
+# share while their cross-loadings or off-diagonal error covariances differ
+# -- against the row's own block, and fail loudly rather than silently pair a
+# row with another observation's measurement quantities.
+
+test_that("fs_indiv(): a reordered FIML result errors with the row-order message", {
+  # fs_fiml has multiple observed patterns with DIFFERENT per-pattern SEs.
+  # Swapping two rows from different patterns moves each carried SE into the
+  # other's slot while the fs_pattern label vector and the per-pattern
+  # fsT/fsL attributes stay put -- the guard must catch the mismatch.
+  se <- unname(fs_fiml[["fs_visual_se"]])
+  # Deterministic: find two rows whose SEs actually differ.
+  i <- 1L
+  j <- which(round(se, 8L) != round(se[i], 8L))[1L]
+  expect_true(!is.na(j), label = "fixture must carry >1 distinct per-row SE")
+  perm <- seq_len(nrow(fs_fiml))
+  perm[c(i, j)] <- c(j, i)
+  fs_shuf <- fs_fiml[perm, , drop = FALSE]
+  # The carried SE column moved with the rows; the pattern labels did not.
+  expect_false(isTRUE(all.equal(
+    unname(fs_shuf[["fs_visual_se"]]), unname(fs_fiml[["fs_visual_se"]]),
+    tolerance = 0
+  )))
+  expect_error(
+    fs_indiv(fs_shuf),
+    "reordered or subset after scoring"
+  )
+})
+
+test_that("fs_indiv(): a randomly shuffled FIML result also errors", {
+  set.seed(4321)
+  n <- nrow(fs_fiml)
+  fs_shuf <- fs_fiml[sample(n), , drop = FALSE]
+  expect_error(
+    fs_indiv(fs_shuf),
+    "reordered or subset after scoring"
+  )
+})
+
+test_that("fs_indiv(): a row-subset (dropping rows) FIML result errors", {
+  # Subsetting drops rows but the fs_pattern label vector keeps its original
+  # length, so the resolved row->block map no longer matches the data rows.
+  keep <- seq_len(floor(nrow(fs_fiml) / 2))
+  fs_sub <- fs_fiml[keep, , drop = FALSE]
+  expect_error(
+    fs_indiv(fs_sub),
+    "reordered or subset after scoring"
+  )
+})
+
+test_that("fs_indiv() guard: equal-SE patterns with different error covariances are caught", {
+  # Regression (PLAN 18): the guard must compare the FULL carried measurement
+  # quantities, not just sqrt(diag(fsT)). Two patterns can share identical score
+  # SEs while differing in an off-diagonal error covariance; a row swap across
+  # them moves a row into a slot whose SE still matches but whose error
+  # covariance does not. An SE-only check lets that pass and silently assigns
+  # the wrong ecov; the full-quantity check must catch it.
+  mkL <- function() {
+    L <- diag(2)
+    rownames(L) <- c("fs_visual", "fs_speed"); colnames(L) <- c("visual", "speed")
+    L
+  }
+  mkT <- function(e) {
+    m <- matrix(c(0.1, e, e, 0.2), 2)
+    rownames(m) <- c("fs_visual", "fs_speed"); colnames(m) <- c("fs_visual", "fs_speed")
+    m
+  }
+  b1 <- list(fsL = mkL(), fsT = mkT(+0.02), fsb = NULL)
+  b2 <- list(fsL = mkL(), fsT = mkT(-0.02), fsb = NULL)
+  resolved <- list(n = 2L, pattern_idx = c(1L, 2L), blocks = list(b1, b2))
+  cnames <- unlist(R2spa:::fs_row_colnames(b1$fsL, b1$fsT))
+  r1 <- as.numeric(R2spa:::fs_row_cols(matrix(0, 1, 1), b1$fsL, b1$fsT, NULL)[1, ])
+  r2 <- as.numeric(R2spa:::fs_row_cols(matrix(0, 1, 1), b2$fsL, b2$fsT, NULL)[1, ])
+  # The SE columns (first two) are identical across the two patterns; only the
+  # off-diagonal error covariance (column 8) differs.
+  expect_true(isTRUE(all.equal(round(r1[1:2], 10), round(r2[1:2], 10))))
+  expect_false(isTRUE(all.equal(round(r1[8], 10), round(r2[8], 10))))
+  aligned <- as.data.frame(rbind(r1, r2)); names(aligned) <- cnames
+  swapped <- as.data.frame(rbind(r2, r1)); names(swapped) <- cnames
+  # Aligned: the guard is silent. Swapped across the two patterns: the SE-only
+  # comparison still matches, but the full-quantity check must fail.
+  expect_no_error(R2spa:::check_fs_row_alignment(aligned, resolved))
+  expect_error(R2spa:::check_fs_row_alignment(swapped, resolved),
+               "reordered or subset after scoring")
+})
+
+test_that("fs_indiv() guard: dropping one loading column still detects a cross-pattern swap", {
+  # Regression (PLAN 18): the guard must compare the measurement columns that
+  # REMAIN after the user drops some, not skip entirely because one is missing
+  # (the earlier all-or-nothing check disabled the guard on a single dropped
+  # column, letting a cross-pattern swap slip through). A two-factor FIML
+  # result has multiple patterns with differing per-pattern SEs; removing one
+  # cross-loading column must leave the check able to catch a row swap via the
+  # remaining columns, through both public entry points.
+  d <- HolzingerSwineford1939
+  set.seed(7712)
+  d$x2[!rbinom(nrow(d), 1L, 0.6)] <- NA
+  d$x7[!rbinom(nrow(d), 1L, 0.6)] <- NA
+  fit_2f <- suppressWarnings(
+    cfa("visual =~ x1 + x2 + x3\n speed =~ x7 + x8 + x9",
+        data = d, missing = "fiml")
+  )
+  fs_2f <- get_fs(fit_2f)
+  # [[col]] <- NULL (not fs[, j]): column subsetting via [, ] drops the
+  # row-specific attributes (fs_pattern / fsT / fsL) the guard relies on.
+  expect_true("visual_by_fs_visual" %in% names(fs_2f))
+  fs_drop <- fs_2f
+  fs_drop[["visual_by_fs_visual"]] <- NULL
+  # two rows from patterns with different SEs (deterministic)
+  se <- unname(fs_drop[["fs_visual_se"]])
+  i <- 1L
+  j <- which(round(se, 8L) != round(se[i], 8L))[1L]
+  expect_true(!is.na(j))
+  perm <- seq_len(nrow(fs_drop))
+  perm[c(i, j)] <- c(j, i)
+  fs_swap <- fs_drop[perm, , drop = FALSE]
+  # aligned (one column dropped): the guard is silent for both entry points
+  expect_no_error(fs_indiv(fs_drop))
+  expect_no_error(suppressWarnings(compute_fs_prod(fs_drop, "visual:speed")))
+  # swapped: the remaining SE columns moved with the rows while the pattern
+  # labels stayed put, so the guard fires through both public functions
+  expect_error(fs_indiv(fs_swap), "reordered or subset after scoring")
+  expect_error(
+    suppressWarnings(compute_fs_prod(fs_swap, "visual:speed")),
+    "reordered or subset after scoring"
+  )
+})
+
+test_that("fs_indiv() guard: a column dropped from one group does not disable another group's check", {
+  # Regression (PLAN 18): for a multigroup list input each group must be
+  # checked against the measurement columns IT carries, not the intersection
+  # across groups. A distinguishing column remaining in the swapped group must
+  # still catch the swap even when another group has dropped it. Group A holds
+  # two patterns with EQUAL score SEs (same diag) but OPPOSITE error
+  # covariances, so only the ecov column distinguishes the two rows.
+  L2 <- diag(2)
+  rownames(L2) <- c("fs_visual", "fs_speed"); colnames(L2) <- c("visual", "speed")
+  mkT <- function(a, e, d) {
+    m <- matrix(c(a, e, e, d), 2)
+    rownames(m) <- colnames(m) <- c("fs_visual", "fs_speed")
+    m
+  }
+  cnames <- c("fs_visual_se", "fs_speed_se",
+              "visual_by_fs_visual", "visual_by_fs_speed",
+              "speed_by_fs_visual", "speed_by_fs_speed",
+              "ev_fs_visual", "ecov_fs_speed_fs_visual", "ev_fs_speed")
+  rowvals <- function(T, L) as.numeric(
+    R2spa:::fs_row_cols(matrix(0, 1, 1), L, T, NULL)[1L, ]
+  )
+  mk_group <- function(scores, labels, Tlist) {
+    meas <- t(vapply(labels, function(p) rowvals(Tlist[[p]], L2),
+                     numeric(length(cnames))))
+    colnames(meas) <- cnames
+    df <- as.data.frame(cbind(scores, meas))
+    attr(df, "fs_pattern") <- list(label = labels)
+    attr(df, "fsT") <- Tlist
+    attr(df, "fsL") <- stats::setNames(lapply(labels, function(p) L2), labels)
+    attr(df, "fsb") <- NULL
+    df
+  }
+  sc <- function(a, b, c, d) {
+    m <- matrix(c(a, b, c, d), 2, 2, byrow = TRUE)
+    colnames(m) <- c("fs_visual", "fs_speed")
+    m
+  }
+  A <- list(P1 = mkT(0.1, 0.02, 0.2), P2 = mkT(0.1, -0.02, 0.2))
+  A_df <- mk_group(sc(0.1, 0.2, 0.3, 0.4), c("P1", "P2"), A)
+  B <- list(P3 = mkT(0.3, 0.05, 0.4), P4 = mkT(0.5, 0.06, 0.6))
+  B_df <- mk_group(sc(0.5, 0.6, 0.7, 0.8), c("P3", "P4"), B)
+  fs <- list(A = A_df, B = B_df)
+  # aligned: the guard is silent
+  expect_no_error(fs_indiv(fs))
+  # swap group A's two rows (equal SEs, opposite ecov): caught via the ecov
+  fs_swap <- fs
+  fs_swap[["A"]] <- A_df[c(2L, 1L), , drop = FALSE]
+  expect_error(fs_indiv(fs_swap), "reordered or subset after scoring")
+  # drop the distinguishing ecov column from group B only: the swapped group A
+  # is still checked against its OWN ecov column, so it still errors
+  fs_noecov <- fs_swap
+  fs_noecov[["B"]][["ecov_fs_speed_fs_visual"]] <- NULL
+  expect_error(fs_indiv(fs_noecov), "reordered or subset after scoring")
+})
+
+test_that("fs_indiv(): an unmodified result passes the guard (no false positive)", {
+  # The fixture used throughout this file is a fresh get_fs() result; the
+  # carried SE columns agree with the per-block fsT, so the guard is silent
+  # and fs_indiv() succeeds.
+  expect_no_error(fs_indiv(fs_fiml))
+  expect_no_error(fs_indiv(fs_sg))
+  expect_no_error(fs_indiv(fs_mg))
+})

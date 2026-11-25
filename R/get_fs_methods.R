@@ -1131,7 +1131,8 @@ get_fs.default <- function(object, ...) {
     "get_fs() is not implemented for objects of class '",
     paste(class(object), collapse = "', '"),
     "'. Currently supported: 'data.frame', 'lavaan', ",
-    "and 'lmerMod'. Support for 'mirt' models is planned.",
+    "'lmerMod', and mirt fits ('SingleGroupClass' / ",
+    "'MultipleGroupClass').",
     call. = FALSE
   )
 }
@@ -1269,10 +1270,24 @@ get_fs.lavaan <- function(
   group_var <- object@Data@group
   group_col <- if (length(group_var) > 0) group_var else NULL
 
+  # Ground-truth per-group case counts (the model frame's row counts): a
+  # fully-missing case at the END of a group has no scorable case_idx, so
+  # max(case_idx) sizing would drop it; the frame counts keep it as an NA
+  # row (PLAN 18). lavInspect("data") is a named list of per-group frames in
+  # group order (matching blocks_by_group's names) for a multigroup fit and
+  # a single frame/matrix for a single-group fit (whose group label is "").
+  grp_data <- lavInspect(object, "data")
+  group_n <- if (is.list(grp_data) && !is.data.frame(grp_data)) {
+    vapply(grp_data, nrow, integer(1))
+  } else {
+    setNames(nrow(grp_data), "")
+  }
+
   out <- assemble_fs_blocks(
     blocks_by_group,
     format = format,
-    group_col = group_col
+    group_col = group_col,
+    group_n = group_n
   )
 
   # Group-level latent moments (effective / prior-adjusted), attached
@@ -1790,6 +1805,20 @@ require_mirt <- function() {
   }
 }
 
+# The mirt methods accept only `prior_mean` and `format` explicitly; any other
+# named argument (e.g. prior_cov, product, method, corrected_fsT) would
+# otherwise be silently ignored. Fail fast, naming the unsupported option(s).
+reject_mirt_dots <- function(dots) {
+  if (length(dots) > 0L) {
+    stop(
+      "get_fs() does not support the option(s) ",
+      paste0("'", names(dots), "'", collapse = ", "),
+      " for mirt objects; only 'prior_mean' and 'format' are accepted.",
+      call. = FALSE
+    )
+  }
+}
+
 # Full factor variance-covariance matrix estimated by a mirt model, q x q,
 # dimnames = factor names. Preferred route: coef(simplify = TRUE)$cov, mirt's
 # own reconstruction, which fills the lower triangle positionally from the
@@ -1833,6 +1862,7 @@ get_fs.SingleGroupClass <- function(object, prior_mean = NULL,
   if (!inherits(object, "SingleGroupClass")) {
     stop("`object` must be a mirt `SingleGroupClass` model object.", call. = FALSE)
   }
+  reject_mirt_dots(list(...))
   format <- match.arg(format)  # accepted but unused: single-group mirt -> one df
 
   q <- mirt::extract.mirt(object, "nfact")
@@ -2003,6 +2033,7 @@ get_fs.MultipleGroupClass <- function(object, prior_mean = NULL,
   if (!inherits(object, "MultipleGroupClass")) {
     stop("`object` must be a mirt `MultipleGroupClass` model object.", call. = FALSE)
   }
+  reject_mirt_dots(list(...))
   format <- match.arg(format)  # accepted but unused: mirt -> one per-obs df + group
 
   q <- mirt::extract.mirt(object, "nfact")

@@ -177,6 +177,20 @@ test_that("get_fs(): prior_mean validation (mirt)", {
                regexp = "finite")
 })
 
+test_that("get_fs(): unsupported options passed to a mirt fit are rejected (not silently ignored)", {
+  # prior_cov, product, and method are not mirt options; each must error and
+  # name the offending option rather than being a silent no-op.
+  expect_error(get_fs(m1, prior_cov = matrix(2)), "prior_cov")
+  expect_error(get_fs(m2, product = "F1:F2"), "product")
+  expect_error(get_fs(m1, method = "ML"), "method")
+  # multiple unsupported options are all named
+  expect_error(get_fs(m1, prior_cov = matrix(2), method = "ML"),
+               "prior_cov.*method|method.*prior_cov")
+  # the supported arguments still work
+  expect_no_error(get_fs(m1, prior_mean = c(F1 = 0.5)))
+  expect_no_error(get_fs(m1, format = "unified"))
+})
+
 # ============================================================================
 # 10. 2-factor with CORRELATED factors: psi must be the full mirt covariance
 # ============================================================================

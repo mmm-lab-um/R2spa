@@ -34,12 +34,15 @@ for a \code{cbind()}'d frame whose attributes \code{cbind()} drops,
 the \verb{fs_<v>}/\verb{fs_<v>_se} score columns for a
 single-factor fit (see \code{Details}).}
 
-\item{reliability}{A numeric vector representing the reliability indexes
-of each latent factor. Currently \code{tspa()} does not
-support the reliability argument. Please use \code{se}.}
+\item{reliability}{Not supported: supplying a non-\code{NULL} value is an
+error. Correct for measurement error with \code{se_fs}
+(the factor-score standard errors) instead.}
 
-\item{se}{Deprecated to avoid conflict with the argument of the same name
-in \code{\link[lavaan:lavaan]{lavaan::lavaan()}}.}
+\item{se}{Forwarded to \code{lavaan::sem()} as its \code{se} argument (the
+standard-error type: \code{"standard"}, \code{"robust"},
+\code{"boot"}, ...). It does \emph{not} take factor-score
+standard errors — supply those via \code{se_fs} (numeric
+score-SE usage through this argument is deprecated).}
 
 \item{se_fs}{A numeric vector representing the standard errors of each
 factor score variable for single-group 2S-PA. A list or data
@@ -66,12 +69,13 @@ When omitted, \code{fsT} is derived from the \code{fsT} attribute of a
 \code{\link[=get_fs]{get_fs()}} result passed as \code{data} (see \code{Details}); an
 explicit \code{fsT} always wins.}
 
-\item{fsL}{A matrix of loadings and cross-loadings from the
-latent variables to the factor scores \code{fs}, which
-can be obtained from the output of \code{\link[=get_fs]{get_fs()}} using
-\code{attr()} with the argument \code{which = "fsL"}.
+\item{fsL}{The score-on-latent loading matrix (\verb{q x p}, rows = the factor
+scores \code{fs}, columns = the latent variables): the coefficient of
+the latents in \code{fs = fsb + fsL \%*\% eta + error}, including
+cross-loadings. It can be obtained from the output of \code{\link[=get_fs]{get_fs()}}
+using \code{attr()} with the argument \code{which = "fsL"}.
 For details see the Multi-Factor Measurement Model vignette:
-\code{vignette("Multi-Factor Measurement Model", package = "R2spa")}.
+\code{vignette("multiple-factors", package = "R2spa")}.
 As with \code{fsT}, per-pattern (FIML missing data), per-cluster
 (merMod), and per-observation (mirt) values are supported and
 reduced per group by \code{reduce}; the pooled (not the nested)
@@ -332,8 +336,16 @@ The returned fit carries a self-contained \verb{@call}, so
 \code{lavaan::update()} works on it as it does on a hand-written
 \code{lavaan::sem()} fit. In particular
 \code{update(fit, meanstructure = TRUE)} re-fits the stage-2 model with a
-mean structure, equivalent to calling \code{tspa(..., meanstructure = TRUE)}
-from the start.
+mean structure.
+
+Note that \code{update()} re-runs only the \emph{stored} stage-2 \code{lavaan::sem()}
+model. The rendered measurement model (the fixed \code{fsT}/\code{fsL}/\code{fsb} terms)
+is preserved because it is inlined in the model string, but the R2spa
+post-fit steps are \emph{not} re-applied: an \code{update()} of a
+\code{corrected_se = TRUE} fit does not carry the corrected covariance, and the
+R2spa attributes (\code{tspa_args}, \code{tspa_corrected}, \code{tspaModel}, \code{pooled_fs},
+...) are not copied to the updated fit. To recover them, re-call \code{tspa()}
+(with the same arguments) instead of \code{update()}.
 }
 }
 \examples{
@@ -489,12 +501,12 @@ tspa("y ~ x + m + x:m", data = fs_prod, product = TRUE)
 }
 \seealso{
 \itemize{
-\item \code{vignette("Two-Stage Path Analysis (2S-PA) Model Examples", package = "R2spa")} for an end-to-end walkthrough.
-\item \code{vignette("Multi-Factor Measurement Model", package = "R2spa")} for multi-factor measurement models.
-\item \code{vignette("Linear Growth Modeling with Two-Stage Path Analysis", package = "R2spa")} for growth models.
-\item \code{vignette("2S-PA with Missing Data", package = "R2spa")} for missing data (\code{missing = "fiml"}).
-\item \code{vignette("Product factor-score indicators (latent interactions)", package = "R2spa")} for \code{product = TRUE}.
-\item \code{vignette("Corrected Standard Errors", package = "R2spa")} for \code{corrected_se = TRUE}.
-\item \code{vignette("Scoring Methods and SE Correction in 2S-PA: A Simulation Study", package = "R2spa")} for a simulation comparison of scoring methods and SE correction.
+\item \code{vignette("R2spa", package = "R2spa")} for an end-to-end walkthrough.
+\item \code{vignette("multiple-factors", package = "R2spa")} for multi-factor measurement models.
+\item \code{vignette("tspa-growth-vignette", package = "R2spa")} for growth models.
+\item \code{vignette("missing-data", package = "R2spa")} for missing data (\code{missing = "fiml"}).
+\item \code{vignette("product-factor-scores", package = "R2spa")} for \code{product = TRUE}.
+\item \code{vignette("corrected-se", package = "R2spa")} for \code{corrected_se = TRUE}.
+\item \code{vignette("sim-scoring-se", package = "R2spa")} for a simulation comparison of scoring methods and SE correction.
 }
 }

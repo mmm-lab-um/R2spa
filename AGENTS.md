@@ -124,7 +124,9 @@ This package uses `devtools` + `roxygen2` + `testthat` (edition 3). Never skip o
   - `fs_a:fs_b` DMC product indicator | `fs_a:fs_b_se` per-row SE | `fs_a:fs_b_ld` implied
     loading (from `get_fs(product = )`/`compute_fs_prod()`; `tspa_sf_alias()` maps
     `fs_a:fs_b` to the `fs_ab` model name)
-  - Attributes: `fsT` (error cov), `fsL` (loadings), `fsb` (intercepts), `scoring_matrix`
+   - Attributes: `fsT` (error cov), `fsL` (score-on-latent loadings; rows = scores,
+     cols = latents, `score = fsb + fsL·η + error`; the `_by_` columns carry this same
+     quantity), `fsb` (intercepts), `scoring_matrix`
     (lavaan: per-group score×item matrices; `merMod`: named list of per-cluster
     `num_re × n_j` matrices), `psi`/`alpha` (effective latent covariance/mean —
     `prior_cov`/`prior_mean` if supplied, else the model estimate; mirt MG: per-group

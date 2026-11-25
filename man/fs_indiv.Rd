@@ -30,8 +30,9 @@ order:
 * the per-observation standard errors (\verb{fs_<f>_se}; the square
 root of the per-row \code{fsT} diagonal, \code{NA} where that entry is
 negative or non-finite);
-* the implied loadings of the latents on the factor scores
-(\verb{<latent_j>_by_fs_<f>}, \code{q^2} of them);
+* the implied loadings of the factor scores on the latents
+(\verb{<latent_j>_by_fs_<f>}, \code{q^2} of them; the \code{fsL} matrix, one
+column per latent--score pair);
 * the error variances and error covariances of the factor scores
 (\verb{ev_fs_<f>}, \code{q} of them, and \verb{ecov_fs_<a>_fs_<b>}, \verb{q choose 2} of them), in the same lower-triangular order \code{\link[=get_fs]{get_fs()}} uses;
 * optionally (when \code{include_intercept = TRUE}) the score
@@ -58,6 +59,19 @@ when the data contain missing values (rows across groups may always
 differ). For \code{merMod} models there is one row per cluster, each carrying
 that cluster's own \code{fsL}/\code{fsT}.
 }
+\details{
+\strong{Row safety.} The row-specific attributes of the input \code{\link[=get_fs]{get_fs()}}
+result (\code{fs_pattern} labels, per-row \code{fsL}/\code{fsT}) are positional and do
+not follow row subsetting or reordering (see the "Row safety" note in
+\code{\link[=get_fs]{get_fs()}}). If the input rows appear to have been reordered or subset
+after scoring, \code{fs_indiv()} errors rather than silently pairing rows
+with another observation's measurement quantities.
+
+\strong{Multi-group mirt.} A multi-group mirt result carries a literal
+\code{group} column but no \code{group_col} attribute, so the \code{group} column is
+dropped from the output (the trailing-group recovery that \code{\link[=tspa]{tspa()}}
+performs on such results is not replicated here).
+}
 \examples{
 library(lavaan)
 fit <- cfa("visual =~ x1 + x2 + x3", data = HolzingerSwineford1939)
@@ -75,6 +89,6 @@ fs_indiv(get_fs(lmod))
 }
 \seealso{
 \itemize{
-\item \code{vignette("Scoring Matrices: lavaan CFA and lme4", package = "R2spa")} for the scoring-matrix internals these per-row quantities come from.
+\item \code{vignette("scoring-matrices", package = "R2spa")} for the scoring-matrix internals these per-row quantities come from.
 }
 }

@@ -2,7 +2,7 @@
 title: "Two-Stage Path Analysis (2S-PA) Model Examples"
 author: "Yixiao Li"
 date: "`r Sys.Date()`"
-output: 
+output:
   rmarkdown::html_vignette:
     toc: true
 vignette: >
@@ -12,356 +12,258 @@ vignette: >
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-The example is from https://lavaan.ugent.be/tutorial/sem.html. 
+## What does 2S-PA estimate?
 
-Load packages
+Researchers often use scale means or factor scores to study relations among
+constructs such as depression, motivation, or cognitive ability. These scores
+are useful summaries, but they contain measurement error. Treating them as
+error-free variables in a regression or path analysis can bias the estimated
+structural relations (Cole & Preacher, 2014).
 
-```{r load-pkg, message = FALSE}
+Two-stage path analysis (2S-PA; Lai & Hsiao, 2022) separates the analysis into
+two stages. In **stage 1**, researchers fit measurement models and obtain
+factor scores and estimates of their measurement error. In **stage 2**, the
+factor scores serve as indicators of latent variables in a structural model.
+Their loadings and error variances are fixed using the stage-1 results.
+The structural coefficients therefore describe relations among the latent
+variables, rather than relations among scores treated as perfectly reliable.
+
+Joint SEM estimates the measurement and structural parameters simultaneously.
+With 2S-PA, researchers can evaluate the measurement models separately and
+retain the same measurement results when considering different structural
+models. This is one of several approaches to *stepwise estimation* of latent
+variable models reviewed by Vermunt (2025).
+
+The simulation studies in Lai and Hsiao (2022) and Lai et al. (2023) found
+results similar to joint SEM in large samples, with better convergence and
+inference in some small-sample conditions. Those findings depend on the
+models and conditions studied; they do not imply identical estimates in
+every application.
+
+## Example: industrialization and political democracy
+
+We use `PoliticalDemocracy`, also used in the
+[lavaan SEM tutorial](https://lavaan.ugent.be/tutorial/sem.html).
+The constructs are industrialization in 1960 (`ind60`) and political
+democracy in 1960 and 1965 (`dem60` and `dem65`).
+
+```{r load-pkg, message=FALSE}
 library(lavaan)
 library(R2spa)
 ```
 
-## Why two-stage path analysis
+### Stage 1: obtain scores for each construct
 
-When the constructs in a path model are measured with error, plugging composite
-or factor scores into a regression as if they were error-free biases the path
-coefficients (Cole & Preacher, 2014). A single joint structural equation model,
-estimating the
-measurement and structural models together, is the gold standard, but it can be
-hard to specify, is prone to convergence and admissibility problems in small
-samples, and forces a whole-model refit whenever the measurement *or* the
-structural part changes (Rosseel, 2012).
+The measurement syntax is the same as in lavaan. Here, `local = TRUE`
+fits a separate single-factor CFA for each construct. Each score uses
+only the indicators of its own construct.
 
-Two-stage path analysis (2S-PA; Lai & Hsiao, 2022) is a practical alternative
-that splits the problem:
+```{r}
+measurement_model <- '
+  ind60 =~ x1 + x2 + x3
+  dem60 =~ y1 + y2 + y3 + y4
+  dem65 =~ y5 + y6 + y7 + y8
+'
+fs_dat <- get_fs(PoliticalDemocracy, model = measurement_model, local = TRUE)
+head(fs_dat[c("fs_ind60", "fs_dem60", "fs_dem65",
+              "fs_ind60_se", "fs_dem60_se", "fs_dem65_se")])
+```
 
-- **Stage 1 — score each construct** with an appropriate psychometric model (a
-  `lavaan` CFA, an `lme4` mixed model, a `mirt` IRT model, or even an EFA) and
-  record each score's measurement error / reliability.
-- **Stage 2 — path-analyze the scores**, correcting for measurement
-  error by fixing the loading(s) and error variance (and covariances) to values
-  implied in Stage 1. Observation-specific values can be used via 
-  *definition variables* (currently available in *OpenMx*).
+The `fs_` columns contain the factor scores. The corresponding `_se`
+columns contain their **standard errors of measurement**: uncertainty in
+the scores due to imperfect measurement. These differ from the sampling
+standard errors of the path coefficients that we obtain in stage 2.
 
-Because the stages are separate, you can tune and diagnose each on its own, mix
-estimators across constructs (one construct from a CFA, another from an IRT
-model), and avoid the small-sample convergence problems of one large joint
-model. Simulations find 2S-PA tracks the joint model in large samples but
-converges more often, with less standard-error bias and better Type-I error /
-CI coverage in small samples and with categorical items (Lai & Hsiao, 2022;
-Lai et al., 2023); the same two-stage idea also covers empirical-Bayes random
-slopes from mixed models (Lai & Liu, 2026).
+Regression factor scores are used by default. They are shrinkage estimates,
+so their loadings on the latent variables need not equal one. `get_fs()`
+also stores these loadings and the score error variances for use in stage 2.
 
-`R2spa` implements both stages: `get_fs()` is stage 1 (scores plus their
-loadings, error covariances and intercepts) and `tspa()` / `tspa_mx_model()`
-are stage 2.
+### Stage 2: estimate the structural relations
 
-## Why the standardized coefficients are of interest
+Write the structural model using the latent-variable names, without the
+`fs_` prefix. `tspa()` adds the score indicators and their measurement-error
+constraints automatically.
 
-The latent constructs in a 2S-PA — like the latents in any latent-variable
-model — have **no intrinsic scale**. A latent variable is not directly
-observed; its units are arbitrary and are fixed only by an identification
-constraint in the measurement model (a loading pinned to 1, or a variance
-pinned to 1 via `std.lv = TRUE`). The unstandardized stage-2 path coefficients
-therefore inherit that arbitrary scale (units of latent `dem60` per unit of
-latent `ind60`), and their magnitudes shift if the latent is rescaled.
+```{r}
+path_model <- '
+  dem60 ~ ind60
+  dem65 ~ ind60 + dem60
+'
+tspa_fit <- tspa(model = path_model, data = fs_dat)
+standardizedSolution(tspa_fit) |>
+  subset(op == "~")
+```
 
-The **standardized** coefficients are dimensionless — each path is the effect
-of a one-SD change in the predictor on the outcome, in SD units — and are
-invariant to the arbitrary choice of latent metric. They are therefore usually
-the parameters of substantive interest, and they are comparable across
-constructs and between 2S-PA and the joint SEM (the two agree when the sample
-is large). Inspect them with `summary(fit, standardized = TRUE)` or
-`lavaan::standardizedSolution(fit)`. For multigroup fits, `standardizedSolution()`
-standardizes within group and `grandStandardizedSolution()` pools across groups
-(see the [Grand Standardized Coefficients](gr-std-coef.html) vignette).
+The `dem65 ~ dem60` coefficient describes the association of democracy in
+1960 with democracy in 1965, holding industrialization constant. In the
+standardized solution, a one-SD difference in the predictor corresponds
+to an `est.std`-SD difference in the outcome. The SDs refer to the latent
+variables after accounting for measurement error.
 
-## How the measurement error is supplied
+Unstandardized coefficients depend on how the latent variables are scaled.
+They can be substantively useful when that scale has a meaningful interpretation.
+Standardized coefficients are particularly useful when comparing 2S-PA with
+joint SEM or across scoring methods, because the latent-variable metrics
+may differ (Lai et al., 2023).
 
-`tspa()` needs each score's measurement error, in one of two forms:
+The returned object is a lavaan fit. Use `summary(tspa_fit, standardized = TRUE)`
+for the full output. To see the score loadings and error variances fixed in
+the stage-2 model, inspect the generated lavaan syntax:
 
-- **`se_fs`** — one standard error per score (a scalar, or a list / data frame
-  of per-group scalars for multigroup). This treats the error *variance* as
-  constant across observations and assumes each score is an indicator of a
-  single latent (no cross-loadings, no correlated score errors). It is the
-  simple path: suitable for a unidimensional construct scored from continuous,
-  roughly equally reliable items.
-- **`fsT`** (with **`fsL`** and **`fsb`**) — the general form `get_fs()` returns
-  as attributes (`attr(fs, "fsT")`, `attr(fs, "fsL")`, `attr(fs, "fsb")`).
-  `fsT` is the score error *variance-covariance* (so it also carries correlated
-  errors and cross-loadings) and `fsL` the implied loading of each latent on the
-  score. Use this when scores are composite (several indicators per latent, or a
-  score loading on several latents), and note it is the only form that carries
-  per-observation measurement properties, which the `mirt` (IRT) and `merMod` (mixed
-  model) paths need because loadings and error variances vary by person / cluster (see the
-  `multiple-factors`, `tspa-vignette-mx` and `multilevel` vignettes).
+```{r}
+cat(attr(tspa_fit, "tspaModel"))
+```
 
-Each construct below is a single-factor score from continuous items, so
-`se_fs` is the natural form: the single-factor example passes it explicitly,
-while the multi-factor and multigroup examples omit it, since `tspa()` reads
-those standard errors from the `get_fs()` result automatically. The
-`multiple-factors` vignette shows the `fsT`/`fsL` form.
-The `OpenMx` backend `tspa_mx_model()` likewise omits the
-measurement inputs on a `get_fs()` result, deriving them from the
-result's attributes (per-row quantities as definition variables —
-the exact, non-pooled route; see the `tspa-vignette-mx` vignette).
+## Using an existing CFA fit
 
-## Reading the `get_fs()` output
+If you have already fitted and evaluated a measurement model in lavaan,
+pass that fit to `get_fs()`. The following example fits the three factors
+together, allowing their correlations to be estimated in stage 1.
 
-`get_fs()` returns one row per observation. For a construct called `<name>` it
-contributes these columns, with the matching matrix-form quantities attached
-as attributes on the returned data frame:
+```{r}
+cfa_fit <- cfa(measurement_model, data = PoliticalDemocracy)
+fs_joint <- get_fs(cfa_fit)
+tspa_joint <- tspa(path_model, data = fs_joint)
+standardizedSolution(tspa_joint) |>
+  subset(op == "~")
+```
 
-| Column(s) / attribute | Meaning |
-| --- | --- |
-| `fs_<name>` | the factor score |
-| `fs_<name>_se` | that score's standard error — the measurement-error term `tspa()` corrects for |
-| `ev_fs_<name>` | the score's error variance |
-| `ecov_fs_<a>_fs_<b>` | error covariance between scores `a` and `b` (only from a shared multi-factor model) |
-| `<indicator>_by_fs_<name>` | model-implied loading — the mean of the indicator on the score |
-| `attr(fs, "fsT")` | the score error variance-covariance (carries correlated errors and cross-loadings) |
-| `attr(fs, "fsL")` | the implied loading of each latent on the score |
-| `attr(fs, "fsb")` | the scoring-equation intercept, one per score (named by the score, e.g. `fs_ind60`; `0` for a complete-data single-factor CFA, varying per row when the measurement quantities do) |
+With regression scoring from a multi-factor model, a score can use indicators
+of other correlated factors. As a result, it can load on more than one latent
+variable, and its measurement error can correlate with that of other scores.
+`tspa()` retains both features using the information stored by `get_fs()`.
+See [Multi-Factor Measurement Model](multiple-factors.html) for an explanation
+and a comparison with separate measurement models.
 
-The attributes are what `tspa_mx_model()` consumes, and `tspa(fsb = ...)` uses
-`fsb` to fix the stage-2 intercept constraints. `fs_indiv(include_intercept =
-TRUE)` materializes the `fsb` values as `int_fs_<f>` columns, which is how the
-`tspa_mx_model()` examples wire up the score-intercept definition variables
-(`fsb = c(fs_ind60 = "int_fs_ind60", ...)`).
+## Mean scores
 
-## Mean (sum) scores
-
-`get_fs()` can also score a construct as its **mean score** — the plain mean of
-the items that load on it, with no latent distribution — a simpler alternative
-to the default regression (EB) scores. Request it with `method = "mean"` (the
-item-to-factor split is auto-derived from the estimated loadings, or supplied
-via `sum_items`):
+2S-PA can also account for measurement error in unweighted item means.
+`method = "mean"` computes the mean of the indicators assigned to each factor
+and obtains its loading and error variance from the measurement model.
 
 ```{r}
 fs_mean <- get_fs(PoliticalDemocracy,
-                  model = "ind60 =~ x1 + x2 + x3
-                           dem60 =~ y1 + y2 + y3 + y4",
-                  method = "mean")
-head(fs_mean)   # fs_ind60 == rowMeans(x1, x2, x3); constant fs_<name>_se per factor
+                  model = measurement_model, method = "mean")
+tspa_mean <- tspa(path_model, data = fs_mean)
+standardizedSolution(tspa_mean) |>
+  subset(op == "~")
 ```
 
-A mean score is a composite of items, so its measurement error is carried by
-the `fsT`/`fsL`/`fsb` form (the cross terms are exactly zero for a plain CFA).
-`tspa()` reads those from the result's attributes:
+This option requires complete indicator data. The mean-score loading is
+generally not one, even when every item loads on only one factor.
+
+## Multiple groups
+
+The `HolzingerSwineford1939` data contain cognitive test scores from two
+schools. We illustrate a model relating visual ability to speed. First,
+fit a multigroup CFA with equal factor loadings across schools:
 
 ```{r}
-tspa_mean_fit <- tspa(model = "dem60 ~ ind60",
-                      data = fs_mean,
-                      fsT = attr(fs_mean, "fsT"),
-                      fsL = attr(fs_mean, "fsL"),
-                      fsb = attr(fs_mean, "fsb"))
-summary(tspa_mean_fit, standardized = TRUE)
-```
-
-`method = "mean"` is for complete-data fits: it errors when stage 1 retains
-missing data (e.g. `missing = "fiml"`) and is not supported together with
-`corrected_fsT`, `vfsLT`, `reliability`, `prior_mean`, or `prior_cov`.
-
-## Single group, single factor
-
-```r
-model <- ' 
-  # latent variable definitions
-     ind60 =~ x1 + x2 + x3
-     dem60 =~ y1 + y2 + y3 + y4
-
-  # regressions
-    dem60 ~ ind60
+hs_model <- '
+  visual =~ x1 + x2 + x3
+  speed =~ x7 + x8 + x9
 '
+hs_fit <- cfa(hs_model, data = HolzingerSwineford1939,
+              group = "school", group.equal = "loadings")
+fs_hs <- get_fs(hs_fit)
+tspa_hs <- tspa("visual ~ speed", data = fs_hs, group = "school")
+standardizedSolution(tspa_hs) |>
+  subset(op == "~")
 ```
 
-To call `tspa()`, a data frame of factor scores is needed for all latent variables. To get this data frame, apply `get_fs()` to all latent variables and specify model parameters as their respective definitions. Combine factor scores for all latent variables using `cbind()` so that it can be used in `tspa()` for model building.
+The stage-2 path is estimated separately for each school, using each group's
+score loadings and error variances. To constrain the unstandardized paths
+to equality, add `group.equal = "regressions"` to `tspa()`.
 
-```{r}
-fs_dat_ind60 <- get_fs(PoliticalDemocracy, 
-                       model = "ind60 =~ x1 + x2 + x3")
-fs_dat_dem60 <- get_fs(PoliticalDemocracy, 
-                       model = "dem60 =~ y1 + y2 + y3 + y4")
-fs_dat <- cbind(fs_dat_ind60, fs_dat_dem60)
-head(fs_dat)
-```
+Measurement invariance should be evaluated in stage 1. If only partial
+invariance is supported, specify the appropriate equality constraints and
+freed measurement parameters in that model before obtaining scores.
+The stage-2 correction then uses the group-specific measurement information
+(Lai et al., 2023). A common latent-variable metric is needed for meaningful
+cross-group comparisons.
 
-To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = regressions, data = the combined factor score data frame using `get_fs()`, and specify standard error as either a list or a data frame. Values for standard error can be found at column named `fs_[variable name]_se`. For example, the standard error of latent variable ind60 can be found at column `fs_ind60_se` in the `fs_dat` data frame.
+`standardizedSolution()` uses within-group SDs, so even equal unstandardized
+paths can have different standardized values. For coefficients expressed in
+grand-SD units across the combined sample, see
+[Grand Standardized Coefficients](gr-std-coef.html).
 
-```r
-tspa_fit <- tspa(model = "dem60 ~ ind60", 
-                 data = fs_dat, 
-                 se_fs = list(ind60 = 0.1213615, dem60 = 0.6756472))
-```
+## How the score measurement information is represented
 
-We recently added support for `tspa()` to directly grep the `fs_[variable name]_se` columns from the `get_fs()` output, so the `se_fs` argument can be omitted:
+For a vector of factor scores, the stage-2 measurement equation is
 
-```{r}
-tspa_fit <- tspa(model = "dem60 ~ ind60", 
-                 data = fs_dat)
-summary(tspa_fit, standardized = TRUE)
-```
+$$
+\tilde{\boldsymbol{\eta}}_i = \mathbf{b}_i +
+\mathbf{L}_i\boldsymbol{\eta}_i + \mathbf{e}_i,
+\qquad \operatorname{Var}(\mathbf{e}_i) = \mathbf{T}_i.
+$$
 
-In this flow `tspa()` also recovers each score's factor-score loading
-automatically from its implied-loading column (`<name>_by_fs_<name>`),
-rather than assuming a unit loading, so a shrinkage score (implied
-loading below one) is corrected consistently with the explicit
-`fsL`/`fsT` form.
+Here, $\boldsymbol{\eta}_i$ contains the latent variables, $\mathbf{L}_i$
+contains the score loadings, $\mathbf{b}_i$ contains the score intercepts,
+and $\mathbf{T}_i$ contains the score error variances and covariances.
+`get_fs()` stores these quantities as data-frame attributes named `fsL`,
+`fsb`, and `fsT`. They are used automatically by `tspa()`.
 
-The **standardized** coefficients (the `est.std` column) are usually the
-parameters of interest, because the latent constructs have no intrinsic scale
-(see the 'Why the standardized coefficients are of interest' section above).
-To view the Two-Stage Path Analysis model, use `attributes([model name])$tspaModel`. Function `cat()` can help tidy up the model output. In the output, the values of error constraints are computed by squaring standard errors from the previous section.
+| Example column or attribute | Interpretation |
+| --- | --- |
+| `fs_ind60` | Factor score for industrialization |
+| `fs_ind60_se` | Standard error of measurement of that score |
+| `ev_fs_ind60` | Score error variance |
+| `ind60_by_fs_ind60` | Loading of `fs_ind60` on `ind60` |
+| `ecov_fs_ind60_fs_dem60` | Measurement-error covariance between two scores |
+| `attr(fs_dat, "fsL")` | Score loading matrix; rows are scores, columns are latent variables |
+| `attr(fs_dat, "fsT")` | Score error variance-covariance matrix |
+| `attr(fs_dat, "fsb")` | Score measurement intercepts |
 
-```{r}
-cat(attributes(tspa_fit)$tspaModel)
-```
+If you supply scores from another source, you can specify `fsL` and `fsT`
+explicitly. The simpler `se_fs` argument specifies standard errors of
+measurement for single indicators with unit loadings and uncorrelated
+measurement errors. That parameterization must match the scale of the scores;
+it should not be assumed for shrinkage scores.
 
-## Single group, multiple factors
+For complete continuous-item CFA data, these quantities are constant within
+a group. With missing indicators, categorical items, or random effects from
+mixed models, they can vary across observations. `tspa()` pools varying
+quantities within groups; `tspa_mx_model()` retains the observation-specific
+values using OpenMx *definition variables*. A definition variable is a data
+value used to fix a model parameter for a particular observation.
 
-```r
-model <- ' 
-  # latent variable definitions
-     ind60 =~ x1 + x2 + x3
-     dem60 =~ y1 + y2 + y3 + y4
-     dem65 =~ y5 + y6 + y7 + y8
+Keep the row order of a `get_fs()` result when passing it to another function:
+its row-specific attributes must remain aligned with the scores. To analyze
+a subset, obtain scores for that subset. For separately scored constructs,
+`combine_fs()` preserves the measurement information and can align observations
+by an ID column; see the multi-factor vignette.
 
-  # regressions
-    dem60 ~ ind60
-    dem65 ~ ind60 + dem60
+## Where to go next
 
-  # # residual correlations
-  #   y1 ~~ y5
-  #   y2 ~~ y4 + y6
-  #   y3 ~~ y7
-  #   y4 ~~ y8
-  #   y6 ~~ y8
-'
-```
-
-To call `tspa()`, a data frame of factor scores is needed for all latent variables. To get this data frame, apply `get_fs()` to all latent variables and specify model parameters as their respective definitions. Combine factor scores for all latent variables using `cbind()` to call `tspa()` for model building.
-
-```r
-fs_dat_ind60 <- get_fs(PoliticalDemocracy, 
-                       model = "ind60 =~ x1 + x2 + x3")
-fs_dat_dem60 <- get_fs(PoliticalDemocracy, 
-                       model = "dem60 =~ y1 + y2 + y3 + y4")
-fs_dat_dem65 <- get_fs(PoliticalDemocracy, 
-                       model = "dem65 =~ y5 + y6 + y7 + y8")
-fs_dat <- cbind(fs_dat_ind60, fs_dat_dem60, fs_dat_dem65)
-```
-
-We recently made `get_fs()` to support a multi-factor model input, but computing the factor scores separately for each latent variable via the argument `local = TRUE`.
-
-```{r}
-# This is equivalent to the previous chunk:
-fs_dat <- get_fs(PoliticalDemocracy, 
-                 model = "ind60 =~ x1 + x2 + x3
-                          dem60 =~ y1 + y2 + y3 + y4
-                          dem65 =~ y5 + y6 + y7 + y8",
-                 local = TRUE)
-head(fs_dat)  # check that the error covariances and cross-loadings are zero.
-```
-
-`local = TRUE` (above) scores each latent from its own measurement model in a
-single call on one multi-factor model. When the per-factor `get_fs()` results
-instead come from different data subsets or different measurement methods (for
-example `mirt` for some items and `lavaan` for the rest), `combine_fs()`
-assembles them into the same block-diagonal `get_fs()`-shaped result that feeds
-`tspa()` directly; see the *Multi-Factor Measurement Model* vignette.
-
-To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = regressions (for all predictors) and data = the factor score data frame created by combining results from `get_fs()`. Each score's standard error is available in the column named `fs_[variable name]_se`.^[The text inside `[]` should be replaced with the actual variable name.] For example, the standard error of latent variable ind60 is in column `fs_ind60_se` of the `fs_dat` data frame. Because the combined frame carries each score's `fs_[variable name]_se` column from `get_fs()`, `tspa()` reads those standard errors from the columns automatically, so the `se_fs` argument can be omitted (passing it explicitly as a list or a data frame still works). In the output model, the values of error constraints are computed by squaring the standard errors.
-
-```{r}
-tspa_3var_fit <- tspa(model = "dem60 ~ ind60
-                               dem65 ~ ind60 + dem60", 
-                      data = fs_dat)
-cat(attributes(tspa_3var_fit)$tspaModel)
-```
-
-## Multigroup, multiple factors
-
-```r
-model <- ' 
-  # latent variable definitions
-    visual =~ x1 + x2 + x3
-    speed =~ x7 + x8 + x9
-
-  # regressions
-    visual ~ speed
-'
-```
-
-To call `tspa()`, a data frame of factor scores is needed for all latent variables for each group. To get this data frame, you can use the above strategy to compute factor scores separately for each latent variable with the `local = TRUE` argument. Alternatively, you can use the default (`local = FALSE`), which computes factor scores for all latent variables simultaneously, but resulting in correlated measurement errors and cross-loadings with the regression method for factor scores (see more discussion in the [`Scoring Matrices: lavaan CFA and lme4`](scoring-matrices.html) vignette).
-
-```{r}
-hs_mod <- '
-visual =~ x1 + x2 + x3
-speed =~ x7 + x8 + x9
-'
-
-# get factor scores (joint model)
-fs_hs <- get_fs(HolzingerSwineford1939, model = hs_mod, group = "school")
-head(fs_hs)  # with cross-loadings and correlated measurement errors
-```
-
-To build a Two-Stage Path Analysis model, simply call the `tspa()` function with model = the regression relation, data = the combined factor score data frame, and `group` = the grouping column (here `"school"`). Each score's standard error is available in the column named `fs_[variable name]_se`. For example, the standard error of the multigroup variable visual is in column `fs_visual_se` of the `fs_hs` data frame. Because `fs_hs` comes from `get_fs()`, `tspa()` reads the per-group standard errors from those columns automatically, so the `se_fs` argument can be omitted (passing it explicitly as a data frame still works). The `unique()` function is handy for inspecting the per-group standard errors: for example, `unique(fs_hs$fs_visual_se)` shows the standard error of visual in each group.
-
-Function `standardizedsolution()` enables user to view a table of the standardized estimate, standard error, z score, p-value, and confidence interval bounds for each multigroup regression relation.
-
-```{r}
-# tspa model
-tspa_fit <- tspa(model = "visual ~ speed",
-                 data = fs_hs,
-                 group = "school"
-                 # group.equal = "regressions"
-                 )
-stdsol <- standardizedsolution(tspa_fit)
-subset(stdsol, subset = op == "~")
-```
-
-To view the Two-Stage Path Analysis model for multigroup, use `attributes([model name])$tspaModel`. Function `cat()` can help tidy up the model output. In the output, the values of error constraints are computed by squaring standard errors from the previous section.
-
-```{r}
-cat(attributes(tspa_fit)$tspaModel)
-```
-
-## Related vignettes
-
-- [`Multiple factors`](multiple-factors.html) — a score that is a composite of several indicators: the `fsT`/`fsL` path and `tspa()` cross-loadings.
-- [`2S-PA with Random Effects`](multilevel.html) — stage 1 from an `lme4` mixed model, feeding empirical-Bayes random effects into 2S-PA.
-- [`Scoring Matrices: lavaan CFA and lme4`](scoring-matrices.html) — the per-observation scoring matrices `get_fs()` attaches, and the empirical-Bayes identity behind them.
-- [`Correction to Measurement Error`](correction-error.html) — the measurement-error correction factor and its effect on standard errors.
-- [`EFA Scores`](efa-score.html) — stage 1 from an exploratory factor analysis (EFA) rather than a CFA.
-- [`Linear Growth Modeling with 2S-PA`](tspa-growth-vignette.html) — 2S-PA for longitudinal / growth-curve measurement models.
-- [`2S-PA with OpenMx and IRT (mirt)`](tspa-vignette-mx.html) — stage 2 via `tspa_mx_model()` (OpenMx), including the `mirt` (IRT) path.
+- **Different measurement settings:** [missing data](missing-data.html),
+  [categorical items with mirt and OpenMx](tspa-vignette-mx.html), and
+  [random effects](multilevel.html).
+- **Inference:** [stage-2 standard-error correction](corrected-se.html) and
+  [grand standardization](gr-std-coef.html).
+- **Extensions:** [latent interactions](product-factor-scores.html),
+  [growth models](tspa-growth-vignette.html), and [EFA scores](efa-score.html).
+- **Technical detail and simulation evidence:**
+  [scoring matrices](scoring-matrices.html),
+  [score error-variance correction](correction-error.html),
+  [scoring-method simulation](sim-scoring-se.html), and
+  [categorical-item simulation](sim-categorical-irt.html).
 
 ## References
 
-- Bollen, K. A. (1989). *Structural equations with latent variables*.
-  New York, NY: Wiley.
 - Cole, D. A., & Preacher, K. J. (2014). Manifest variable path analysis:
   Potentially serious and misleading consequences due to uncorrected measurement
   error. *Psychological Methods, 19*(2), 300–315.
-  [https://doi.org/10.1037/a0033805](https://doi.org/10.1037/a0033805)
-- Kline, R. B. (2016). *Principles and practice of structural equation
-  modeling* (4th ed.). New York, NY: The Guilford Press.
+  <https://doi.org/10.1037/a0033805>
 - Lai, M. H. C., & Hsiao, Y.-Y. (2022). Two-stage path analysis with definition
   variables: An alternative framework to account for measurement error.
-  *Psychological Methods, 27*(4), 568–588.
-  [https://doi.org/10.1037/met0000410](https://doi.org/10.1037/met0000410)
+  *Psychological Methods, 27*(4), 568–588. <https://doi.org/10.1037/met0000410>
 - Lai, M. H. C., Tse, W. W.-Y., Zhang, G., Li, Y., & Hsiao, Y.-Y. (2023).
   Correcting for unreliability and partial invariance: A two-stage path analysis
   approach. *Structural Equation Modeling: A Multidisciplinary Journal, 30*(2),
-  258–271.
-  [https://doi.org/10.1080/10705511.2022.2125397](https://doi.org/10.1080/10705511.2022.2125397)
-- Lai, M. H. C., & Liu, S. (2026). A two-stage approach to account for
-  measurement error when using empirical Bayes estimates of random slopes.
-  *Psychological Methods.* Advance online publication.
-  [https://doi.org/10.1037/met0000838](https://doi.org/10.1037/met0000838)
-- Rosseel, Y. (2012). *lavaan*: An R package for structural equation modeling.
-  *Journal of Statistical Software, 48*(2), 1–36.
-  [https://doi.org/10.18637/jss.v048.i02](https://doi.org/10.18637/jss.v048.i02)
+  258–271. <https://doi.org/10.1080/10705511.2022.2125397>
+- Vermunt, J. K. (2025). Stepwise estimation of latent variable models:
+  An overview of approaches. *Statistical Modelling, 25*(6), 530–551.
+  <https://doi.org/10.1177/1471082X251355693>
