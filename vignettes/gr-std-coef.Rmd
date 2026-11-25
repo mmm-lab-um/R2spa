@@ -14,18 +14,40 @@ knitr::opts_chunk$set(
 )
 ```
 
-This vignette shows how to obtain grand standardized estimates for the latent variables for multi-group `lavaan` objects, using the `R2spa::grandStandardizedSolution()` function.
+## Choosing a standardization for multiple groups
+
+In a multigroup model, a regression coefficient can be expressed in either
+**within-group SD units** or **grand-SD units** for the combined sample.
+The choice changes its interpretation. `lavaan::standardizedSolution()`
+uses each group's SDs. `R2spa::grand_standardized_solution()` uses the same
+grand SDs for all groups. Its original name, `grandStandardizedSolution()`,
+is also supported and is used in the examples below.
+
+This distinction matters when comparing a multigroup SEM with a pooled
+2S-PA analysis, or when comparing coefficients across groups with different
+latent variances (Lai et al., 2023). Grand standardization includes both
+within-group variability and variability associated with group mean
+differences. It puts coefficients in common SD units; it does not impose
+equality of the structural paths or establish measurement invariance.
+
+The function accepts multigroup lavaan fits, including fits returned by
+`tspa()`. We first illustrate ordinary standardization, then show the
+multigroup calculation.
 
 ```{r setup}
 library(lavaan)
 library(R2spa)
 ```
 
-The example is from https://lavaan.ugent.be/tutorial/sem.html.
+The examples use the `PoliticalDemocracy` and `HolzingerSwineford1939`
+datasets supplied by lavaan.
 
 ## Single Group
 
-For single groups, standardized solution can be obtained by first obtaining the latent variable covariance matrix:
+For a single group, within-group and grand standardization coincide.
+The standardized path from a predictor to an outcome is the unstandardized
+path multiplied by the predictor SD and divided by the outcome SD.
+Those SDs come from the latent-variable covariance matrix:
 
 $$
   \begin{aligned}
@@ -59,7 +81,7 @@ $$
 \mathbf{B}_s = \mathbf{S}_\eta^{-1} \mathbf{B} \mathbf{S}_\eta
 $$
 
-where $\mathbf{S}_\eta$ is a diagonal matrix containing the square root of the diagonal elements of $\mathrm{Var}(\mathbf{\eta})$
+where $\mathbf{S}_\eta$ is a diagonal matrix of latent-variable SDs.
 
 ```{r}
 S_eta <- diag(
@@ -73,6 +95,10 @@ standardizedSolution(fit)[8, ]
 ```
 
 ## Multiple Groups
+
+This example relates visual ability to speed in two schools. Equal loadings
+and intercepts provide a common measurement scale. The repeated label `b1`
+constrains the unstandardized regression coefficient to equality across schools.
 
 ```{r}
 reg <- '
@@ -89,6 +115,10 @@ reg_fit <- sem(reg, data = HolzingerSwineford1939,
 ```
 
 ### Separate standardization by group
+
+Although the unstandardized path is constrained equal, the standardized
+paths can differ because the predictor-to-outcome SD ratio differs across
+groups:
 
 ```{r}
 standardizedSolution(reg_fit, type = "std.lv") |>
@@ -123,7 +153,9 @@ The grand covariance matrix is:
 
 $$\mathrm{Var}(\mathbf{\eta}) = \frac{1}{N} \sum_{g = 1}^G n_g \left\{\mathrm{Var}(\mathbf{\eta}_g) + [\mathrm{E}(\mathbf{\eta}_g) - \mathrm{E}(\mathbf{\eta})][\mathrm{E}(\mathbf{\eta}_g) - \mathrm{E}(\mathbf{\eta})]^\top \right\}$$
 
-So we need to involve the mean as well
+The grand covariance includes the within-group covariances and a
+between-group component based on deviations from the grand mean. Thus,
+both latent means and latent covariances enter the calculation:
 
 ```{r}
 # Latent means
@@ -137,8 +169,23 @@ R2spa:::veta_grand(ns, beta_list = lapply(reg_fit_est, `[[`, "beta"),
                    alpha_list = lapply(reg_fit_est, `[[`, "alpha"))
 ```
 
-The function `grandStandardizedSolution()` automates the computation of grand standardized coefficients, with the asymptotic standard error obtained using the delta method:
+`grandStandardizedSolution()` performs this calculation and obtains
+sampling standard errors using the delta method:
 
 ```{r}
 grandStandardizedSolution(reg_fit)
 ```
+
+In this example, the common unstandardized path is multiplied by a common
+grand-SD ratio, so its grand-standardized value is also equal across groups.
+For unconstrained paths, the function reports each group's path expressed
+in those same units. If a `tspa()` fit has corrected standard errors, the
+grand-standardized standard errors use its corrected covariance matrix;
+see [Corrected Standard Errors](corrected-se.html).
+
+## Reference
+
+Lai, M. H. C., Tse, W. W.-Y., Zhang, G., Li, Y., & Hsiao, Y.-Y. (2023).
+Correcting for unreliability and partial invariance: A two-stage path analysis
+approach. *Structural Equation Modeling: A Multidisciplinary Journal, 30*(2),
+258–271. <https://doi.org/10.1080/10705511.2022.2125397>

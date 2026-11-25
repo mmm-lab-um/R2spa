@@ -18,23 +18,23 @@ knitr::opts_chunk$set(
 
 ## Overview
 
-The **scoring matrix** is the linear operator that converts the modelled
-observed data into the factor / empirical-Bayes (EB) scores reported by
-`get_fs()`. Together with the score error-covariance (`fsT`), implied
-loadings (`fsL`) and implied intercepts (`fsb`), it fully specifies how
-each reported score is constructed from the model. `get_fs()` exposes the
-scoring matrix as the `scoring_matrix` attribute alongside these three:
+Factor scores are weighted combinations of observed indicators. The
+**scoring matrix** contains those weights: one row for each score and
+one column for each indicator. In a mixed model, the same idea gives
+weights for obtaining empirical Bayes (EB) random-effect estimates from
+a person's repeated observations.
 
-- for **lavaan** CFA models it is a named list of one (score x item)
-  matrix per group;
-- for **lme4** models it is a named list of one (random-effect x
-  observation) matrix per cluster.
+This technical vignette shows how the weights produce both the scores and
+the score measurement information used in stage 2. We reconstruct scores
+from a lavaan CFA and an lme4 mixed model, then calculate their loadings
+and measurement-error covariances. For a worked path analysis, start with
+the [introductory vignette](R2spa.html) or
+[2S-PA with Random Effects](multilevel.html).
 
-In this vignette we reconstruct the scores **by hand** from the stored
-scoring matrix and the modelled data, demonstrating the identity in both
-settings. (The vignette [2S-PA with Random Effects](multilevel.html) shows
-the downstream 2S-PA use of the `ev_`/`ecov_` columns that `get_fs()`
-derives from `fsT`.)
+`get_fs()` stores the weights in its `scoring_matrix` attribute. With
+complete CFA data, there is one matrix per group; with mixed models,
+there is one matrix per cluster. This reflects the fact that mixed-model
+weights can depend on each cluster's observation schedule.
 
 ```{r, message = FALSE}
 library(R2spa)
@@ -44,9 +44,9 @@ library(lme4)
 
 ## lavaan CFA
 
-We fit a single-factor CFA on `lavaan::PoliticalDemocracy` with a
-mean structure, so that the observed-item intercepts `nu` and the factor
-intercept `alpha` are estimated parameters:
+We fit a single-factor CFA on `lavaan::PoliticalDemocracy` with a mean
+structure. By default, lavaan estimates the item intercepts (`nu`) and
+fixes the factor mean (`alpha`) to zero for identification:
 
 ```{r, message = FALSE}
 cfa_fit <- cfa("f =~ y1 + y2 + y3 + y4",
@@ -70,13 +70,18 @@ attr(lavPredict(cfa_fit, fsm = TRUE), "fsm")
 
 ### Reconstructing the scores by hand
 
-`get_fs()` computes the regression scores as
+For a participant's item vector $\mathbf{y}$, the regression score is
 
-`f = S %*% (y' - (lambda %*% alpha + nu))' + alpha`,
+$$
+\tilde{\boldsymbol{\eta}} =
+\mathbf{S}(\mathbf{y} - \boldsymbol{\nu} -
+\boldsymbol{\Lambda}\boldsymbol{\alpha}) + \boldsymbol{\alpha}.
+$$
 
-where `lambda` is the item-loading matrix, `nu` the item intercepts, and
-`alpha` the factor intercept. From `lavInspect(cfa_fit, "est")` we can
-therefore recompute the scores directly from the raw data:
+Here, $\boldsymbol{\Lambda}$ contains the item loadings,
+$\boldsymbol{\nu}$ contains the item intercepts, and
+$\boldsymbol{\alpha}$ contains the factor means. We retrieve those
+quantities from the fit and reproduce the scores:
 
 ```{r}
 est <- lavInspect(cfa_fit, "est")
@@ -89,14 +94,12 @@ fs_hand <- S %*% (t(y) - (as.vector(Lambda %*% alpha) + nu)) + as.vector(alpha)
 max(abs(fs_hand - fs$fs_f))
 ```
 
-The maximum deviation from the reported `fs_f` column is at the level of
-machine precision. The same `S` also generates the companion attributes,
-so all of them are redundant views of the same linear operator:
+The reconstructed scores agree with `fs_f` to numerical precision.
+The same weights, together with the CFA parameters, give the score
+measurement equation used in stage 2:
 
 - `fsL = S %*% Lambda`: implied loadings of the factor scores on the
-  latent variables (rows = score names, columns = latent names; i.e. each
-  score's regression on each latent, the score equation
-  `score = fsb + fsL·η + error`, in loading form);
+  latent variables;
 - `fsb = alpha - fsL %*% alpha`: implied intercepts of the factor
   scores;
 - `fsT = S %*% Theta %*% t(S)`: error variance-covariance of the
@@ -110,10 +113,9 @@ max(abs(attr(fs, "fsT")[[1]] - S %*% Theta %*% t(S)))
 
 ## lme4
 
-We fit the classic `sleepstudy` growth model with a random intercept and
-slope for `Subject`, using ML estimation (the 2S-PA convention; see the
-Notes there). Each cluster (subject) obtains a single 2-dimensional EB
-estimate of the random effect:
+We fit the `sleepstudy` growth model with a random intercept and slope
+for each participant (`Subject`), using maximum likelihood. `get_fs()`
+returns two EB estimates per participant: their random intercept and slope.
 
 ```{r, message = FALSE}
 lme1 <- lmer(Reaction ~ Days + (Days | Subject), sleepstudy,
@@ -136,7 +138,7 @@ knitr::kable(sm1[["308"]], digits = 3,
 
 ### Reconstructing the scores by hand
 
-The theoretical EB score of cluster `j` is
+The EB random-effect estimate for cluster `j` is
 
 `u_hat_j = S_j %*% (y_j - X_j %*% beta)`,
 
@@ -147,10 +149,8 @@ with
 where `y_j` is the cluster's response vector, `X_j` its rows of the
 fixed-effects design, `Z_j` its rows of the random-effects design,
 `beta = fixef(.)` the fixed-effect estimates, and `G`, `sigma^2` the
-random-effects and residual variances. `R2spa` reconstructs the scaled
-matrix `D = G / sigma^2` from the LME4 theta via `get_D()`; because
-`Kz = Z_j' Z_j` is unscaled, `sigma^2` cancels in `S_j`. As with lavaan,
-`S_j` also determines the companion attributes:
+random-effects covariance matrix and residual variance. As in the CFA,
+the weights give the score loadings and measurement-error covariance:
 
 - `fsL_j = S_j %*% Z_j`: loading of the EB estimate on the random
   effect, i.e. the operator of `E[u_hat_j | u_j]`;

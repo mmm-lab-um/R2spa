@@ -25,43 +25,78 @@ have_numderiv <- requireNamespace("numDeriv", quietly = TRUE)
 have_boot     <- requireNamespace("boot", quietly = TRUE)
 ```
 
-This vignette shows how to obtain Taylor-series corrected standard errors in 2S-PA, accounting for the uncertainty in the weights for obtaining the factor scores. It is described in [this paper](https://doi.org/10.1007/s00181-020-01942-z).
+## Two sources of uncertainty
 
-The second-stage estimation treats as known the loading matrix and the error covariance matrix of the factor scores as indicators of the true latent variables. However, those are estimates based on the first-stage measurement model. When the sample size is large and/or the reliability of the factor scores is high, the uncertainty in the estimated loading and error covariance matrix is generally negligible. Otherwise, a first-order correction on the standard errors of the second-stage estimation is possible, as illustrated below.
+2S-PA accounts for **measurement error in factor scores** by fixing score
+loadings and error variances in stage 2. Those fixed quantities are themselves
+estimated in stage 1, however, and can vary from sample to sample.
+The default stage-2 standard errors condition on them as if they were known.
 
-> **Optional dependencies.** The numeric-Jacobian demonstration uses
-> `numDeriv` and the bootstrap comparison uses `boot` (both `Suggests`). They
-> are loaded up front when available, and the dependent chunks are skipped when
-> not, so the vignette builds without them; both are installed automatically
-> during `R CMD check`.
+This vignette illustrates an additional, first-order delta-method correction
+to the **sampling standard errors of the structural parameter estimates**.
+The correction adds uncertainty associated with the estimated score loadings
+and error covariance matrix. It changes the reported standard errors and
+confidence intervals, while leaving the path estimates unchanged. Related
+two-step corrections are discussed by
+[Meijer et al. (2021)](https://doi.org/10.1007/s00181-020-01942-z).
 
-> **What is — and is not — corrected.** The correction is *partial by
-> design*. It propagates only the *sampling* uncertainty of the stage-1
-> estimates of `fsL` (loadings / cross-loadings) and `fsT` (the score
-> error variance-covariance, including its off-diagonals). It does **not**
-> account for the sampling uncertainty of the factor-score *values* (the
-> `fs_<name>` columns fitted in stage 2), their standard errors (`se_fs`), or
-> the score intercepts (`fsb`) — these are held fixed. The two-stage
-> approximation also treats the two stages as independent, so the
-> cross-covariance between the stage-1 estimates and the stage-2 data is not
-> modelled.
+### A short example
 
-## First-order correction for SE
-
-$$\hat V_{\gamma, c} = \hat V_{\gamma} + \boldsymbol{J}_\boldsymbol{\gamma}(\hat{\boldsymbol{\theta}}) \hat V_{\theta} \boldsymbol{J}_\boldsymbol{\gamma}(\hat{\boldsymbol{\theta}})^\top,$$
-
-where $\boldsymbol{J}_\boldsymbol{\gamma}$ is the Jacobian matrix of $\hat{\boldsymbol{\gamma}}$ with respect to $\boldsymbol{\theta}$, or
-
-$$\hat V_{\gamma, c} = \hat V_{\gamma} + (\boldsymbol{H}_\gamma)^{-1} \left(\frac{\partial^2 \ell}{\partial \theta \partial \gamma^\top}\right) \hat V_{\theta} \left(\frac{\partial^2 \ell}{\partial \theta \partial \gamma^\top}\right)^\top (\boldsymbol{H}_\gamma)^{-1},$$
-
-where $V_{\gamma}$ is the naive covariance matrix of the structural parameter estimates $\hat{\boldsymbol{\gamma}}$ assuming the measurement model parameters $\boldsymbol{\theta}$ (the score loadings and error variances) are known, $\boldsymbol{H}_\gamma$ is the Hessian matrix of the log-likelihood $\ell$ with respect to $\hat{\boldsymbol{\gamma}}$, and $V_{\theta}$ can be obtained in the first-stage measurement model analysis.
-
-```{r load-pkg, message = FALSE}
+```{r load-pkg, message=FALSE}
 library(lavaan)
 library(R2spa)
 if (have_numderiv) library(numDeriv)
-if (have_boot)     library(boot)
+if (have_boot) library(boot)
 ```
+
+For scores from a multi-factor CFA, request `vfsLT = TRUE` in stage 1.
+This stores an estimated sampling covariance matrix for the score loadings
+and error variances/covariances. Supply that matrix to `tspa()` and request
+`corrected_se = TRUE`:
+
+```{r}
+measurement_fit <- cfa('ind60 =~ x1 + x2 + x3
+                       dem60 =~ y1 + y2 + y3 + y4',
+                       data = PoliticalDemocracy)
+scores <- get_fs(measurement_fit, vfsLT = TRUE)
+fit_plain <- tspa("dem60 ~ ind60", data = scores)
+fit_corrected <- tspa("dem60 ~ ind60", data = scores,
+                      vfsLT = attr(scores, "vfsLT"), corrected_se = TRUE)
+standardizedSolution(fit_plain) |>
+  subset(op == "~")
+standardizedSolution(fit_corrected) |>
+  subset(op == "~")
+```
+
+The correction implemented here propagates uncertainty in `fsL` and `fsT`,
+holding the observed score values and score intercepts (`fsb`) fixed.
+It omits cross-covariance terms between the two stages. It is therefore a
+partial approximation to stage-1 estimation uncertainty, rather than a
+complete two-stage sampling variance calculation. A bootstrap that repeats
+both stages provides another way to examine uncertainty; an example appears
+below.
+
+The numerical derivative demonstrations require `numDeriv`, and the
+bootstrap code requires `boot`. The remaining sections explain the
+calculation and its use with separate measurement models, Bartlett scores,
+and multiple groups.
+
+## How the first-order correction is computed
+
+$$\hat V_{\gamma, c} = \hat V_{\gamma} + \boldsymbol{J}_\boldsymbol{\gamma}(\hat{\boldsymbol{\theta}}) \hat V_{\theta} \boldsymbol{J}_\boldsymbol{\gamma}(\hat{\boldsymbol{\theta}})^\top,$$
+
+where $\hat V_{\gamma}$ is the default covariance matrix of the stage-2
+parameter estimates, $\hat V_{\theta}$ is the sampling covariance of the
+stage-1 score measurement parameters (`vfsLT`), and
+$\boldsymbol{J}_{\boldsymbol{\gamma}}$ describes how the stage-2 estimates
+change as those measurement parameters change. The added term translates
+stage-1 uncertainty into uncertainty in the structural estimates.
+
+The default calculation uses $\mathbf{J} = -\mathbf{H}^{-1}\mathbf{C}$,
+where $\mathbf{H}$ is the stage-2 log-likelihood Hessian and $\mathbf{C}$
+contains its cross-derivatives with respect to the fixed score measurement
+parameters. Rows of $\mathbf{J}$ correspond to stage-2 parameters and columns
+to stage-1 score measurement parameters.
 
 This example is based on the `PoliticalDemocracy` dataset, from the lavaan tutorial (<https://lavaan.ugent.be/tutorial/sem.html>), also used as an example in Bollen (1989).
 
@@ -99,12 +134,11 @@ fs_dat <- data.frame(
 vldev <- block_diag(vldev1, vldev2)[c(1, 3, 2, 4), c(1, 3, 2, 4)]
 ```
 
-The block-diagonal `vldev` above is an *approximation*: the two single-factor
-models are fit to the same subjects, so their loading/error-variance estimates
-are sampled-correlated, but `block_diag()` sets that cross-model covariance to
-zero. It is the conventional choice for the separate-measurement-models setup
-and is exact in the limit of independent samples. (A joint multi-factor model
-estimates the cross-covariance in a single `vfsLT`; see the next section.)
+The two CFAs use the same participants, so their measurement parameter
+estimates can be correlated across repeated samples. `block_diag()` sets
+that cross-model sampling covariance to zero. The calculation below makes
+this simplifying approximation. A multi-factor measurement model estimates
+the cross-model covariance as part of a single `vfsLT` matrix.
 
 ```{r}
 # 2S-PA
@@ -125,41 +159,20 @@ vcov(tspa_fit)
 sqrt(diag(vc_cor))
 ```
 
-The `engine` argument of `vcov_corrected()` (and of `tspa(corrected_se = TRUE)`) selects how the Jacobian is evaluated. The default `"analytic"` evaluates it refit-free and deterministically as an influence-function closed form, $J = -H^{-1} C$ with $H$ (the log-likelihood Hessian over the free parameters) and $C$ (the cross-derivative with respect to the fixed `fsL`/`fsT`) obtained by central-differencing the analytic log-likelihood score; it covers single- and multi-group models, saturated and restricted (df > 0) structural models, and mean-structure models, and is a pure function of the base fit + `vfsLT` (bit-reproducible, no refits). `"fd"` (central finite differences, one stage-2 refit on each side of each free element) is retained as the A/B reference and the transparent fallback for a shape the analytic form cannot handle. The two agree to the finite-difference noise floor whenever `"analytic"` applies.
+`vcov_corrected()` returns the corrected covariance matrix without changing
+the fit. The alternative `tspa(corrected_se = TRUE)` stores that matrix in
+the returned lavaan fit, so functions such as `standardizedSolution()` use it.
 
-Standardized solution
+For technical comparisons, `engine = "analytic"` uses derivatives of the
+likelihood score without refitting the model. `engine = "fd"` perturbs the
+measurement parameters and refits stage 2 to approximate the derivatives.
+The latter is also used as a fallback when the default calculation does not
+support the fitted model.
 
-The corrected standard error of the `dem60 ~ ind60` coefficient, derived by hand as the standard error of the standardized coefficient plus a first-order delta-method term:
-
-```{r}
-keep_dem_ind <- function(std) {
-  std[std$lhs == "dem60" & std$rhs == "ind60" & std$op == "~", , drop = FALSE]
-}
-tspa_est_std <- function(ld_ev) {
-  ld1 <- ld
-  ev1 <- ev
-  ld1[c(1, 4)] <- ld_ev[1:2]
-  ev1[c(1, 4)] <- ld_ev[3:4]
-  tfit <- tspa(model = "dem60 ~ ind60",
-               data = fs_dat,
-               fsL = ld1,
-               fsT = ev1)
-  keep_dem_ind(standardizedSolution(tfit))$est.std
-}
-tspa_est_std(c(ld[c(1, 4)], ev[c(1, 4)]))
-```
-
-The numeric-Jacobian check below is guarded by the `numDeriv` availability flag, so it is skipped when the package is not installed:
-
-```{r, eval = have_numderiv}
-# Jacobian of the standardized coefficient w.r.t. (loadings, error variances)
-jac_std <- numDeriv::jacobian(tspa_est_std,
-                              x = c(ld[c(1, 4)], ev[c(1, 4)]))
-ss0 <- keep_dem_ind(standardizedSolution(tspa_fit))
-sqrt(ss0$se^2 + jac_std %*% vldev %*% t(jac_std))
-```
-
-The same value comes from the one-call option. Because the two factors were fitted in separate models, only the two loadings and the two error variances are free (positions 1, 4, 5, 7), so we pass the matching 4 x 4 submatrix of `vldev` together with `which_free`:
+For the one-call option, `which_free` identifies the measurement quantities
+whose uncertainty is being propagated. In this separate-model example,
+positions 1 and 4 are the two score loadings and positions 5 and 7 are the
+two error variances. Their order must match the rows and columns of `vldev`:
 
 ```{r}
 tspa_fit_corr <- tspa(model = "dem60 ~ ind60",
@@ -168,25 +181,35 @@ tspa_fit_corr <- tspa(model = "dem60 ~ ind60",
                       fsT = ev,
                       vfsLT = vldev,
                       which_free = c(1, 4, 5, 7),
-                      corrected_se = TRUE)
+                       corrected_se = TRUE)
+keep_dem_ind <- function(std) {
+  std[std$lhs == "dem60" & std$rhs == "ind60" & std$op == "~", , drop = FALSE]
+}
 sc <- keep_dem_ind(standardizedSolution(tspa_fit_corr))
 sc$est.std              # unchanged point estimate
 sc$se                   # corrected standard SE (matches the hand-derived value)
 attr(tspa_fit_corr, "tspa_corrected")   # TRUE
 ```
 
-Compare to joint structural and measurement model (unstandardized solution):
+### Comparison with joint SEM
+
+For comparison, obtain the standard errors of the corresponding
+unstandardized parameters from a joint SEM:
 
 ```{r}
 sem_fit <- sem(model, data = PoliticalDemocracy)
-# Larger standard error
+# Covariance of the structural parameter estimates
 (vc_j <- 
   vcov(sem_fit)[c("dem60~ind60", "ind60~~ind60", "dem60~~dem60"),
                 c("dem60~ind60", "ind60~~ind60", "dem60~~dem60")])
 sqrt(diag(vc_j))
 ```
 
-Bootstrap Standard Errors
+### Bootstrap standard errors
+
+Resample participants and repeat both stages in each bootstrap sample.
+The code below shows the procedure; this vignette reads stored bootstrap
+results rather than running 1,999 replications each time it is built.
 
 ```{r, eval = FALSE, echo = TRUE}
 run_tspa <- function(df, inds) {
@@ -220,7 +243,12 @@ boo$t |>
     setNames(c("dem60~ind60", "ind60~~ind60", "dem60~~dem60"))
 ```
 
-The standard errors seem to diverge slightly among methods. SE(`dem60~ind60`) with bootstrap is the lowest. SE(`ind60~~ind60`) with the joint model is particularly higher than the other two. SE(`dem60~~dem60`) is the lowest with the corrected 2S-PA. It should be pointed out that the joint model and 2S-PA are different estimators.
+The displayed bootstrap summary uses the median absolute deviation (MAD),
+a robust measure of spread that limits the influence of extreme replications.
+The usual bootstrap SE is the standard deviation of the bootstrap estimates.
+Neither summary is expected to match the delta-method SE exactly. Joint SEM
+and 2S-PA also use different estimators, so their sampling standard errors
+need not agree.
 
 ```{r, eval = FALSE}
 run_sem <- function(df, inds) {
@@ -228,81 +256,6 @@ run_sem <- function(df, inds) {
   coef(sem_fit)
 }
 boo <- boot(PoliticalDemocracy, statistic = run_sem, R = 999)
-```
-
-## Joint Measurement Model
-
-```{r}
-cfa_joint <- cfa("ind60 =~ x1 + x2 + x3
-                  dem60 =~ y1 + y2 + y3 + y4",
-                 data = PoliticalDemocracy)
-# Factor score
-fs_joint <- get_fs_lavaan(cfa_joint, vfsLT = TRUE)
-# Delta method variance
-vldev_joint <- attr(fs_joint, which = "vfsLT")
-```
-
-```{r}
-tspa_fit2 <- tspa(model = "dem60 ~ ind60",
-                  data = fs_joint,
-                  fsT = attr(fs_joint, "fsT"),
-                  fsL = attr(fs_joint, "fsL"))
-# Unadjusted covariance
-vcov(tspa_fit2)
-# Adjusted covariance
-(vc2_cor <- vcov_corrected(tspa_fit2, vfsLT = vldev_joint))
-# Corrected standard errors
-sqrt(diag(vc2_cor))
-```
-
-Bootstrap Standard Errors
-
-```{r, eval = FALSE}
-run_tspa2 <- function(df, inds) {
-  fs_joint <- get_fs(df[inds, ],
-                     model = "ind60 =~ x1 + x2 + x3
-                              dem60 =~ y1 + y2 + y3 + y4",
-                     se = "none", test = "none")
-  # tspa() reads fsL/fsT/fsb and the per-score SEs from the get_fs() result
-  tspa_fit2 <- tspa(model = "dem60 ~ ind60",
-                    data = fs_joint,
-                    test = "none")
-  coef(tspa_fit2)
-}
-boo2 <- boot(PoliticalDemocracy, statistic = run_tspa2, R = 1999)
-# run_tspa2b <- function(df, inds) {
-#   fsb_joint <- get_fs(df[inds, ],
-#                       model = "ind60 =~ x1 + x2 + x3
-#                                dem60 =~ y1 + y2 + y3 + y4",
-#                       se = "none", test = "none", method = "Bartlett")
-#   tspa_fit2b <- tspa(model = "dem60 ~ ind60",
-#                      data = fsb_joint,
-#                      fsT = attr(fsb_joint, "fsT"),
-#                      fsL = diag(2),
-#                      test = "none")
-#   coef(tspa_fit2b)
-# }
-# boo2b <- boot(PoliticalDemocracy, statistic = run_tspa2b, R = 4999)
-# run_sem2 <- function(df, inds) {
-#   sem_fit <- sem(model, data = df[inds, ])
-#   coef(sem_fit)[c(6, 14, 15)]
-# }
-# boo2j <- boot(PoliticalDemocracy, statistic = run_sem2, R = 4999)
-```
-
-```{r, eval = FALSE, include = FALSE}
-saveRDS(boo2, file = "boo_joint.RDS")
-```
-
-```{r, include = FALSE}
-boo2 <- readRDS("boo_joint.RDS")
-```
-
-```{r}
-# Use MAD to downweigh outlying replications
-boo2$t |>
-    apply(MARGIN = 2, FUN = mad) |>
-    setNames(c("dem60~ind60", "ind60~~ind60", "dem60~~dem60"))
 ```
 
 ### With Bartlett's Method
@@ -392,7 +345,11 @@ round(cbind(unadjusted = sqrt(diag(vcov(tspa_fit))),
 
 ### Corrected grand-standardized solution (multigroup)
 
-`grandStandardizedSolution()` pools across groups (grand mean / grand SD) rather than standardizing each group separately as `lavaan::standardizedSolution()` does. Feeding it the corrected fit's covariance yields the corrected grand-standardized SEs; we use a structural path model so there is a regression to standardize:
+`grand_standardized_solution()` expresses each group's paths in grand-SD
+units for the combined sample. This differs from the within-group SD units
+used by `standardizedSolution()`. The function also accepts its original
+name, `grandStandardizedSolution()`, used below. When given the corrected
+fit, it uses the corrected covariance matrix to obtain standard errors:
 
 ```{r}
 path_mg <- "textual ~ visual + speed
@@ -442,7 +399,9 @@ ld_ev0 <- c(attr(fs_dat, which = "fsL")[[1]],
 tspa_est_std(ld_ev0)
 ```
 
-The same numeric-Jacobian check for the multigroup model (`numDeriv`-guarded):
+The following calculation expresses the added variance from stage 1
+relative to the default variance of the standardized estimates. It requires
+`numDeriv`:
 
 ```{r, eval = have_numderiv}
 jac <- numDeriv::jacobian(tspa_est_std, x = ld_ev0)

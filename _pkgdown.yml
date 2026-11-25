@@ -29,20 +29,21 @@ reference:
 articles:
   - title: "Getting started"
     desc: >
-      The canonical two-stage workflow and worked model examples.
+      Obtain factor scores, account for measurement error, and interpret
+      structural relations using worked examples.
     contents:
     - R2spa
   - title: "Scoring strategies"
     desc: >
-      How the stage-1 factor scores and their measurement quantities are
-      assembled, for single- and multi-factor measurement models.
+      Scores from separate and multi-factor measurement models, and the
+      loadings and error variances used in stage 2.
     contents:
     - scoring-matrices
     - multiple-factors
   - title: "Missing data & groups"
     desc: >
-      Per-row scoring under missing data, and grouped (clustered / random-effects)
-      data.
+      Observation-specific measurement error with missing indicators and
+      random-effect estimates from mixed models.
     contents:
     - missing-data
     - multilevel
@@ -56,8 +57,8 @@ articles:
     - gr-std-coef
   - title: "Extensions"
     desc: >
-      Product (latent-interaction) indicators, the OpenMx / IRT (mirt) route,
-      linear growth, and EFA scores.
+      Latent interactions, categorical items with mirt and OpenMx,
+      latent growth models, and EFA scores.
     contents:
     - product-factor-scores
     - tspa-vignette-mx
@@ -65,8 +66,8 @@ articles:
     - efa-score
   - title: "Theory & simulation evidence"
     desc: >
-      Simulation studies comparing scoring methods, SE correction, and
-      categorical (IRT) items against gold-standard references.
+      Simulation studies comparing scoring methods, standard-error
+      corrections, and categorical-item analyses with joint SEM.
     contents:
     - sim-scoring-se
     - sim-categorical-irt

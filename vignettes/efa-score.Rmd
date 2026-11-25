@@ -16,7 +16,15 @@ knitr::opts_chunk$set(
 )
 ```
 
-This vignette demonstrates how to use the `compute_fscore()` function to calculate factor scores based on exploratory factor analysis, and compare the results to those calculated by the `psych::factor.scores()` function.
+Exploratory factor analysis (EFA) can also provide stage-1 scores for 2S-PA.
+The important requirement is to retain the measurement-error covariance of
+the scores, rather than treating the scores as perfectly measured.
+
+This vignette uses a five-factor EFA of personality items from `psych::bfi`.
+We calculate Bartlett scores with `psych::factor.scores()`, obtain their
+measurement-error covariance with `R2spa::compute_fscore()`, and use that
+information to estimate latent correlations in stage 2. Because EFA allows
+cross-loadings, the factor interpretation depends on the selected rotation.
 
 ```{r}
 library(psych)
@@ -25,6 +33,11 @@ library(lavaan)
 ```
 
 ## Example: Big Five Inventory
+
+The first 25 variables contain five items for each of the Big Five domains.
+We use a target rotation that encourages the expected five-domain loading
+pattern while allowing cross-loadings. The measurement model is estimated
+from the complete-case item correlation matrix.
 
 ```{r}
 # Complete-case (listwise) correlation — the same rows used to compute the
@@ -43,7 +56,7 @@ fa_target_bfi <- psych::fa(
     nfactors = 5,
     rotate = "targetQ", Target = target_mat_bfi,
     scores = "Bartlett",
-    n.rotations = 1)  # <-- avoids the psych 2.6.5 faRotations() bug
+    n.rotations = 1)
 # Factor correlations
 fa_target_bfi$Phi |>
     (`[`)(paste0("MR", 1:5), paste0("MR", 1:5)) |>
@@ -63,7 +76,11 @@ bfi |>
     knitr::kable(digits = 2, caption = "Sum scores")
 ```
 
-Hand calculate the Bartlett scores using weights
+### From item weights to factor scores
+
+A Bartlett score is a weighted combination of the standardized items.
+The next calculation illustrates the score for the first participant
+and compares it with the score returned by `psych`:
 
 ```{r}
 # Bartlett score for first person
@@ -85,9 +102,13 @@ cov(bscores$scores, use = "complete") |>
     knitr::kable(digits = 2, caption = "With Bartlett scores")
 ```
 
-### Using `compute_fscore()` and perform a two-stage analysis
+### Obtain the score measurement-error covariance
 
-Use `R2spa::compute_fscore()`
+`compute_fscore()` takes the estimated item loadings and unique variances
+directly. Here, `theta` is a diagonal matrix of EFA uniquenesses, and
+`fs_matrices = TRUE` requests the score measurement matrices in addition
+to the scores. The standardized data are already centered, so we set
+`center_y = FALSE`.
 
 ```{r}
 # Obtain error covariances
@@ -113,7 +134,11 @@ attr(bfi_fs, which = "scoring_matrix")
 attr(bfi_fs, which = "fsT")
 ```
 
-Recover factor covariances with 2S-PA
+### Estimate latent correlations with 2S-PA
+
+For Bartlett scores, the score loading matrix is the identity. We supply
+it together with the error covariance obtained above. An empty structural
+model string leaves the latent covariances unrestricted in this example.
 
 ```{r}
 ts_fit <- tspa("",
@@ -128,4 +153,8 @@ lavInspect(ts_fit, what = "cor.lv") |>
     knitr::kable(digits = 2, caption = "With Bartlett scores and 2S-PA")
 ```
 
-
+Compare the resulting latent correlation matrix with the EFA factor
+correlations and with the correlations of the uncorrected scores.
+The latter describe relations among fallible scores; the 2S-PA correlations
+account for their estimated measurement error. The EFA specification and
+rotation remain part of the measurement assumptions underlying that correction.

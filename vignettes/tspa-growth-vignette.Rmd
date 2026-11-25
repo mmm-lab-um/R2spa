@@ -1,8 +1,8 @@
 ---
-title: "Linear Growth Modeling with Two-Stage Path Analysis"
+title: "Latent Growth Modeling with Two-Stage Path Analysis"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Linear Growth Modeling with Two-Stage Path Analysis}
+  %\VignetteIndexEntry{Latent Growth Modeling with Two-Stage Path Analysis}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -19,7 +19,25 @@ library(lavaan)
 library(R2spa)
 ```
 
-We use the example from [this tutorial](https://thechangelab.stanford.edu/tutorials/growth-modeling/measurement-invariance-2nd-order-growth-model/) from Chapter 14 of the book *Growth Modeling* (Grimm, Ram & Estabrook, 2017) to demonstrate how to perform linear growth modeling with two-stage path analysis (2S-PA)
+## Modeling change in a repeatedly measured construct
+
+When a construct is measured by several indicators at each occasion,
+researchers can model growth in the latent construct rather than growth
+in an uncorrected composite. With 2S-PA, stage 1 estimates a longitudinal
+measurement model and obtains a factor score for each occasion. Stage 2
+fits a growth model while accounting for measurement error in those scores.
+
+We use an example from Chapter 14 of *Growth Modeling* (Grimm, Ram, &
+Estabrook, 2017), available in
+[this tutorial](https://thechangelab.stanford.edu/tutorials/growth-modeling/measurement-invariance-2nd-order-growth-model/).
+Science, reading, and mathematics scores at grades 3, 5, and 8 are used
+as indicators of an academic achievement construct.
+
+The example uses a **latent basis growth model**: the first and last slope
+loadings are fixed at zero and one, and the middle loading is estimated.
+It therefore permits a nonlinear pattern of mean change between the three
+occasions rather than imposing a strictly linear time trend. The data are
+stored with this vignette; the code below shows their original source.
 
 ```{r, echo = TRUE, eval = FALSE}
 # Load data
@@ -40,9 +58,15 @@ saveRDS(eclsk, file = "eclsk.rds")
 eclsk <- readRDS("eclsk.rds")
 ```
 
-## Joint structural equation model: Latent growth with strict invariance model
+## Joint SEM: measurement and growth estimated together
 
-In the [tutorial](https://quantdev.ssri.psu.edu/tutorials/growth-modeling-chapter-14-modeling-change-latent-variables-measured-continuous), the authors first performed longitudinal invariance testing and found support for strict invariance. They moved on to fit a latent growth model based on the strict invariance model, as shown below. 
+The tutorial first evaluates longitudinal measurement invariance and then
+fits a growth model using a strict invariance specification. Equal
+loadings and item intercepts establish a common measurement scale over
+time; equal item residual variances add strict invariance. Residual
+covariances between repeated measures of the same indicator are also
+included. The joint SEM below estimates the measurement and growth
+parameters simultaneously.
 
 ```{r}
 jsem_growth_mod <- "
@@ -96,9 +120,12 @@ jsem_growth_fit <- lavaan(jsem_growth_mod,
                           fixed.x = FALSE)
 ```
 
-## 2S-PA: Latent growth with strict invariance model
+## Stage 1: longitudinal measurement model
 
-With 2S-PA, we first specify the strict invariance model, directly adopted from the [tutorial](https://quantdev.ssri.psu.edu/tutorials/growth-modeling-chapter-14-modeling-change-latent-variables-measured-continuous). Based on the strict invariance model, we then obtain the factor scores. 
+For 2S-PA, first estimate the measurement model without the growth factors.
+The occasion-specific factors have freely estimated covariances, while the
+same measurement-invariance constraints are retained. `eta1` has mean zero
+and variance one to establish the reference occasion's scale.
 
 ```{r}
 strict_mod <- "
@@ -146,7 +173,14 @@ m_g8 ~ i3 * 1
 fs_dat <- get_fs(eclsk, model = strict_mod)
 ```
 
-In the second stage, we use the factor scores obtained from the strict invariance model to model the growth trajectory across time points. The growth model is the same as the "latent basis model" in the joint structural equation model. 
+## Stage 2: growth model
+
+The three occasion-specific latent variables now indicate an intercept
+factor `i` and a change factor `s`. The mean of `s` represents expected
+change from the first to the last occasion on the chosen latent scale.
+The middle slope loading locates grade 5 relative to those endpoints.
+The variances of `i` and `s` describe individual differences in initial
+level and change, and their covariance describes the association between them.
 
 ```{r}
 # Growth model
@@ -168,16 +202,9 @@ s ~ 1
 "
 ```
 
-```r
-# Fit the growth model
-tspa_growth_fit <- tspa(tspa_growth_mod, fs_dat,
-                        fsT = attr(fs_dat, "fsT"),
-                        fsL = attr(fs_dat, "fsL"),
-                        fsb = attr(fs_dat, "fsb"),
-                        estimator = "ML")
-```
-
-For objects extracted from `get_fs()`, one can omit the `fsT`, `fsL`, and `fsb` arguments, as the `tspa()` function will automatically extract the necessary information from the `fs_dat` object.
+`tspa()` obtains the score loadings, error covariance, and intercepts from
+`fs_dat`. These constraints connect the occasion scores to the latent
+achievement variables before the growth model is estimated:
 
 ```{r}
 tspa_growth_fit <- tspa(tspa_growth_mod, fs_dat, estimator = "ML")
@@ -185,7 +212,11 @@ tspa_growth_fit <- tspa(tspa_growth_mod, fs_dat, estimator = "ML")
 
 ## Comparison
 
-The joint structural equation model and 2S-PA yielded comparable estimates of the mean and variances of the intercept and slope factors. 
+The following tables show the growth-factor means, variances, and covariance.
+The joint SEM fixes the intercept-factor mean to zero, whereas the stage-2
+model estimates it; the mean specifications should therefore be considered
+when comparing the output. The two approaches also differ in whether
+measurement and growth parameters are estimated simultaneously or separately.
 
 ```{r}
 parameterestimates(tspa_growth_fit) |>
@@ -193,4 +224,3 @@ parameterestimates(tspa_growth_fit) |>
 parameterestimates(jsem_growth_fit) |>
   subset(subset = lhs %in% c("i", "s") & op  %in% c("~1", "~~"))
 ```
-
